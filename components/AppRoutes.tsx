@@ -365,6 +365,42 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
     else if (currentView === "congvan_records") title = "Hồ sơ công văn";
     else if (currentView === "other_records") title = "Hồ sơ khác";
 
+    const subAdminEmp = employees.find((e) => e.id === currentUser.employeeId);
+    let isSubAdminAllowedTab = true;
+    if (isSubadmin) {
+      if (!subAdminEmp) {
+        isSubAdminAllowedTab = false;
+      } else {
+        const rawDept = subAdminEmp.department || "";
+        const removeAccents = (s: string) => {
+          return s
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/đ/g, "d")
+            .replace(/Đ/g, "D");
+        };
+        const cleanDept = removeAccents(rawDept.toLowerCase());
+
+        if (isMeasurementView) {
+          isSubAdminAllowedTab =
+            cleanDept.includes("do dac") ||
+            cleanDept.includes("ky thuat") ||
+            cleanDept.includes("to do") ||
+            cleanDept.includes("dia chinh") ||
+            cleanDept.includes("noi nghiep") ||
+            cleanDept.includes("ngoai nghiep");
+        } else if (isRegistrationView) {
+          isSubAdminAllowedTab = cleanDept.includes("dang ky") || cleanDept.includes("cap giay");
+        } else if (isArchiveView) {
+          isSubAdminAllowedTab = cleanDept.includes("luu tru") || cleanDept.includes("van phong") || cleanDept.includes("hanh chinh");
+        } else if (isCongVanView) {
+          isSubAdminAllowedTab = cleanDept.includes("cong van") || cleanDept.includes("van phong") || cleanDept.includes("hanh chinh");
+        }
+      }
+    }
+
+    const tabAllowedCanPerformAction = canPerformAction && isSubAdminAllowedTab;
+
     return (
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col flex-1 h-full animate-fade-in-up">
         {/* SUB-HEADER TABS FOR MEASUREMENT RECORDS */}
@@ -698,7 +734,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               {title}
-              {!canPerformAction && (
+              {!tabAllowedCanPerformAction && (
                 <span className="text-xs font-normal text-gray-500 px-2 py-0.5 bg-gray-100 rounded-full border">
                   Chỉ xem
                 </span>
@@ -907,7 +943,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </div>
             )}
 
-            {canPerformAction &&
+            {tabAllowedCanPerformAction &&
               (isAllRecordsAny ||
                 currentView === "other_records") && (
                 <div className="flex items-center gap-2 bg-white px-2 py-1.5 border border-gray-200 rounded-md shadow-sm">
@@ -962,7 +998,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </div>
               )}
 
-            {canPerformAction && (
+            {tabAllowedCanPerformAction && (
               <>
                 <div className="h-6 w-px bg-gray-300 mx-2"></div>
                 <button
@@ -1066,7 +1102,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
           )}
 
           <div className="flex justify-end gap-3 mt-2">
-            {canPerformAction &&
+            {tabAllowedCanPerformAction &&
               isHandoverAny &&
               props.handoverTab === "today" &&
               props.selectedRecordIds.size > 0 && (
@@ -1078,7 +1114,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   {props.selectedRecordIds.size})
                 </button>
               )}
-            {canPerformAction &&
+            {tabAllowedCanPerformAction &&
               isHandoverAny &&
               props.handoverTab === "returned" && (
                 <button
@@ -1088,7 +1124,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   <FileSpreadsheet size={18} /> Xuất Excel (Đã trả KQ)
                 </button>
               )}
-            {canPerformAction &&
+            {tabAllowedCanPerformAction &&
               isCheckAny &&
               props.filteredRecords.length > 0 && (
                 <button
@@ -1099,7 +1135,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   {props.filteredRecords.length})
                 </button>
               )}
-            {canPerformAction &&
+            {tabAllowedCanPerformAction &&
               (currentView === "completed_list") &&
               props.selectedRecordIds.size > 0 && (
                 <button
@@ -1116,7 +1152,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   {props.selectedRecordIds.size})
                 </button>
               )}
-            {canPerformAction &&
+            {tabAllowedCanPerformAction &&
               (currentView === "archive_completed_list") &&
               props.selectedRecordIds.size > 0 && (
                 <button
@@ -1133,7 +1169,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   {props.selectedRecordIds.size})
                 </button>
               )}
-            {canPerformAction &&
+            {tabAllowedCanPerformAction &&
               (currentView === "pending_check_list" ||
                 currentView === "archive_pending_check_list") &&
               props.selectedRecordIds.size > 0 && (
@@ -1151,7 +1187,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   {props.selectedRecordIds.size})
                 </button>
               )}
-            {canPerformAction &&
+            {tabAllowedCanPerformAction &&
               (currentView === "assign_tasks" ||
                 currentView === "other_assign_tasks" ||
                 currentView === "archive_assign_tasks" ||
@@ -1217,7 +1253,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
             <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase sticky top-0 shadow-sm z-10">
               <tr>
                 <th className="p-3 w-10 text-center">
-                  {canPerformAction ? (
+                  {tabAllowedCanPerformAction ? (
                     <button onClick={props.toggleSelectAll}>
                       {props.selectedRecordIds.size ===
                         props.paginatedRecords.length &&
@@ -1280,7 +1316,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                       </th>
                     ),
                 )}
-                {canPerformAction && (
+                {tabAllowedCanPerformAction && (
                   <th className="p-3 w-28 text-center bg-gray-50 sticky right-0 shadow-l">
                     Thao Tác
                   </th>
@@ -1296,7 +1332,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                     employees={employees}
                     visibleColumns={props.visibleColumns}
                     isSelected={props.selectedRecordIds.has(r.id)}
-                    canPerformAction={canPerformAction}
+                    canPerformAction={tabAllowedCanPerformAction}
                     currentUser={currentUser}
                     onToggleSelect={props.toggleSelectRecord}
                     onView={props.handleViewRecord}

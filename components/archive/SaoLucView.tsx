@@ -161,6 +161,29 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
     setEmployees(data);
   };
 
+  const isAllowedToModify = useMemo(() => {
+    const roleUpper = (currentUser.role || "").toUpperCase();
+    if (roleUpper === "ADMIN") return true;
+    if (roleUpper === "SUBADMIN") {
+      const emp = employees.find((e) => e.id === currentUser.employeeId);
+      if (!emp) return false;
+      const dept = (emp.department || "").toLowerCase();
+      
+      const removeAccents = (s: string) => {
+        return s
+          .normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .replace(/đ/g, "d")
+          .replace(/Đ/g, "D");
+      };
+      const cleanDept = removeAccents(dept);
+      
+      // SaoLucView is for "Lưu trữ", "Văn phòng", or "Hành chính"
+      return cleanDept.includes("luu tru") || cleanDept.includes("van phong") || cleanDept.includes("hanh chinh");
+    }
+    return true; 
+  }, [currentUser, employees]);
+
   const filteredRecords = useMemo(() => {
     let list = records;
 
@@ -209,6 +232,59 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
           (r.trich_yeu || "").toLowerCase().includes(lower),
       );
     }
+
+    // EXCLUDE records belonging to BAN GIAM DOC, TO TRUONG, TO PHO if currentUser is SUBADMIN
+    const isSubAdminUser =
+      (currentUser.role as string) === "SUBADMIN" ||
+      (currentUser.role as string) === "subadmin";
+
+    if (isSubAdminUser) {
+      const isDirectorOrLeader = (employeeId: string | null | undefined) => {
+        if (!employeeId) return false;
+        const emp = employees.find((e) => e.id === employeeId);
+        if (emp) {
+          const dept = (emp.department || "").toLowerCase();
+          const pos = (emp.position || "").toLowerCase();
+
+          const removeAccents = (s: string) => {
+            return s
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .replace(/đ/g, "d")
+              .replace(/Đ/g, "D");
+          };
+          const cleanDept = removeAccents(dept);
+          const cleanPos = removeAccents(pos);
+
+          const isDirDeptClean =
+            cleanDept.includes("ban giam doc") ||
+            cleanDept.includes("giam doc") ||
+            cleanDept.includes("ban lanh dao");
+          const isDirPosClean =
+            cleanPos.includes("giam doc") ||
+            cleanPos.includes("lanh dao") ||
+            cleanPos.includes("pho giam doc");
+          const isLeaderPosClean =
+            cleanPos.includes("to truong") ||
+            cleanPos.includes("to pho") ||
+            cleanPos.includes("truong phong") ||
+            cleanPos.includes("pho phong") ||
+            cleanPos.includes("truong nhom") ||
+            cleanPos.includes("nhom truong");
+
+          if (isDirDeptClean || isDirPosClean || isLeaderPosClean) return true;
+        }
+        return false;
+      };
+
+      list = list.filter(
+        (r) =>
+          !isDirectorOrLeader(r.data?.assigned_to) &&
+          !isDirectorOrLeader(r.data?.checked_by) &&
+          !isDirectorOrLeader(r.data?.submitted_to)
+      );
+    }
+
     return list;
   }, [
     records,
@@ -218,6 +294,8 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
     toDate,
     filterWard,
     filterEmployee,
+    employees,
+    currentUser,
   ]);
 
   // Reset selection and page when tab/filters change
@@ -830,10 +908,11 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
   };
 
   const isManager =
-    (currentUser.role as string) === "ADMIN" ||
+    ((currentUser.role as string) === "ADMIN" ||
     (currentUser.role as string) === "SUBADMIN" ||
     (currentUser.role as string) === "admin" ||
-    (currentUser.role as string) === "subadmin";
+    (currentUser.role as string) === "subadmin") &&
+    isAllowedToModify;
 
   const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
   const paginatedRecords = filteredRecords.slice(
@@ -1628,6 +1707,7 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
                         filteredRecords.length > 0 &&
                         selectedIds.size === filteredRecords.length
                       }
+                      disabled={!isAllowedToModify}
                     />
                   </th>
                   <th className="p-3 w-10 text-center">#</th>
@@ -1672,6 +1752,7 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
                           type="checkbox"
                           checked={selectedIds.has(r.id)}
                           onChange={() => handleSelectRow(r.id)}
+                          disabled={!isAllowedToModify}
                         />
                       </td>
                       <td className="p-3 text-center text-gray-500">

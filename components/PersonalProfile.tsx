@@ -76,7 +76,46 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
 
   const myRecords = useMemo(() => {
     const effectiveId = user.employeeId || user.username || 'admin';
+    
+    const isDirectorOrLeader = (employeeId: string | null | undefined) => {
+        if (!employeeId) return false;
+        const emp = employees.find(e => e.id === employeeId);
+        if (emp) {
+            const dept = (emp.department || '').toLowerCase();
+            const pos = (emp.position || '').toLowerCase();
+            
+            const removeAccents = (s: string) => {
+              return s
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '')
+                .replace(/đ/g, 'd')
+                .replace(/Đ/g, 'D');
+            };
+            const cleanDept = removeAccents(dept);
+            const cleanPos = removeAccents(pos);
+            
+            const isDirDeptClean = cleanDept.includes('ban giam doc') || cleanDept.includes('giam doc') || cleanDept.includes('ban lanh dao');
+            const isDirPosClean = cleanPos.includes('giam doc') || cleanPos.includes('lanh dao') || cleanPos.includes('pho giam doc');
+            const isLeaderPosClean = cleanPos.includes('to truong') || cleanPos.includes('to pho') || cleanPos.includes('truong phong') || cleanPos.includes('pho phong') || cleanPos.includes('truong nhom') || cleanPos.includes('nhom truong');
+            
+            if (isDirDeptClean || isDirPosClean || isLeaderPosClean) return true;
+        }
+        const associatedUser = users.find(u => u.employeeId === employeeId);
+        if (associatedUser) {
+            if (associatedUser.role === UserRole.TEAM_LEADER || associatedUser.role === UserRole.ADMIN) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     const mainRecords = records.filter(r => {
+        if (user.role === UserRole.SUBADMIN) {
+            // Exclude records of directors or leaders
+            if (isDirectorOrLeader(r.assignedTo) || isDirectorOrLeader(r.checkedBy) || isDirectorOrLeader(r.submittedTo)) {
+                return false;
+            }
+        }
         if (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN) {
             return r.submittedTo === effectiveId || r.assignedTo === effectiveId || !r.submittedTo;
         }
@@ -90,6 +129,11 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
     
     const mappedArchives = archiveRecords
         .filter(r => {
+            if (user.role === UserRole.SUBADMIN) {
+                if (isDirectorOrLeader(r.data?.assigned_to) || isDirectorOrLeader(r.data?.checked_by) || isDirectorOrLeader(r.data?.submitted_to)) {
+                    return false;
+                }
+            }
             if (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN) {
                 return r.data?.submitted_to === effectiveId || r.data?.assigned_to === effectiveId || !r.data?.submitted_to; 
             }
@@ -985,20 +1029,14 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                             {/* Logic nút chuyển trạng thái theo từng Tab */}
                                             {activeTab === 'pending' && (
                                                 <div className="flex gap-1.5 animate-fade-in">
-                                                    {r.status === RecordStatus.ASSIGNED ? (
-                                                        <button onClick={() => handleStartWork(r)} title="Nhận việc & bắt đầu thực hiện" className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all animate-pulse" id={`row-btn-start-${r.id}`}>
-                                                            <Clock size={14} /> Bắt đầu thực hiện
+                                                    {r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn' ? (
+                                                        <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-sign-${r.id}`}>
+                                                            <Send size={14} /> Trình ký
                                                         </button>
                                                     ) : (
-                                                        r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn' ? (
-                                                            <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-sign-${r.id}`}>
-                                                                <Send size={14} /> Trình ký
-                                                            </button>
-                                                        ) : (
-                                                            <button onClick={() => handleForwardToCheck(r)} title="Trình kiểm tra" className="px-3 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-check-${r.id}`}>
-                                                                <Send size={14} /> Trình kiểm tra
-                                                            </button>
-                                                        )
+                                                        <button onClick={() => handleForwardToCheck(r)} title="Trình kiểm tra" className="px-3 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-check-${r.id}`}>
+                                                            <Send size={14} /> Trình kiểm tra
+                                                        </button>
                                                     )}
                                                     <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa / báo lỗi" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-pending-${r.id}`}>
                                                         <CornerUpLeft size={14} /> Trả hồ sơ
