@@ -128,12 +128,25 @@ function App() {
   } = useAppData(currentUser);
 
   const records = useMemo(() => {
+      let filtered = rawRecords;
       if (currentUser?.role === UserRole.ONEDOOR) {
           const emp = employees.find(e => e.id === currentUser.employeeId);
           const managedWards = emp?.managedWards || [];
-          return rawRecords.filter(r => r.ward && managedWards.includes(r.ward));
+          filtered = rawRecords.filter(r => r.ward && managedWards.includes(r.ward));
+      } else if (currentUser?.role === UserRole.TEAM_LEADER && currentUser.employeeId) {
+          const empId = currentUser.employeeId;
+          filtered = rawRecords.filter(r => {
+              // Unassigned is visible so they can assign it
+              if (!r.assignedTo) return true;
+              
+              // Assigned to themselves or they are the checker, signer/submitter, or receiver
+              return r.assignedTo === empId || 
+                     r.checkedBy === empId || 
+                     r.submittedTo === empId || 
+                     r.receivedBy === empId;
+          });
       }
-      return rawRecords;
+      return filtered;
   }, [rawRecords, currentUser, employees]);
 
   // Reminder System
@@ -900,6 +913,7 @@ function App() {
             records={submitTargetRecords}
             users={users}
             employees={employees}
+            currentUser={currentUser || undefined}
             onConfirm={async (directorId) => {
                 try {
                     const nowStr = new Date().toISOString();
@@ -950,6 +964,7 @@ function App() {
             users={users}
             employees={employees}
             isCheckMode={true}
+            currentUser={currentUser || undefined}
             onConfirm={async (checkerId) => {
                 try {
                     const nowStr = new Date().toISOString();

@@ -119,10 +119,17 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
         if (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN) {
             return r.submittedTo === effectiveId || r.assignedTo === effectiveId || !r.submittedTo;
         }
-        // Nếu là người kiểm tra, họ có thể thấy hồ sơ được giao cho họ HOẶC hồ sơ trình cho họ kiểm tra
-        const isCheckerUser = employees.find(e => e.id === effectiveId)?.position?.toLowerCase().includes('tổ') && (employees.find(e => e.id === effectiveId)?.department?.toLowerCase().includes('đo đạc') || employees.find(e => e.id === effectiveId)?.department?.toLowerCase().includes('kỹ thuật'));
-        if (isCheckerUser) {
-            return r.assignedTo === effectiveId || r.checkedBy === effectiveId;
+        // Nếu là người lãnh đạo/kiểm tra hoặc có vai trò TEAM_LEADER/Tổ trưởng/Tổ phó, họ có thể thấy hồ sơ liên quan đến họ
+        const empPosition = (employees.find(e => e.id === effectiveId)?.position || '').toLowerCase();
+        const isTeamLeaderOrChecker = user.role === UserRole.TEAM_LEADER || 
+                                     empPosition.includes('tổ trưởng') || 
+                                     empPosition.includes('tổ phó') || 
+                                     empPosition.includes('trưởng phòng') || 
+                                     empPosition.includes('phó phòng') || 
+                                     empPosition.includes('trưởng nhóm') || 
+                                     empPosition.includes('nhóm trưởng');
+        if (isTeamLeaderOrChecker) {
+            return r.assignedTo === effectiveId || r.checkedBy === effectiveId || r.submittedTo === effectiveId || r.receivedBy === effectiveId;
         }
         return r.assignedTo === effectiveId;
     });
@@ -137,9 +144,16 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
             if (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN) {
                 return r.data?.submitted_to === effectiveId || r.data?.assigned_to === effectiveId || !r.data?.submitted_to; 
             }
-            const isCheckerUser = employees.find(e => e.id === effectiveId)?.position?.toLowerCase().includes('tổ') && (employees.find(e => e.id === effectiveId)?.department?.toLowerCase().includes('đo đạc') || employees.find(e => e.id === effectiveId)?.department?.toLowerCase().includes('kỹ thuật'));
-            if (isCheckerUser) {
-                return r.data?.assigned_to === effectiveId || r.data?.checked_by === effectiveId;
+            const empPosition = (employees.find(e => e.id === effectiveId)?.position || '').toLowerCase();
+            const isTeamLeaderOrChecker = user.role === UserRole.TEAM_LEADER || 
+                                         empPosition.includes('tổ trưởng') || 
+                                         empPosition.includes('tổ phó') || 
+                                         empPosition.includes('trưởng phòng') || 
+                                         empPosition.includes('phó phòng') || 
+                                         empPosition.includes('trưởng nhóm') || 
+                                         empPosition.includes('nhóm trưởng');
+            if (isTeamLeaderOrChecker) {
+                return r.data?.assigned_to === effectiveId || r.data?.checked_by === effectiveId || r.data?.submitted_to === effectiveId;
             }
             return r.data?.assigned_to === effectiveId;
         })
@@ -1038,19 +1052,16 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                                             <Send size={14} /> Trình kiểm tra
                                                         </button>
                                                     )}
-                                                    <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa / báo lỗi" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-pending-${r.id}`}>
-                                                        <CornerUpLeft size={14} /> Trả hồ sơ
-                                                    </button>
                                                 </div>
                                             )}
                                             {activeTab === 'pending_check' && (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) && (
                                                 <div className="flex gap-1.5">
-                                                    {(isChecker || isDirector) && (
+                                                    {r.checkedBy === user.employeeId && (
                                                         <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-sig-check-${r.id}`}>
                                                             <Send size={14} /> Trình ký
                                                         </button>
                                                     )}
-                                                    {(isChecker || isDirector || user.role === UserRole.ADMIN || r.checkedBy === user.employeeId) && (
+                                                    {r.checkedBy === user.employeeId && (
                                                         <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-${r.id}`}>
                                                             <CornerUpLeft size={14} /> Trả hồ sơ
                                                         </button>
@@ -1059,13 +1070,13 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                                         <button onClick={() => handleRecallRecord(r)} title="Thu hồi hồ sơ đã trình" className="px-2.5 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md hover:bg-amber-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-recall-${r.id}`}>
                                                             <RotateCcw size={14} /> Thu hồi
                                                         </button>
-                                                    )}
+                                                     )}
                                                 </div>
                                             )}
                                             
                                             {activeTab === 'pending_sign' && r.status === RecordStatus.PENDING_SIGN && (
                                                 <div className="flex gap-1.5 animate-fade-in">
-                                                    {(isDirector || user.role === UserRole.ADMIN || r.submittedTo === user.employeeId) && (
+                                                    {r.submittedTo === user.employeeId && (
                                                         <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-sign-${r.id}`}>
                                                             <CornerUpLeft size={14} /> Trả hồ sơ
                                                         </button>
@@ -1113,6 +1124,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
           records={submitTargetRecords}
           users={users}
           employees={employees}
+          currentUser={user}
           onConfirm={handleConfirmSubmit}
       />
 
@@ -1123,6 +1135,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
           users={users}
           employees={employees}
           isCheckMode={true}
+          currentUser={user}
           onConfirm={async (checkerId) => {
               try {
                   for (const record of submitTargetRecords) {

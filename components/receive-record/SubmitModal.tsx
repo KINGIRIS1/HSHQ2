@@ -10,9 +10,10 @@ interface SubmitModalProps {
     users: User[];
     employees: Employee[];
     isCheckMode?: boolean; // MỚI: Chế độ trình kiểm tra
+    currentUser?: User; // MỚI: Người dùng hiện tại để lọc theo tổ
 }
 
-const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, records, onConfirm, users, employees, isCheckMode }) => {
+const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, records, onConfirm, users, employees, isCheckMode, currentUser }) => {
     const [selectedDirector, setSelectedDirector] = useState<string>('');
 
     // Lọc ra các user phù hợp
@@ -21,16 +22,44 @@ const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, records, onC
         
         if (isCheckMode) {
             // Chế độ trình kiểm tra: CHỈ Tổ trưởng, Tổ phó của Tổ đo đạc hoặc kỹ thuật, hoặc TEAM_LEADER
-            if (u.role === UserRole.TEAM_LEADER) return true;
-            if (!emp) return false;
+            const isTeamLeaderUser = u.role === UserRole.TEAM_LEADER;
+            if (!emp) return isTeamLeaderUser;
             
             const dept = emp.department?.toLowerCase() || '';
             const pos = emp.position?.toLowerCase() || '';
             
-            const isDoDacOrKyThuat = dept.includes('đo đạc') || dept.includes('kỹ thuật');
-            const isLeader = pos.includes('tổ trưởng') || pos.includes('tổ phó') || pos.includes('trưởng phòng');
+            const isDoDacOrKyThuat = dept.includes('đo đạc') || dept.includes('kỹ thuật') || dept.includes('bản đồ') || dept.includes('địa chính');
+            const isCapGiayOrDangKy = dept.includes('đăng ký') || dept.includes('cấp giấy') || dept.includes('pháp chế');
+            const isLeader = pos.includes('tổ trưởng') || pos.includes('tổ phó') || pos.includes('trưởng phòng') || pos.includes('phó phòng') || pos.includes('trưởng nhóm') || pos.includes('nhóm trưởng');
             
-            return isDoDacOrKyThuat && isLeader;
+            // Candidate must be some kind of leader or TEAM_LEADER
+            if (!isTeamLeaderUser && !(isDoDacOrKyThuat && isLeader) && !pos.includes('nhóm trưởng') && !pos.includes('tổ trưởng') && !pos.includes('tổ phó')) {
+                return false;
+            }
+
+            // FILTER: ONLY SHOW FOR THEIR SPECIFIC TEAM IF CURRENT USER BELONGS TO TEAM
+            if (currentUser) {
+                const currentEmp = currentUser.employeeId ? employees.find(e => e.id === currentUser.employeeId) : null;
+                if (currentEmp) {
+                    const curDept = (currentEmp.department || '').toLowerCase();
+                    const isCurDoDac = curDept.includes('đo đạc') || curDept.includes('kỹ thuật') || curDept.includes('bản đồ') || curDept.includes('địa chính');
+                    const isCurCapGiay = curDept.includes('đăng ký') || curDept.includes('cấp giấy') || curDept.includes('pháp chế');
+                    
+                    const isTargetDoDac = dept.includes('đo đạc') || dept.includes('kỹ thuật') || dept.includes('bản đồ') || dept.includes('địa chính');
+                    const isTargetCapGiay = dept.includes('đăng ký') || dept.includes('cấp giấy') || dept.includes('pháp chế');
+                    
+                    if (isCurDoDac && !isTargetDoDac) return false;
+                    if (isCurCapGiay && !isTargetCapGiay) return false;
+                    if (!isCurDoDac && !isCurCapGiay) {
+                        // For other general cases, must match department
+                        if (currentEmp.department !== emp.department && !dept.includes(curDept) && !curDept.includes(dept)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            
+            return true;
         } else {
             // Chế độ trình ký: CHỈ Giám đốc, Phó giám đốc, ADMIN hoặc SUBADMIN
             if (u.role === UserRole.ADMIN || u.role === UserRole.SUBADMIN) return true;
