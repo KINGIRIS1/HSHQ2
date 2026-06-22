@@ -27,7 +27,8 @@ const OPTIONAL_NEW_COLUMNS = [
     'authorizedBy', 'authDocType', 'otherDocs',
     'privateNotes', 'personalNotes', 'checkedBy', 'pendingCheckDate', 'checkedDate', 'completedWorkDate',
     'price', 'advancePayment', 'isDeptSynced',
-    'hasDefect', 'defectReason', 'defectDate'
+    'hasDefect', 'defectReason', 'defectDate',
+    'submittedTo', 'submissionDate'
 ];
 
 export const fetchRecords = async (): Promise<RecordFile[]> => {

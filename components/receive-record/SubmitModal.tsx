@@ -17,25 +17,29 @@ const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, records, onC
 
     // Lọc ra các user phù hợp
     let targetUsers = users.filter((u: User) => {
-        if (!u.employeeId) return false;
-        const emp = employees.find(e => e.id === u.employeeId);
-        if (!emp) return false;
+        const emp = u.employeeId ? employees.find(e => e.id === u.employeeId) : null;
         
         if (isCheckMode) {
-            // Chế độ trình kiểm tra: CHỈ Tổ trưởng, Tổ phó của Tổ đo đạc
+            // Chế độ trình kiểm tra: CHỈ Tổ trưởng, Tổ phó của Tổ đo đạc hoặc kỹ thuật, hoặc TEAM_LEADER
+            if (u.role === UserRole.TEAM_LEADER) return true;
+            if (!emp) return false;
+            
             const dept = emp.department?.toLowerCase() || '';
             const pos = emp.position?.toLowerCase() || '';
             
-            const isDoDac = dept.includes('đo đạc');
-            const isLeader = pos.includes('tổ trưởng') || pos.includes('tổ phó');
+            const isDoDacOrKyThuat = dept.includes('đo đạc') || dept.includes('kỹ thuật');
+            const isLeader = pos.includes('tổ trưởng') || pos.includes('tổ phó') || pos.includes('trưởng phòng');
             
-            return isDoDac && isLeader;
+            return isDoDacOrKyThuat && isLeader;
         } else {
-            // Chế độ trình ký: CHỈ Giám đốc, Phó giám đốc
+            // Chế độ trình ký: CHỈ Giám đốc, Phó giám đốc, ADMIN hoặc SUBADMIN
+            if (u.role === UserRole.ADMIN || u.role === UserRole.SUBADMIN) return true;
+            if (!emp) return false;
+            
             const pos = emp.position?.toLowerCase() || '';
             const dept = emp.department?.toLowerCase() || '';
             
-            const isDirectorPos = pos.includes('giám đốc') || pos.includes('phó giám đốc');
+            const isDirectorPos = pos.includes('giám đốc') || pos.includes('phó giám đốc') || pos.includes('lãnh đạo');
             const isDirectorDept = dept.includes('ban giám đốc') || dept.includes('ban lãnh đạo');
             
             return isDirectorPos || isDirectorDept;
@@ -65,7 +69,7 @@ const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, records, onC
                         <X size={24} />
                     </button>
                 </div>
-
+ 
                 <div className="p-6">
                     <div className="mb-6">
                         <p className="text-gray-700 mb-2 font-medium">
@@ -76,27 +80,30 @@ const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, records, onC
                         </p>
                         
                         <div className="space-y-2">
-                            {targetUsers.map((director: User) => (
-                                <label 
-                                    key={director.employeeId} 
-                                    className={`flex items-center p-3 border rounded-xl cursor-pointer transition-all ${selectedDirector === director.employeeId ? (isCheckMode ? 'border-orange-500 bg-orange-50 shadow-sm' : 'border-indigo-500 bg-indigo-50 shadow-sm') : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
-                                >
-                                    <input 
-                                        type="radio" 
-                                        name="director" 
-                                        value={director.employeeId} 
-                                        checked={selectedDirector === director.employeeId}
-                                        onChange={(e) => setSelectedDirector(e.target.value)}
-                                        className={`w-4 h-4 ${isCheckMode ? 'text-orange-600 focus:ring-orange-500' : 'text-indigo-600 focus:ring-indigo-500'} border-gray-300`}
-                                    />
-                                    <div className="ml-3">
-                                        <span className="block text-sm font-medium text-gray-900">{director.name}</span>
-                                        <span className="block text-xs text-gray-500">
-                                            {employees.find(e => e.id === director.employeeId)?.position || (director.role === UserRole.ADMIN ? 'Giám đốc' : 'Phó giám đốc')}
-                                        </span>
-                                    </div>
-                                </label>
-                            ))}
+                            {targetUsers.map((director: User) => {
+                                const directorKey = director.employeeId || director.username || 'admin';
+                                return (
+                                    <label 
+                                        key={directorKey} 
+                                        className={`flex items-center p-3 border rounded-xl cursor-pointer transition-all ${selectedDirector === directorKey ? (isCheckMode ? 'border-orange-500 bg-orange-50 shadow-sm' : 'border-indigo-500 bg-indigo-50 shadow-sm') : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'}`}
+                                    >
+                                        <input 
+                                            type="radio" 
+                                            name="director" 
+                                            value={directorKey} 
+                                            checked={selectedDirector === directorKey}
+                                            onChange={(e) => setSelectedDirector(e.target.value)}
+                                            className={`w-4 h-4 ${isCheckMode ? 'text-orange-600 focus:ring-orange-500' : 'text-indigo-600 focus:ring-indigo-500'} border-gray-300`}
+                                        />
+                                        <div className="ml-3">
+                                            <span className="block text-sm font-medium text-gray-900">{director.name}</span>
+                                            <span className="block text-xs text-gray-500">
+                                                {employees.find(e => e.id === director.employeeId)?.position || (director.role === UserRole.ADMIN ? 'Giám đốc / Quản trị viên' : 'Phó giám đốc / Phó quản trị')}
+                                            </span>
+                                        </div>
+                                    </label>
+                                );
+                            })}
                             {targetUsers.length === 0 && (
                                 <div className="text-sm text-red-500 flex items-center gap-1 p-2 bg-red-50 rounded-lg">
                                     <AlertCircle size={14} /> Không tìm thấy user {isCheckMode ? 'Tổ trưởng/Tổ phó' : 'Ban giám đốc'} nào.

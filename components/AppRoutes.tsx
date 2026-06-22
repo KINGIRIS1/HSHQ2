@@ -229,13 +229,14 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
 
   // Xác định xem user có thuộc Ban giám đốc không
   const isDirector = React.useMemo(() => {
+    if (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.SUBADMIN) return true;
     if (!currentUser.employeeId) return false;
     const emp = employees.find((e) => e.id === currentUser.employeeId);
     return emp
       ? emp.department?.trim().toLowerCase() === "ban giám đốc" ||
           emp.department?.trim().toLowerCase() === "ban lãnh đạo"
       : false;
-  }, [currentUser.employeeId, employees]);
+  }, [currentUser.employeeId, currentUser.role, employees]);
 
   // canPerformAction is kept for backward compatibility, but we should use hasPermission where possible
   const canPerformAction =

@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { RecordFile, RecordStatus, User, Employee, RolePermissions, DEFAULT_ROLE_PERMISSIONS } from '../types';
+import { RecordFile, RecordStatus, User, Employee, RolePermissions, DEFAULT_ROLE_PERMISSIONS, UserRole } from '../types';
 import StatusBadge from './StatusBadge';
 import { Briefcase, ArrowRight, CheckCircle, Clock, Send, AlertTriangle, UserCog, ChevronLeft, ChevronRight, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Bell, CalendarClock, FileCheck, Map, CheckSquare, ClipboardList, FileDown, RotateCcw, CornerUpLeft } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
@@ -75,30 +75,29 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   }, []);
 
   const myRecords = useMemo(() => {
+    const effectiveId = user.employeeId || user.username || 'admin';
     const mainRecords = records.filter(r => {
-        if (!user.employeeId) return false;
-        if (isDirector) {
-            return r.submittedTo === user.employeeId || r.assignedTo === user.employeeId;
+        if (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN) {
+            return r.submittedTo === effectiveId || r.assignedTo === effectiveId || !r.submittedTo;
         }
         // Nếu là người kiểm tra, họ có thể thấy hồ sơ được giao cho họ HOẶC hồ sơ trình cho họ kiểm tra
-        const isCheckerUser = employees.find(e => e.id === user.employeeId)?.position?.toLowerCase().includes('tổ') && (employees.find(e => e.id === user.employeeId)?.department?.toLowerCase().includes('đo đạc') || employees.find(e => e.id === user.employeeId)?.department?.toLowerCase().includes('kỹ thuật'));
+        const isCheckerUser = employees.find(e => e.id === effectiveId)?.position?.toLowerCase().includes('tổ') && (employees.find(e => e.id === effectiveId)?.department?.toLowerCase().includes('đo đạc') || employees.find(e => e.id === effectiveId)?.department?.toLowerCase().includes('kỹ thuật'));
         if (isCheckerUser) {
-            return r.assignedTo === user.employeeId || r.checkedBy === user.employeeId;
+            return r.assignedTo === effectiveId || r.checkedBy === effectiveId;
         }
-        return r.assignedTo === user.employeeId;
+        return r.assignedTo === effectiveId;
     });
     
     const mappedArchives = archiveRecords
         .filter(r => {
-            if (!user.employeeId) return false;
-            if (isDirector) {
-                return r.data?.submitted_to === user.employeeId || r.data?.assigned_to === user.employeeId; 
+            if (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN) {
+                return r.data?.submitted_to === effectiveId || r.data?.assigned_to === effectiveId || !r.data?.submitted_to; 
             }
-            const isCheckerUser = employees.find(e => e.id === user.employeeId)?.position?.toLowerCase().includes('tổ') && (employees.find(e => e.id === user.employeeId)?.department?.toLowerCase().includes('đo đạc') || employees.find(e => e.id === user.employeeId)?.department?.toLowerCase().includes('kỹ thuật'));
+            const isCheckerUser = employees.find(e => e.id === effectiveId)?.position?.toLowerCase().includes('tổ') && (employees.find(e => e.id === effectiveId)?.department?.toLowerCase().includes('đo đạc') || employees.find(e => e.id === effectiveId)?.department?.toLowerCase().includes('kỹ thuật'));
             if (isCheckerUser) {
-                return r.data?.assigned_to === user.employeeId || r.data?.checked_by === user.employeeId;
+                return r.data?.assigned_to === effectiveId || r.data?.checked_by === effectiveId;
             }
-            return r.data?.assigned_to === user.employeeId;
+            return r.data?.assigned_to === effectiveId;
         })
         .map(r => {
             // Map status
