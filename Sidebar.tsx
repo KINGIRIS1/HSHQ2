@@ -88,8 +88,8 @@ const Sidebar: React.FC<SidebarProps> = ({
         {/* BRAND HEADER */}
         <div className="p-4 border-b border-slate-800 bg-slate-900/50 flex flex-col gap-3 shrink-0">
           <div className="flex items-start gap-3">
-             <div className="bg-blue-600 p-1.5 rounded-lg shadow-blue-500/20 shrink-0 mt-1">
-                <ShieldCheck size={20} className="text-white" />
+             <div className="bg-white rounded-full shrink-0 mt-1 w-12 h-12 flex items-center justify-center shadow-lg overflow-hidden p-0 ring-2 ring-white/10">
+                <img src="/icon.svg" alt="Logo Hớn Quản" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
              </div>
              <div className="flex-1">
                  <h1 className="font-bold text-sm text-slate-100 leading-snug">

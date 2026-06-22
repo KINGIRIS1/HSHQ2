@@ -63,8 +63,8 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
             
             <div className="relative z-10">
                 <div className="mb-8">
-                    <div className="bg-blue-600 p-3 rounded-xl shadow-lg shadow-blue-500/20 ring-1 ring-blue-400/30 w-fit">
-                        <ShieldCheck size={32} className="text-white" />
+                    <div className="bg-white rounded-full shadow-xl w-24 h-24 flex items-center justify-center p-0 overflow-hidden ring-4 ring-white/10 shrink-0">
+                        <img src="/icon.svg" alt="Logo Hớn Quản" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     </div>
                 </div>
                 
