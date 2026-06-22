@@ -214,40 +214,14 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       
       const isArchive = activeRecord.recordType === 'Sao lục' || activeRecord.recordType === 'Công văn';
       
-      let nextStatus = RecordStatus.PENDING_CHECK;
+      let nextStatus = RecordStatus.IN_PROGRESS;
       const trackingUpdates: Partial<RecordFile> = {};
       
-      if (activeRecord.status === RecordStatus.RECEIVED || 
-          activeRecord.status === RecordStatus.ASSIGNED || 
-          activeRecord.status === RecordStatus.IN_PROGRESS || 
-          activeRecord.status === RecordStatus.COMPLETED_WORK) {
-          
-          if (isArchive || activeRecord.recordType === 'Cung cấp tài liệu đất đai') {
-              nextStatus = RecordStatus.PENDING_SIGN;
-              trackingUpdates.submissionDate = nowStr;
-              trackingUpdates.submittedTo = activeRecord.submittedTo || currentUser?.employeeId || 'DIR01';
-          } else {
-              nextStatus = RecordStatus.PENDING_CHECK;
-              trackingUpdates.pendingCheckDate = nowStr;
-              trackingUpdates.checkedBy = activeRecord.checkedBy || currentUser?.employeeId || 'CHECK01';
-          }
-      } else if (activeRecord.status === RecordStatus.PENDING_CHECK || 
-                 activeRecord.status === RecordStatus.CHECKED) {
-          nextStatus = RecordStatus.PENDING_SIGN;
-          trackingUpdates.checkedDate = nowStr;
-          trackingUpdates.checkedBy = activeRecord.checkedBy || currentUser?.employeeId || 'CHECK01';
-          trackingUpdates.submissionDate = nowStr;
-          trackingUpdates.submittedTo = activeRecord.submittedTo || 'DIR01';
-      } else if (activeRecord.status === RecordStatus.PENDING_SIGN) {
-          nextStatus = RecordStatus.SIGNED;
-          trackingUpdates.approvalDate = nowStr;
-      } else if (activeRecord.status === RecordStatus.SIGNED) {
-          nextStatus = RecordStatus.HANDOVER;
-          trackingUpdates.completedDate = nowStr;
-      } else {
-          nextStatus = activeRecord.status;
+      if (isArchive) {
+          // Gán lại cho chuyên viên thực hiện đối với hồ sơ lưu trữ
+          nextStatus = 'assigned' as any;
       }
-
+      
       const updatedRecord: RecordFile = {
           ...activeRecord,
           status: nextStatus,
@@ -255,8 +229,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
           defectReason: defectReasonInput,
           defectDate: nowStr,
           notes: currentNotes,
-          privateNotes: currentPrivateNotes,
-          ...trackingUpdates
+          privateNotes: currentPrivateNotes
       };
       
       try {

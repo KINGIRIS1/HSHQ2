@@ -464,23 +464,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
             if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
                 const currentArchive = archiveRecords.find(r => r.id === record.id);
                 let nextStatus: ArchiveRecord['status'] = 'assigned';
-                let actionText = 'Trình ký';
-                if (currentArchive) {
-                    const currentStatus = currentArchive.status;
-                    if (currentStatus === 'assigned' || currentStatus === 'executed') {
-                        nextStatus = 'pending_sign';
-                        actionText = 'Trình ký (Bị trả/Có lỗi)';
-                    } else if (currentStatus === 'pending_sign') {
-                        nextStatus = 'signed';
-                        actionText = 'Ký duyệt (Bị trả/Có lỗi)';
-                    } else if (currentStatus === 'signed') {
-                        nextStatus = 'completed';
-                        actionText = 'Hoàn thành (Bị trả/Có lỗi)';
-                    } else {
-                        nextStatus = currentStatus;
-                        actionText = 'Bị trả lại';
-                    }
-                }
+                let actionText = 'Bị trả lại (Có lỗi/Sai sót)';
 
                 const historyEntry = {
                     action: actionText,
@@ -509,40 +493,8 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                     });
                 }
             } else {
-                // Determine next status for normal records
-                let nextStatus = RecordStatus.PENDING_CHECK;
-                const trackingUpdates: Partial<RecordFile> = {};
-                
-                if (record.status === RecordStatus.RECEIVED || 
-                    record.status === RecordStatus.ASSIGNED || 
-                    record.status === RecordStatus.IN_PROGRESS || 
-                    record.status === RecordStatus.COMPLETED_WORK) {
-                    
-                    if (record.recordType === 'Cung cấp tài liệu đất đai') {
-                        nextStatus = RecordStatus.PENDING_SIGN;
-                        trackingUpdates.submissionDate = nowStr;
-                        trackingUpdates.submittedTo = record.submittedTo || user.employeeId || 'DIR01';
-                    } else {
-                        nextStatus = RecordStatus.PENDING_CHECK;
-                        trackingUpdates.pendingCheckDate = nowStr;
-                        trackingUpdates.checkedBy = record.checkedBy || user.employeeId || 'CHECK01';
-                    }
-                } else if (record.status === RecordStatus.PENDING_CHECK || 
-                           record.status === RecordStatus.CHECKED) {
-                    nextStatus = RecordStatus.PENDING_SIGN;
-                    trackingUpdates.checkedDate = nowStr;
-                    trackingUpdates.checkedBy = record.checkedBy || user.employeeId || 'CHECK01';
-                    trackingUpdates.submissionDate = nowStr;
-                    trackingUpdates.submittedTo = record.submittedTo || 'DIR01';
-                } else if (record.status === RecordStatus.PENDING_SIGN) {
-                    nextStatus = RecordStatus.SIGNED;
-                    trackingUpdates.approvalDate = nowStr;
-                } else if (record.status === RecordStatus.SIGNED) {
-                    nextStatus = RecordStatus.HANDOVER;
-                    trackingUpdates.completedDate = nowStr;
-                } else {
-                    nextStatus = record.status;
-                }
+                // Determine regression status for normal records
+                let nextStatus = RecordStatus.IN_PROGRESS;
 
                 // Normal Record
                 const updatedRecord: RecordFile = {
@@ -552,8 +504,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                     privateNotes: currentPrivateNotes,
                     hasDefect: true,
                     defectReason: reason,
-                    defectDate: nowStr,
-                    ...trackingUpdates
+                    defectDate: nowStr
                 };
 
                 if (onUpdateRecord) {
