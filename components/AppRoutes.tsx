@@ -1201,7 +1201,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                     className="flex items-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 font-bold shadow-md transition-all"
                     title="Trả hồ sơ về Bộ phận 1 cửa"
                   >
-                    <ClipboardList size={18} /> Hồ sơ trả (
+                    <ClipboardList size={18} /> Trả hồ sơ (
                     {props.selectedRecordIds.size})
                   </button>
                   <button

@@ -5,7 +5,7 @@ import { RecordFile } from '../../types';
 interface RejectReasonModalProps {
     isOpen: boolean;
     onClose: () => void;
-    record: RecordFile | null;
+    record: RecordFile | RecordFile[] | null;
     onConfirm: (reason: string) => void;
 }
 
@@ -22,7 +22,10 @@ const RejectReasonModal: React.FC<RejectReasonModalProps> = ({ isOpen, onClose, 
         setReason('');
     };
 
-    const recordCode = record.code || record.receiptNumber || '---';
+    const isArray = Array.isArray(record);
+    const recordCode = isArray 
+        ? `${record.length} hồ sơ đang chọn`
+        : (record as RecordFile).code || (record as RecordFile).receiptNumber || '---';
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center z-[9999] p-4 backdrop-blur-xs">

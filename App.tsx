@@ -27,6 +27,7 @@ import MobileRoutes from './components/mobile/MobileRoutes';
 import SubmitModal from './components/receive-record/SubmitModal';
 import GlobalConfirmModal from './components/GlobalConfirmModal';
 import GlobalAlertModal from './components/GlobalAlertModal';
+import RejectReasonModal from './components/receive-record/RejectReasonModal';
 
 function App() {
   const isMobile = useIsMobile(768);
@@ -71,6 +72,8 @@ function App() {
   const [isBulkUpdateModalOpen, setIsBulkUpdateModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [returnRecord, setReturnRecord] = useState<RecordFile | null>(null);
+  const [isRejectReasonModalOpen, setIsRejectReasonModalOpen] = useState(false);
+  const [rejectRecordsTarget, setRejectRecordsTarget] = useState<RecordFile[]>([]);
 
   // Report States
   const [globalReportContent, setGlobalReportContent] = useState('');
@@ -631,35 +634,70 @@ function App() {
 
   const handleMarkAsRejected = async () => {
       if (selectedRecordIds.size === 0) return;
-      if (await confirmAction(`Xác nhận đánh dấu ${selectedRecordIds.size} hồ sơ đang chọn thành "Hồ sơ trả"?\n\nHồ sơ sẽ được chuyển vào danh sách Chờ giao của bộ phận 1 cửa.`)) {
-          const nowStr = new Date().toISOString();
-          const targets = records.filter(r => selectedRecordIds.has(r.id));
-          
-          const flow = [RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.PENDING_CHECK, RecordStatus.CHECKED, RecordStatus.PENDING_SIGN, RecordStatus.SIGNED, RecordStatus.HANDOVER];
+      const targets = records.filter(r => selectedRecordIds.has(r.id));
+      setRejectRecordsTarget(targets);
+      setIsRejectReasonModalOpen(true);
+  };
 
-          const updatesToApply = targets.map(r => {
-             const updates: any = { status: RecordStatus.REJECTED, completedDate: r.completedDate || nowStr };
-             const prevIdx = flow.indexOf(r.status);
-             if (prevIdx >= 0) {
-                 if (prevIdx >= flow.indexOf(RecordStatus.ASSIGNED) && !r.assignedDate) updates.assignedDate = nowStr;
-                 if (prevIdx >= flow.indexOf(RecordStatus.COMPLETED_WORK) && !r.completedWorkDate) updates.completedWorkDate = nowStr;
-                 if (prevIdx >= flow.indexOf(RecordStatus.PENDING_CHECK) && !r.pendingCheckDate) updates.pendingCheckDate = nowStr;
-                 if (prevIdx >= flow.indexOf(RecordStatus.CHECKED) && !r.checkedDate) updates.checkedDate = nowStr;
-                 if (prevIdx >= flow.indexOf(RecordStatus.PENDING_SIGN) && !r.submissionDate) updates.submissionDate = nowStr;
-                 if (prevIdx >= flow.indexOf(RecordStatus.SIGNED) && !r.approvalDate) updates.approvalDate = nowStr;
+  const handleConfirmRejectRecords = async (reason: string) => {
+      if (rejectRecordsTarget.length === 0) return;
+      const nowStr = new Date().toISOString();
+      const flow = [RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.PENDING_CHECK, RecordStatus.CHECKED, RecordStatus.PENDING_SIGN, RecordStatus.SIGNED, RecordStatus.HANDOVER];
+
+      // Format Vietnamese date
+      const formattedDate = new Date().toLocaleDateString('vi-VN');
+      const rejectPrefix = `[Trả hồ sơ ngày ${formattedDate}]: ${reason}`;
+
+      const updatesToApply = rejectRecordsTarget.map(r => {
+         const updates: any = { 
+             status: RecordStatus.REJECTED, 
+             completedDate: r.completedDate || nowStr,
+             rejectDate: nowStr,
+             rejectReason: reason
+         };
+         
+         let currentNotesObj: any = {};
+         if (r.notes && r.notes.startsWith('{') && r.notes.endsWith('}')) {
+             try {
+                 currentNotesObj = JSON.parse(r.notes);
+             } catch (e) {
+                 // ignore
              }
-             return { ...r, ...updates };
-          });
-          
-          setRecords(prev => prev.map(r => {
-              const updated = updatesToApply.find(u => u.id === r.id);
-              return updated ? updated : r;
-          }));
-          await Promise.all(updatesToApply.map(r => updateRecordApi(r)));
-          
-          setSelectedRecordIds(new Set());
-          setToast({ type: 'success', message: `Đã đánh dấu ${targets.length} hồ sơ thành "Hồ sơ trả".` });
-      }
+         }
+         const updatedNotesObj = {
+             ...currentNotesObj,
+             rejectReason: reason,
+             rejectDate: nowStr
+         };
+         updates.notes = JSON.stringify(updatedNotesObj);
+         
+         updates.privateNotes = r.privateNotes 
+             ? `${rejectPrefix}\n${r.privateNotes}` 
+             : rejectPrefix;
+
+         const prevIdx = flow.indexOf(r.status);
+         if (prevIdx >= 0) {
+             if (prevIdx >= flow.indexOf(RecordStatus.ASSIGNED) && !r.assignedDate) updates.assignedDate = nowStr;
+             if (prevIdx >= flow.indexOf(RecordStatus.COMPLETED_WORK) && !r.completedWorkDate) updates.completedWorkDate = nowStr;
+             if (prevIdx >= flow.indexOf(RecordStatus.PENDING_CHECK) && !r.pendingCheckDate) updates.pendingCheckDate = nowStr;
+             if (prevIdx >= flow.indexOf(RecordStatus.CHECKED) && !r.checkedDate) updates.checkedDate = nowStr;
+             if (prevIdx >= flow.indexOf(RecordStatus.PENDING_SIGN) && !r.submissionDate) updates.submissionDate = nowStr;
+             if (prevIdx >= flow.indexOf(RecordStatus.SIGNED) && !r.approvalDate) updates.approvalDate = nowStr;
+         }
+         return { ...r, ...updates };
+      });
+      
+      setRecords(prev => prev.map(r => {
+          const updated = updatesToApply.find(u => u.id === r.id);
+          return updated ? updated : r;
+      }));
+      
+      await Promise.all(updatesToApply.map(r => updateRecordApi(r)));
+      
+      setSelectedRecordIds(new Set());
+      setIsRejectReasonModalOpen(false);
+      setRejectRecordsTarget([]);
+      setToast({ type: 'success', message: `Đã trả ${updatesToApply.length} hồ sơ về Bộ phận 1 cửa thành công!` });
   };
 
   if (!currentUser) return <Login onLogin={setCurrentUser} users={users} />;
@@ -987,6 +1025,13 @@ function App() {
                     setToast({ type: 'error', message: 'Có lỗi xảy ra khi trình kiểm tra.' });
                 }
             }}
+        />
+
+        <RejectReasonModal
+            isOpen={isRejectReasonModalOpen}
+            onClose={() => { setIsRejectReasonModalOpen(false); setRejectRecordsTarget([]); }}
+            record={rejectRecordsTarget}
+            onConfirm={handleConfirmRejectRecords}
         />
 
         {toast && (
