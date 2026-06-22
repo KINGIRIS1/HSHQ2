@@ -6,8 +6,9 @@ import { fetchRecords, fetchEmployees, fetchUsers, fetchUpdateInfo, fetchHoliday
     saveEmployeeApi, deleteEmployeeApi, saveUserApi, deleteUserApi, deleteAllDataApi, getSystemSetting
 } from '../services/api';
 import { supabase } from '../services/supabaseClient';
-import { mapRecordFromDb } from '../services/apiCore';
+import { mapRecordFromDb, saveToCache, CACHE_KEYS } from '../services/apiCore';
 import { DEFAULT_WARDS as STATIC_WARDS, APP_VERSION } from '../constants';
+import { addToOfflineQueue } from '../utils/offlineSync';
 
 export const useAppData = (currentUser: User | null) => {
     const [records, setRecords] = useState<RecordFile[]>([]);
@@ -139,8 +140,19 @@ export const useAppData = (currentUser: User | null) => {
         if (recordData.status === RecordStatus.WITHDRAWN && forceDeleteOnWithdrawn) {
             const success = await deleteRecordApi(recordData.id);
             if (success) {
-                setRecords(prev => prev.filter(r => r.id !== recordData.id));
+                setRecords(prev => {
+                    const filtered = prev.filter(r => r.id !== recordData.id);
+                    saveToCache(CACHE_KEYS.RECORDS, filtered);
+                    return filtered;
+                });
                 alert(`Hồ sơ ${recordData.code} đã được xóa hoàn toàn khỏi hệ thống (Hủy hồ sơ).`);
+            } else {
+                setRecords(prev => {
+                    const filtered = prev.filter(r => r.id !== recordData.id);
+                    saveToCache(CACHE_KEYS.RECORDS, filtered);
+                    return filtered;
+                });
+                addToOfflineQueue('delete_record', { id: recordData.id }, `Hủy hồ sơ: ${recordData.code}`);
             }
             return null;
         }
@@ -149,25 +161,65 @@ export const useAppData = (currentUser: User | null) => {
         if (isEdit) {
             const updated = await updateRecordApi(recordData);
             if (updated) {
-                setRecords(prev => prev.map(r => r.id === updated.id ? updated : r));
+                setRecords(prev => {
+                    const next = prev.map(r => r.id === updated.id ? updated : r);
+                    saveToCache(CACHE_KEYS.RECORDS, next);
+                    return next;
+                });
                 return updated;
+            } else {
+                const offlineRec = { ...recordData };
+                setRecords(prev => {
+                    const next = prev.map(r => r.id === offlineRec.id ? offlineRec : r);
+                    saveToCache(CACHE_KEYS.RECORDS, next);
+                    return next;
+                });
+                addToOfflineQueue('update_record', offlineRec, `Cập nhật hồ sơ: ${recordData.code || recordData.customerName}`);
+                return offlineRec;
             }
         } else {
-            const newRecord = await createRecordApi({ ...recordData, id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9) });
+            const generatedId = recordData.id || (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9));
+            const finalCode = recordData.code || `${new Date().getFullYear().toString().slice(-2)}${('0' + (new Date().getMonth() + 1)).slice(-2)}${('0' + new Date().getDate()).slice(-2)}-TEMP${Math.floor(Math.random() * 1000).toString().padStart(4, '0')}`;
+            const offlineNewRec = { ...recordData, id: generatedId, code: finalCode };
+            
+            const newRecord = await createRecordApi(offlineNewRec);
             if (newRecord) {
-                setRecords(prev => [newRecord, ...prev]);
+                setRecords(prev => {
+                    const next = [newRecord, ...prev];
+                    saveToCache(CACHE_KEYS.RECORDS, next);
+                    return next;
+                });
                 return newRecord;
+            } else {
+                setRecords(prev => {
+                    const next = [offlineNewRec, ...prev];
+                    saveToCache(CACHE_KEYS.RECORDS, next);
+                    return next;
+                });
+                addToOfflineQueue('create_record', offlineNewRec, `Thêm hồ sơ mới: ${offlineNewRec.code} (${offlineNewRec.customerName})`);
+                return offlineNewRec;
             }
         }
-        return null;
     };
 
     const handleDeleteRecord = async (id: string) => {
         const success = await deleteRecordApi(id);
         if (success) {
-            setRecords(prev => prev.filter(r => r.id !== id));
+            setRecords(prev => {
+                const next = prev.filter(r => r.id !== id);
+                saveToCache(CACHE_KEYS.RECORDS, next);
+                return next;
+            });
+        } else {
+            const target = records.find(r => r.id === id);
+            setRecords(prev => {
+                const next = prev.filter(r => r.id !== id);
+                saveToCache(CACHE_KEYS.RECORDS, next);
+                return next;
+            });
+            addToOfflineQueue('delete_record', { id }, `Xóa hồ sơ: ${target?.code || id}`);
         }
-        return success;
+        return true;
     };
 
     const handleImportRecords = async (newRecords: RecordFile[], onProgress?: (processed: number, total: number) => void) => {
@@ -199,14 +251,48 @@ export const useAppData = (currentUser: User | null) => {
         const exists = employees.find(e => e.id === emp.id);
         const savedEmp = await saveEmployeeApi(emp, !!exists);
         if (savedEmp) {
-            if (exists) setEmployees(prev => prev.map(e => e.id === savedEmp.id ? savedEmp : e));
-            else setEmployees(prev => [...prev, savedEmp]);
+            if (exists) setEmployees(prev => {
+                const next = prev.map(e => e.id === savedEmp.id ? savedEmp : e);
+                saveToCache(CACHE_KEYS.EMPLOYEES, next);
+                return next;
+            });
+            else setEmployees(prev => {
+                const next = [...prev, savedEmp];
+                saveToCache(CACHE_KEYS.EMPLOYEES, next);
+                return next;
+            });
+        } else {
+            if (exists) setEmployees(prev => {
+                const next = prev.map(e => e.id === emp.id ? emp : e);
+                saveToCache(CACHE_KEYS.EMPLOYEES, next);
+                return next;
+            });
+            else setEmployees(prev => {
+                const next = [...prev, emp];
+                saveToCache(CACHE_KEYS.EMPLOYEES, next);
+                return next;
+            });
+            addToOfflineQueue(exists ? 'update_record' : 'create_record', emp, `${exists ? 'Cập nhật' : 'Thêm'} nhân viên: ${emp.name}`);
         }
     };
 
     const handleDeleteEmployee = async (id: string) => {
         const success = await deleteEmployeeApi(id);
-        if (success) setEmployees(prev => prev.filter(e => e.id !== id));
+        if (success) {
+            setEmployees(prev => {
+                const next = prev.filter(e => e.id !== id);
+                saveToCache(CACHE_KEYS.EMPLOYEES, next);
+                return next;
+            });
+        } else {
+            const target = employees.find(e => e.id === id);
+            setEmployees(prev => {
+                const next = prev.filter(e => e.id !== id);
+                saveToCache(CACHE_KEYS.EMPLOYEES, next);
+                return next;
+            });
+            addToOfflineQueue('delete_record', { id }, `Xóa nhân viên: ${target?.name || id}`);
+        }
     };
 
     // --- User Handlers ---

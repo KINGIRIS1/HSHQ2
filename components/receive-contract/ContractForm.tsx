@@ -292,6 +292,7 @@ const ContractForm: React.FC<ContractFormProps> = ({ initialData, onSave, onPrin
 
           setFormData(prev => ({ 
               ...prev, 
+              recordCode: found.code,
               customerName: found.customerName, 
               phoneNumber: found.phoneNumber, 
               ward: found.ward, 
@@ -494,12 +495,19 @@ const ContractForm: React.FC<ContractFormProps> = ({ initialData, onSave, onPrin
 
                 <div className="p-6 space-y-6">
                     {/* Basic Info */}
-                    <div className="grid grid-cols-2 gap-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 bg-slate-50 rounded-xl border border-slate-200">
                         <div>
                             <label className={labelClass}>Mã Hợp Đồng</label>
                             <div className="relative">
                                 <FileText size={16} className="absolute left-3 top-3 text-slate-400" />
                                 <input type="text" readOnly className={`${inputClass} bg-white pl-9 font-mono font-bold text-purple-700`} value={formData.code ?? ''} />
+                            </div>
+                        </div>
+                        <div>
+                            <label className={labelClass}>Mã Hồ Sơ liên kết</label>
+                            <div className="relative">
+                                <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+                                <input type="text" className={`${inputClass} pl-9 font-mono font-bold text-blue-700`} value={formData.recordCode ?? ''} onChange={e => handleChange('recordCode', e.target.value)} placeholder="Nhập mã hồ sơ để liên kết" />
                             </div>
                         </div>
                         <div>

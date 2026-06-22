@@ -779,6 +779,7 @@ function App() {
         warningCount={recordFilterProps.warningCount}
         activeRemindersCount={activeRemindersCount}
         connectionStatus={connectionStatus}
+        onSyncSuccess={loadData}
         rolePermissions={rolePermissions}
         departmentPermissions={departmentPermissions}
         employees={employees}

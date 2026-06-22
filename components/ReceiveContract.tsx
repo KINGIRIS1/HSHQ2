@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { RecordFile, Contract, PriceItem, SplitItem, User, Employee } from '../types';
 import { fetchPriceList, deleteContractApi, updateContractApi, createContractApi, fetchContracts } from '../services/api';
-import { FileSignature, LayoutList, Settings, Settings2, FileCheck, FileText, ClipboardList, BookOpen } from 'lucide-react';
+import { FileSignature, LayoutList, Settings, Settings2, FileCheck, FileText, ClipboardList, BookOpen, WifiOff, HelpCircle } from 'lucide-react';
 import PriceConfigModal from './PriceConfigModal';
 import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../services/docxService';
 import TemplateConfigModal from './TemplateConfigModal';
@@ -11,6 +11,8 @@ import { confirmAction, removeVietnameseTones } from '../utils/appHelpers';
 import saveAs from 'file-saver'; // Import saveAs
 import { ContractNumberingBookModal } from './ContractNumberingBookModal';
 import { getContractNumberingConfig, saveContractNumberingConfig, peekNextContractCode } from '../utils/contractNumbering';
+import { saveToCache, CACHE_KEYS } from '../services/apiCore';
+import { addToOfflineQueue } from '../utils/offlineSync';
 
 // Child Components
 import ContractForm from './receive-contract/ContractForm';
@@ -81,6 +83,20 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
   
   const [editingContract, setEditingContract] = useState<Contract | undefined>(undefined);
   const [nextCodeProposal, setNextCodeProposal] = useState<string>('');
+
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== 'undefined' ? navigator.onLine : true);
+  const [isNetworkGuideOpen, setIsNetworkGuideOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+      const handleOnline = () => setIsOnline(true);
+      const handleOffline = () => setIsOnline(false);
+      window.addEventListener('online', handleOnline);
+      window.addEventListener('offline', handleOffline);
+      return () => {
+          window.removeEventListener('online', handleOnline);
+          window.removeEventListener('offline', handleOffline);
+      };
+  }, []);
 
   useEffect(() => { 
       loadPrices(); 
@@ -159,6 +175,7 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
               const newContract: Contract = {
                   id: Math.random().toString(36).substr(2, 9),
                   code: generateContractCode(),
+                  recordCode: recordToLiquidate.code,
                   customerName: recordToLiquidate.customerName,
                   phoneNumber: recordToLiquidate.phoneNumber,
                   address: recordToLiquidate.address,
@@ -209,9 +226,18 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
 
   const handleDelete = async (id: string) => { 
       if(await confirmAction("Bạn có chắc chắn muốn xóa hợp đồng này không?")) {
-          await deleteContractApi(id);
-          loadContracts(); // Reload list
-          loadNextCodeProposal(); // Refresh sequential counter in case the slot allows reuse (though keeping sequence is fine)
+          const target = contracts.find(c => c.id === id);
+          const success = await deleteContractApi(id);
+          if (success) {
+              loadContracts(); // Reload list
+              loadNextCodeProposal(); // Refresh sequential counter
+          } else {
+              const updated = contracts.filter(c => c.id !== id);
+              setContracts(updated);
+              saveToCache(CACHE_KEYS.CONTRACTS, updated);
+              addToOfflineQueue('delete_contract', { id }, `Xóa hợp đồng: ${target?.code || id}`);
+              loadNextCodeProposal();
+          }
       } 
   }; 
 
@@ -219,6 +245,15 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
       let success = false;
       if (isUpdate) {
           success = await updateContractApi(contract);
+          if (success) {
+              loadContracts(); // Reload list
+          } else {
+              const updated = contracts.map(c => c.id === contract.id ? contract : c);
+              setContracts(updated);
+              saveToCache(CACHE_KEYS.CONTRACTS, updated);
+              addToOfflineQueue('update_contract', contract, `Cập nhật hợp đồng ngoại tuyến: ${contract.code || contract.customerName}`);
+              success = true;
+          }
       } else {
           // If the user is saving a new contract:
           // Check if they used the automatically proposed format, or let them override it.
@@ -236,9 +271,22 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
           
           const contractWithFinalCode = { ...contract, code: finalCode };
           success = await createContractApi(contractWithFinalCode);
-          loadNextCodeProposal();
+          if (success) {
+              loadNextCodeProposal();
+              loadContracts(); // Reload list
+          } else {
+              const offlineContract = {
+                  ...contractWithFinalCode,
+                  id: contractWithFinalCode.id || (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11))
+              };
+              const updated = [offlineContract, ...contracts];
+              setContracts(updated);
+              saveToCache(CACHE_KEYS.CONTRACTS, updated);
+              addToOfflineQueue('create_contract', offlineContract, `Tạo hợp đồng ngoại tuyến: ${offlineContract.code} (${offlineContract.customerName})`);
+              loadNextCodeProposal();
+              success = true;
+          }
       }
-      if (success) loadContracts(); // Reload list
       return success;
   };
 
@@ -247,8 +295,18 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
       if (success) {
           loadContracts();
           loadNextCodeProposal();
+      } else {
+          const offlineContract = {
+              ...skeletonContract,
+              id: skeletonContract.id || (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11))
+          };
+          const updated = [offlineContract, ...contracts];
+          setContracts(updated);
+          saveToCache(CACHE_KEYS.CONTRACTS, updated);
+          addToOfflineQueue('create_contract', offlineContract, `Cấp số nhanh hợp đồng ngoại tuyến: ${offlineContract.code}`);
+          loadNextCodeProposal();
       }
-      return success;
+      return true;
   };
 
   // --- LOGIC IN ẤN (TẢI VỀ & MỞ) ---
@@ -490,6 +548,10 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
             <div><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><FileSignature className="text-purple-600" /> Quản Lý Hợp Đồng</h2></div>
             
             <div className="flex gap-2 items-center flex-wrap">
+                <button onClick={() => setIsNetworkGuideOpen(true)} className="px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100 rounded-lg transition-all shadow-sm flex items-center gap-1.5 font-bold text-xs" title="Hướng dẫn khôi phục khi mất mạng/rớt mạng">
+                    <WifiOff size={14} className={!isOnline ? "animate-pulse text-rose-600" : "text-rose-500"} />
+                    <span>Rớt Mạng? {!isOnline && <span className="ml-1 px-1 py-0.5 bg-red-600 text-white rounded text-[10px] uppercase font-mono tracking-wider animate-pulse">Offline</span>}</span>
+                </button>
                 <button onClick={() => setIsNumberingModalOpen(true)} className="px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-700 hover:border-purple-600 rounded-lg transition-all shadow-md flex items-center gap-1.5 font-bold text-xs" title="Sổ Lấy Số & Số Hợp Đồng Tự Động">
                     <BookOpen size={14} />
                     <span>Sổ Lấy Số (Tiếp: {nextCodeProposal})</span>
@@ -502,6 +564,16 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
                 </button>
             </div>
         </div>
+
+        {!isOnline && (
+            <div className="mx-4 mb-4 p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2.5 text-rose-900 animate-pulse text-xs shrink-0">
+                <WifiOff size={16} className="text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                    <span className="font-bold block text-sm">Cảnh báo: Đang Mất Kết Nối Internet!</span>
+                    <p className="mt-0.5">Vui lòng **KHÔNG TẢI LẠI TRANG (F5)** để tránh mất dữ liệu nháp đang nhập dở. Giữ nguyên màn hình, khi có internet ổn định, dữ liệu chuyển tiếp/lưu hợp đồng sẽ tiếp tục được đồng bộ hóa thành công.</p>
+                </div>
+            </div>
+        )}
 
         {/* MAIN TABS */}
         <div className="flex px-4 gap-2 overflow-x-auto">
@@ -611,6 +683,55 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
           onConfigChange={loadNextCodeProposal}
           onQuickAllocate={handleQuickAllocate}
       />
+
+      {isNetworkGuideOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90vh] overflow-hidden shadow-2xl border border-gray-100 flex flex-col animate-scale-up text-left">
+            <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-rose-50 rounded-t-2xl shrink-0">
+              <h3 className="font-bold text-lg text-rose-950 flex items-center gap-2">
+                <WifiOff className="text-rose-600 animate-pulse" size={20} />
+                <span>Hướng dẫn Sự cố Rớt Mạng / Mất Kết Nối</span>
+              </h3>
+              <button onClick={() => setIsNetworkGuideOpen(false)} className="text-rose-900/60 hover:text-rose-900 p-1.5 bg-white hover:bg-rose-100 rounded-full transition-colors font-bold">
+                X
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4 text-sm text-gray-700 leading-relaxed overflow-y-auto max-h-[60vh]">
+              <div>
+                <span className="font-bold text-slate-900 block mb-1">1. ĐIỀU QUAN TRỌNG NHẤT: KHÔNG TẢI LẠI TRANG (F5)</span>
+                <p>Khi mất internet, các dữ liệu tạm thời (form đang nhập dở, danh sách hợp đồng vừa hiển thị) vẫn được <strong>giữ nguyên trong bộ nhớ trình duyệt</strong>. Nếu bạn tải lại trang (F5) hoặc đóng tab, những dữ liệu này sẽ lập tức bị xóa và mất sạch.</p>
+              </div>
+
+              <div>
+                <span className="font-bold text-slate-900 block mb-1">2. CÁCH KHẮC PHỤC KHI LỠ CHUYỂN HỒ SƠ LÚC RỚT MẠNG</span>
+                <p>Nếu bạn nhấn chuyển hồ sơ (hoặc chuyển lập hợp đồng, quyết toán, lưu thông tin) nhưng mạng bị chập chờn:</p>
+                <ul className="list-disc pl-5 mt-1 space-y-1.5 text-slate-600">
+                  <li><strong>Hãy giữ nguyên màn hình đó:</strong> Không cần đóng hay thoát khỏi màn hình hiện tại.</li>
+                  <li><strong>Kiểm tra lại kết nối mạng Wifi/LAN:</strong> Đợi khoảng 10-20 giây để biểu tượng sóng mạng ổn định trở lại.</li>
+                  <li><strong>Tiến hành gửi lại:</strong> Khi có mạng, hãy bấm nút <strong>"Lưu"</strong> hoặc nút <strong>"Tải lại" 🔄</strong> trên danh sách. Dữ liệu sẽ tiếp tục được truyền tải lên máy chủ thành công mà không bị lỗi trùng lặp.</li>
+                </ul>
+              </div>
+
+              <div>
+                <span className="font-bold text-slate-900 block mb-1">3. TÌM LẠI HỒ SƠ QUA "MÃ HỒ SƠ LIÊN KẾT"</span>
+                <p>Để giúp bạn kiểm soát độc lập, chúng tôi đã thêm cột <strong>"Mã hồ sơ liên kết"</strong> ngay bên cạnh Mã Hợp Đồng trong danh sách. Kể cả khi mạng chập chờn và chuyển hồ sơ đi, bạn luôn biết chính xác hợp đồng nào thuộc về hồ sơ nào nhờ liên kết này.</p>
+              </div>
+
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs mt-2">
+                <span className="font-bold block mb-1">💡 Mẹo nhỏ cho khu vực mạng kém:</span>
+                Trước khi thao tác các tác vụ quan trọng, bạn có thể kiểm tra tín hiệu mạng qua biểu tượng phía trên. Nếu mất mạng, hệ thống sẽ cảnh báo bằng biểu ngữ đỏ rực để nhắc nhở phòng ngừa.
+              </div>
+            </div>
+
+            <div className="p-4 bg-gray-50 border-t border-gray-100 flex justify-end shrink-0 rounded-b-2xl">
+              <button onClick={() => setIsNetworkGuideOpen(false)} className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-sm shadow-sm transition-colors">
+                Tôi đã hiểu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

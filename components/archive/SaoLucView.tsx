@@ -74,7 +74,8 @@ interface SaoLucFormData {
     | "checked"
     | "pending_sign"
     | "signed"
-    | "completed";
+    | "completed"
+    | "rejected";
   ngay_hoan_thanh?: string;
   danh_sach?: string;
   receipt_number?: string;

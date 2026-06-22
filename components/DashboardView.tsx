@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { RecordFile, RecordStatus } from '../types';
-import { getNormalizedWard, getShortRecordType } from '../constants';
+import { getNormalizedWard, getShortRecordType, REGISTRATION_PROCEDURES } from '../constants';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { FileText, RotateCcw, CheckCircle, ArchiveX, MapPin, Layers, CalendarRange, Filter, CalendarDays, Calendar } from 'lucide-react';
 
@@ -17,6 +17,9 @@ const DashboardView: React.FC<DashboardViewProps> = ({ records }) => {
     
     // State chọn năm (cho chế độ Year)
     const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
+
+    // State chọn biểu đồ: bộ phận hay loại hình
+    const [chartMode, setChartMode] = useState<'department' | 'type'>('department');
 
     // 1. Tự động xác định danh sách các năm có trong dữ liệu
     const availableYears = useMemo(() => {
@@ -66,11 +69,55 @@ const DashboardView: React.FC<DashboardViewProps> = ({ records }) => {
         });
     }, [records, selectedYear, viewMode]);
 
-    // 3. Tính toán thống kê
+    // 3. Tính toán thống kê chung
     const total = filteredRecords.length;
     const completed = filteredRecords.filter(r => r.status === RecordStatus.HANDOVER || r.status === RecordStatus.RETURNED || r.status === RecordStatus.REJECTED).length;
     const withdrawn = filteredRecords.filter(r => r.status === RecordStatus.WITHDRAWN).length;
     const processing = total - completed - withdrawn;
+
+    // --- Phân loại theo 3 Bộ phận Chính ---
+    const isReg = (type: string | null | undefined): boolean => {
+        if (!type) return false;
+        const t = type.trim().toLowerCase();
+        return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
+    };
+
+    const measRecords = useMemo(() => {
+        return filteredRecords.filter(r => 
+            !['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '') &&
+            !isReg(r.recordType)
+        );
+    }, [filteredRecords]);
+
+    const regRecords = useMemo(() => {
+        return filteredRecords.filter(r => isReg(r.recordType));
+    }, [filteredRecords]);
+
+    const archRecords = useMemo(() => {
+        return filteredRecords.filter(r => ['Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || ''));
+    }, [filteredRecords]);
+
+    // Thống kê chi tiết từng bộ phận
+    const getDeptStats = (deptRecs: RecordFile[]) => {
+        const dTotal = deptRecs.length;
+        const dCompleted = deptRecs.filter(r => r.status === RecordStatus.HANDOVER || r.status === RecordStatus.RETURNED || r.status === RecordStatus.REJECTED).length;
+        const dWithdrawn = deptRecs.filter(r => r.status === RecordStatus.WITHDRAWN).length;
+        const dProcessing = dTotal - dCompleted - dWithdrawn;
+        return { total: dTotal, completed: dCompleted, withdrawn: dWithdrawn, processing: dProcessing };
+    };
+
+    const measStats = useMemo(() => getDeptStats(measRecords), [measRecords]);
+    const regStats = useMemo(() => getDeptStats(regRecords), [regRecords]);
+    const archStats = useMemo(() => getDeptStats(archRecords), [archRecords]);
+
+    // Data so sánh 3 bộ phận tốt nhất
+    const departmentChartData = useMemo(() => {
+        return [
+            { name: 'Đo đạc', value: measStats.total, color: '#3b82f6' },
+            { name: 'Cấp giấy', value: regStats.total, color: '#a855f7' },
+            { name: 'Lưu trữ & Công văn', value: archStats.total, color: '#10b981' }
+        ].filter(d => d.value > 0);
+    }, [measStats.total, regStats.total, archStats.total]);
 
     // --- Data cho Biểu đồ Địa bàn (Xã/Phường) ---
     const wardData = useMemo(() => {
@@ -209,6 +256,146 @@ const DashboardView: React.FC<DashboardViewProps> = ({ records }) => {
                 </div>
             </div>
 
+            {/* 3 BỘ PHẬN NGHIỆP VỤ CHÍNH */}
+            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 space-y-4">
+                <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-extrabold text-gray-800 uppercase tracking-wider flex items-center gap-2">
+                        <Layers size={18} className="text-blue-600" /> THỐNG KÊ CHI TIẾT THEO 3 BỘ PHẬN CHÍNH
+                    </h3>
+                    <span className="text-xs bg-blue-50 text-blue-600 font-bold px-2.5 py-1 rounded-full border border-blue-100">
+                        Phân bổ phòng ban
+                    </span>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* BỘ PHẬN ĐO ĐẠC */}
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100/85 hover:border-blue-200 hover:bg-blue-50/5 transition-all shadow-sm flex flex-col justify-between group">
+                        <div>
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-bold uppercase tracking-wider text-blue-600 bg-blue-50 px-2 py-1 rounded border border-blue-100">
+                                    Đo đạc bản đồ
+                                </span>
+                                <div className="p-2 bg-blue-100/50 rounded-xl text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                    <Layers size={18} />
+                                </div>
+                            </div>
+                            <h4 className="text-base font-bold text-gray-800">Bộ phận Đo đạc</h4>
+                            <p className="text-xs text-gray-500 mt-1 font-medium">Xử lý trích đo, trích lục bản đồ, cắm mốc</p>
+                            
+                            <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-200/60 font-medium">
+                                <div className="text-center">
+                                    <span className="text-[10px] text-gray-400 block font-semibold uppercase">Nhận</span>
+                                    <span className="text-base font-bold text-slate-800">{measStats.total}</span>
+                                </div>
+                                <div className="text-center border-x border-slate-200/60">
+                                    <span className="text-[10px] text-yellow-600 block font-semibold uppercase">Đang XL</span>
+                                    <span className="text-base font-bold text-yellow-600">{measStats.processing}</span>
+                                </div>
+                                <div className="text-center">
+                                    <span className="text-[10px] text-green-600 block font-semibold uppercase">Xong</span>
+                                    <span className="text-base font-bold text-green-600">{measStats.completed}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {measStats.total > 0 && (
+                            <div className="mt-4 pt-3 border-t border-slate-200/50">
+                                <div className="flex justify-between text-xs font-semibold text-gray-500 mb-1">
+                                    <span>Tỷ lệ hoàn thành</span>
+                                    <span>{Math.round((measStats.completed / measStats.total) * 100)}%</span>
+                                </div>
+                                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                    <div className="bg-blue-500 h-full rounded-full" style={{ width: `${(measStats.completed / measStats.total) * 100}%` }}></div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* BỘ PHẬN CẤP GIẤY */}
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100/85 hover:border-purple-200 hover:bg-purple-50/5 transition-all shadow-sm flex flex-col justify-between group">
+                        <div>
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-bold uppercase tracking-wider text-purple-600 bg-purple-50 px-2 py-1 rounded border border-purple-100">
+                                    Cấp giấy & Biến động
+                                </span>
+                                <div className="p-2 bg-purple-100/50 rounded-xl text-purple-600 group-hover:bg-purple-600 group-hover:text-white transition-all">
+                                    <CheckCircle size={18} />
+                                </div>
+                            </div>
+                            <h4 className="text-base font-bold text-gray-800">Bộ phận Cấp giấy</h4>
+                            <p className="text-xs text-gray-500 mt-1 font-medium">Quy trình cấp đổi, cấp mới, thừa kế, tặng cho</p>
+                            
+                            <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-200/60 font-medium">
+                                <div className="text-center">
+                                    <span className="text-[10px] text-gray-400 block font-semibold uppercase">Nhận</span>
+                                    <span className="text-base font-bold text-slate-800">{regStats.total}</span>
+                                </div>
+                                <div className="text-center border-x border-slate-200/60">
+                                    <span className="text-[10px] text-yellow-600 block font-semibold uppercase">Đang XL</span>
+                                    <span className="text-base font-bold text-yellow-600">{regStats.processing}</span>
+                                </div>
+                                <div className="text-center">
+                                    <span className="text-[10px] text-green-600 block font-semibold uppercase">Xong</span>
+                                    <span className="text-base font-bold text-green-600">{regStats.completed}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {regStats.total > 0 && (
+                            <div className="mt-4 pt-3 border-t border-slate-200/50">
+                                <div className="flex justify-between text-xs font-semibold text-gray-500 mb-1">
+                                    <span>Tỷ lệ hoàn thành</span>
+                                    <span>{Math.round((regStats.completed / regStats.total) * 100)}%</span>
+                                </div>
+                                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                    <div className="bg-purple-500 h-full rounded-full" style={{ width: `${(regStats.completed / regStats.total) * 100}%` }}></div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* BỘ PHẬN LƯU TRỮ & CÔNG VĂN */}
+                    <div className="bg-slate-50 p-5 rounded-2xl border border-slate-100/85 hover:border-emerald-200 hover:bg-emerald-50/5 transition-all shadow-sm flex flex-col justify-between group">
+                        <div>
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 px-2 py-1 rounded border border-emerald-100">
+                                    Lưu trữ & Công văn (Gộp)
+                                </span>
+                                <div className="p-2 bg-emerald-100/50 rounded-xl text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-all">
+                                    <FileText size={18} />
+                                </div>
+                            </div>
+                            <h4 className="text-base font-bold text-gray-800">Lưu trữ & Công văn</h4>
+                            <p className="text-xs text-gray-500 mt-1 font-medium">Cung cấp tài liệu, sao lục hồ sơ và xử lý công văn đi/đến</p>
+                            
+                            <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-slate-200/60 font-medium">
+                                <div className="text-center">
+                                    <span className="text-[10px] text-gray-400 block font-semibold uppercase">Nhận</span>
+                                    <span className="text-base font-bold text-slate-800">{archStats.total}</span>
+                                </div>
+                                <div className="text-center border-x border-slate-200/60">
+                                    <span className="text-[10px] text-yellow-600 block font-semibold uppercase">Đang XL</span>
+                                    <span className="text-base font-bold text-yellow-600">{archStats.processing}</span>
+                                </div>
+                                <div className="text-center">
+                                    <span className="text-[10px] text-green-600 block font-semibold uppercase">Xong</span>
+                                    <span className="text-base font-bold text-green-600">{archStats.completed}</span>
+                                </div>
+                            </div>
+                        </div>
+                        {archStats.total > 0 && (
+                            <div className="mt-4 pt-3 border-t border-slate-200/50">
+                                <div className="flex justify-between text-xs font-semibold text-gray-500 mb-1">
+                                    <span>Tỷ lệ hoàn thành</span>
+                                    <span>{Math.round((archStats.completed / archStats.total) * 100)}%</span>
+                                </div>
+                                <div className="w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                    <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${(archStats.completed / archStats.total) * 100}%` }}></div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
             {/* CHARTS */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
                 {/* CHART 1: Thống kê theo Địa bàn */}
@@ -240,43 +427,94 @@ const DashboardView: React.FC<DashboardViewProps> = ({ records }) => {
                     </div>
                 </div>
 
-                {/* CHART 2: Phân loại Hồ sơ */}
+                {/* CHART 2: Phân loại / Phân hệ nghiệp vụ */}
                 <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col h-[400px]">
-                    <h3 className="text-sm font-bold text-gray-800 mb-4 shrink-0 flex items-center gap-2 uppercase tracking-wide">
-                        <Layers size={18} className="text-purple-600" /> Loại hình hồ sơ ({getTitle()})
-                    </h3>
+                    <div className="flex items-center justify-between mb-4 shrink-0">
+                        <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2 uppercase tracking-wide">
+                            <Layers size={18} className="text-purple-600" /> {chartMode === 'department' ? 'Cơ cấu 3 bộ phận nghiệp vụ' : 'Loại hình hồ sơ chi tiết'} ({getTitle()})
+                        </h3>
+                        <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                            <button
+                                onClick={() => setChartMode('department')}
+                                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all ${chartMode === 'department' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                            >
+                                Bộ phận
+                            </button>
+                            <button
+                                onClick={() => setChartMode('type')}
+                                className={`px-2.5 py-1 rounded-md text-xs font-bold transition-all ${chartMode === 'type' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                            >
+                                Chi tiết
+                            </button>
+                        </div>
+                    </div>
                     <div className="w-full flex-1 min-h-0 relative">
-                        {typeData.length > 0 ? (
-                            <div className="absolute inset-0">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie 
-                                            data={typeData} 
-                                            cx="50%" 
-                                            cy="50%" 
-                                            innerRadius={60} 
-                                            outerRadius={100} 
-                                            paddingAngle={2} 
-                                            dataKey="value"
-                                        >
-                                            {typeData.map((entry, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                                        <Legend 
-                                            layout="vertical" 
-                                            verticalAlign="middle" 
-                                            align="right"
-                                            wrapperStyle={{ fontSize: '11px', fontWeight: 500, color: '#4b5563' }}
-                                        />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </div>
+                        {chartMode === 'department' ? (
+                            departmentChartData.length > 0 ? (
+                                <div className="absolute inset-0">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie 
+                                                data={departmentChartData} 
+                                                cx="50%" 
+                                                cy="50%" 
+                                                innerRadius={60} 
+                                                outerRadius={100} 
+                                                paddingAngle={4} 
+                                                dataKey="value"
+                                            >
+                                                {departmentChartData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={entry.color} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                            <Legend 
+                                                layout="vertical" 
+                                                verticalAlign="middle" 
+                                                align="right"
+                                                wrapperStyle={{ fontSize: '11px', fontWeight: 600, color: '#4b5563' }}
+                                            />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                                    <p>Chưa có dữ liệu bộ phận {getTitle()}</p>
+                                </div>
+                            )
                         ) : (
-                            <div className="h-full flex flex-col items-center justify-center text-gray-400">
-                                <p>Chưa có dữ liệu {getTitle()}</p>
-                            </div>
+                            typeData.length > 0 ? (
+                                <div className="absolute inset-0">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie 
+                                                data={typeData} 
+                                                cx="50%" 
+                                                cy="50%" 
+                                                innerRadius={60} 
+                                                outerRadius={100} 
+                                                paddingAngle={2} 
+                                                dataKey="value"
+                                            >
+                                                {typeData.map((entry, index) => (
+                                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                                ))}
+                                            </Pie>
+                                            <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                            <Legend 
+                                                layout="vertical" 
+                                                verticalAlign="middle" 
+                                                align="right"
+                                                wrapperStyle={{ fontSize: '11px', fontWeight: 500, color: '#4b5563' }}
+                                            />
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            ) : (
+                                <div className="h-full flex flex-col items-center justify-center text-gray-400">
+                                    <p>Chưa có dữ liệu {getTitle()}</p>
+                                </div>
+                            )
                         )}
                     </div>
                 </div>

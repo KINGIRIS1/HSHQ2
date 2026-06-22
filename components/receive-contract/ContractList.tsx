@@ -79,6 +79,7 @@ const ContractList: React.FC<ContractListProps> = ({ onEdit, onDelete, onPrint, 
                     <tr> 
                         <th className="p-4 w-12 text-center">STT</th> 
                         <th className="p-4 w-[120px]">Mã HĐ</th> 
+                        <th className="p-4 w-[130px]">Mã hồ sơ</th> 
                         <th className="p-4 w-[200px]">Khách hàng</th> 
                         <th className="p-4 w-[150px]">Loại HĐ</th> 
                         <th className="p-4 w-[120px]">Ngày lập</th> 
@@ -94,7 +95,7 @@ const ContractList: React.FC<ContractListProps> = ({ onEdit, onDelete, onPrint, 
                 <tbody className="divide-y divide-gray-100 text-sm text-gray-700">
                     {loading ? (
                         <tr>
-                            <td colSpan={8} className="p-8 text-center">
+                            <td colSpan={9} className="p-8 text-center">
                                 <div className="flex items-center justify-center">
                                     <Loader2 className="animate-spin inline mr-2"/> Đang tải...
                                 </div>
@@ -105,6 +106,7 @@ const ContractList: React.FC<ContractListProps> = ({ onEdit, onDelete, onPrint, 
                             <tr key={c.id} className={`transition-colors group ${isLiquidationMode ? 'hover:bg-orange-50/50' : 'hover:bg-purple-50/50'}`}>
                                 <td className="p-4 text-center text-gray-400 align-middle">{index + 1}</td>
                                 <td className={`p-4 font-medium truncate align-middle ${isLiquidationMode ? 'text-orange-700' : 'text-purple-700'}`} title={c.code}>{c.code}</td>
+                                <td className="p-4 text-xs font-mono text-blue-700 font-bold align-middle truncate" title={c.recordCode || ''}>{c.recordCode || '-'}</td>
                                 <td className="p-4 font-medium truncate align-middle" title={c.customerName}>{c.customerName}</td>
                                 <td className="p-4 align-middle"> 
                                     <span className="px-2 py-1 bg-gray-100 rounded text-xs border border-gray-200">{c.contractType || 'Khác'}</span> 
@@ -129,13 +131,13 @@ const ContractList: React.FC<ContractListProps> = ({ onEdit, onDelete, onPrint, 
                                         {!isLiquidationMode ? (
                                             <>
                                                 <button onClick={() => onEdit(c)} className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition-colors" title="Sửa Hợp Đồng"><Edit size={16} /></button>
-                                                <button onClick={() => onPrint(c, 'contract')} className="p-1.5 text-purple-600 hover:bg-purple-100 rounded transition-colors" title="Mở Hợp đồng"><ExternalLink size={16} /></button>
+                                                <button onClick={() => onPrint(c, 'contract')} className="p-1.5 text-purple-600 hover:bg-purple-100 rounded transition-colors" title="In Hợp đồng"><Printer size={16} /></button>
                                                 <button onClick={() => onCreateLiquidation(c)} className="p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors" title="Chuyển sang Thanh Lý"><FileCheck size={16} /></button>
                                             </>
                                         ) : (
                                             <>
                                                 <button onClick={() => onCreateLiquidation(c)} className="p-1.5 text-orange-600 hover:bg-orange-100 rounded transition-colors" title="Sửa/Lưu Thanh Lý"><Edit size={16} /></button>
-                                                <button onClick={() => onPrint(c, 'liquidation')} className="p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors" title="Mở Thanh Lý"><ExternalLink size={16} /></button>
+                                                <button onClick={() => onPrint(c, 'liquidation')} className="p-1.5 text-green-600 hover:bg-green-100 rounded transition-colors" title="In Thanh Lý"><Printer size={16} /></button>
                                             </>
                                         )}
                                         
@@ -147,7 +149,7 @@ const ContractList: React.FC<ContractListProps> = ({ onEdit, onDelete, onPrint, 
                             </tr>
                         ))
                     ) : ( 
-                        <tr><td colSpan={8} className="p-8 text-center text-gray-400">Không tìm thấy dữ liệu.</td></tr> 
+                        <tr><td colSpan={9} className="p-8 text-center text-gray-400">Không tìm thấy dữ liệu.</td></tr> 
                     )}
                 </tbody>
             </table>

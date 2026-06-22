@@ -175,6 +175,7 @@ export interface SplitItem {
 export interface Contract {
   id: string;
   code: string;           
+  recordCode?: string | null;
   customerName: string;
   phoneNumber?: string | null;
   customerAddress?: string | null;

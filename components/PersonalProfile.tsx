@@ -9,7 +9,8 @@ import { confirmAction } from '../utils/appHelpers';
 import { updateRecordApi } from '../services/api';
 import { fetchArchiveRecords, ArchiveRecord, saveArchiveRecord } from '../services/apiArchive';
 import SubmitModal from './receive-record/SubmitModal';
-import ReturnReasonModal from './receive-record/ReturnReasonModal';
+import RejectReasonModal from './receive-record/RejectReasonModal';
+import ReturnStepReasonModal from './receive-record/ReturnStepReasonModal';
 import SystemAnnexTemplate from './receive-record/SystemAnnexTemplate';
 import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../services/docxService';
 import saveAs from 'file-saver';
@@ -61,6 +62,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [isSubmitCheckModalOpen, setIsSubmitCheckModalOpen] = useState(false);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectTargetRecord, setRejectTargetRecord] = useState<RecordFile | null>(null);
+  const [isReturnStepModalOpen, setIsReturnStepModalOpen] = useState(false);
+  const [returnStepTargetRecord, setReturnStepTargetRecord] = useState<RecordFile | null>(null);
   const [submitTargetRecords, setSubmitTargetRecords] = useState<RecordFile[]>([]);
   const [returnTargetRecords, setReturnTargetRecords] = useState<RecordFile[]>([]);
   const [isAnnexModalOpen, setIsAnnexModalOpen] = useState(false);
@@ -245,10 +250,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
       }
   }, [isChecker]);
 
-  // 1. Hồ sơ Đang thực hiện (ASSIGNED, IN_PROGRESS, COMPLETED_WORK)
+  // 1. Hồ sơ Đang thực hiện (ASSIGNED, IN_PROGRESS, COMPLETED_WORK, REJECTED)
   const pendingRecords = useMemo(() => {
       let list = myRecords.filter(r => 
-          (r.status === RecordStatus.ASSIGNED || r.status === RecordStatus.IN_PROGRESS || r.status === RecordStatus.COMPLETED_WORK) &&
+          (r.status === RecordStatus.ASSIGNED || r.status === RecordStatus.IN_PROGRESS || r.status === RecordStatus.COMPLETED_WORK || r.status === RecordStatus.REJECTED) &&
           r.assignedTo === effectiveId
       );
       return filterAndSort(list, searchTerm, sortConfig);
@@ -277,13 +282,12 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
       return filterAndSort(list, searchTerm, sortConfig);
   }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
-  // 4. Hồ sơ Hoàn thành (SIGNED, HANDOVER, RETURNED, REJECTED, WITHDRAWN)
+  // 4. Hồ sơ Hoàn thành (SIGNED, HANDOVER, RETURNED, WITHDRAWN)
   const finishedRecords = useMemo(() => {
       let list = myRecords.filter(r => 
           (r.status === RecordStatus.SIGNED || 
            r.status === RecordStatus.HANDOVER || 
            r.status === RecordStatus.RETURNED ||
-           r.status === RecordStatus.REJECTED ||
            r.status === RecordStatus.WITHDRAWN) &&
           (r.assignedTo === effectiveId || r.checkedBy === effectiveId || r.submittedTo === effectiveId || r.receivedBy === effectiveId)
       );
@@ -328,7 +332,24 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
              return nameNorm.includes(lowerSearch) || codeRaw.includes(rawSearch) || wardNorm.includes(lowerSearch);
           });
       }
+
+      const isReturnedOrRejected = (r: RecordFile) => {
+          if (r.status === RecordStatus.REJECTED) return true;
+          if (r.notes) {
+              try {
+                  const notesObj = JSON.parse(r.notes);
+                  if (notesObj.isStepReturned) return true;
+              } catch (e) {}
+          }
+          return false;
+      };
+
       return list.sort((a, b) => {
+          const aRet = isReturnedOrRejected(a);
+          const bRet = isReturnedOrRejected(b);
+          if (aRet && !bRet) return -1;
+          if (!aRet && bRet) return 1;
+
           const aValue = a[sort.key as keyof RecordFile];
           const bValue = b[sort.key as keyof RecordFile];
           if (!aValue) return 1;
@@ -553,135 +574,261 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
     }
   };
 
-  const handleOpenReturnModal = (record: RecordFile) => {
-    setReturnTargetRecords([record]);
-    setIsReturnModalOpen(true);
-  };
+  const handleWithdraw = async (record: RecordFile) => {
+    if (await confirmAction(`Xác nhận thu hồi hồ sơ ${record.code || record.receiptNumber}?\nHồ sơ sẽ quay lại trạng thái "Đang thực hiện".`)) {
+        let currentNotesObj: any = {};
+        if (record.notes) {
+            try {
+                currentNotesObj = JSON.parse(record.notes);
+            } catch (e) {}
+        }
+        delete currentNotesObj.isStepReturned;
+        delete currentNotesObj.stepReturnReason;
+        delete currentNotesObj.stepReturnDate;
+        const updatedNotes = Object.keys(currentNotesObj).length > 0 ? JSON.stringify(currentNotesObj) : null;
 
-  const handleConfirmReturn = async (reason: string) => {
-    try {
-        const nowStr = new Date().toISOString();
-        for (const record of returnTargetRecords) {
-            const formattedReason = `[Trả hồ sơ ngày ${new Date().toLocaleDateString('vi-VN')} bởi ${user.name}]: ${reason}`;
-            const currentNotes = record.notes ? `${record.notes}\n${formattedReason}` : formattedReason;
-            const currentPrivateNotes = record.privateNotes ? `${record.privateNotes}\n${formattedReason}` : formattedReason;
-            
-            if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
-                const currentArchive = archiveRecords.find(r => r.id === record.id);
-                let nextStatus: ArchiveRecord['status'] = 'assigned';
-                let actionText = 'Bị trả lại (Có lỗi/Sai sót)';
+        if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
+            const nowStr = new Date().toISOString();
+            const historyEntry = {
+                action: 'Thu hồi',
+                status: 'assigned',
+                timestamp: nowStr,
+                user: user.name
+            };
 
-                const historyEntry = {
-                    action: actionText,
-                    status: nextStatus,
-                    timestamp: nowStr,
-                    user: user.name,
-                    notes: reason
-                };
-
-                if (currentArchive) {
-                    const oldHistory = Array.isArray(currentArchive.data?.history) ? currentArchive.data.history : [];
-                    const newHistory = [...oldHistory, historyEntry];
-                    await saveArchiveRecord({
-                        id: record.id,
-                        status: nextStatus,
-                        data: { 
-                            ...currentArchive.data, 
-                            history: newHistory,
-                            notes: currentNotes,
-                            privateNotes: currentPrivateNotes,
-                            returned_reason: reason,
-                            hasDefect: true,
-                            defectReason: reason,
-                            defectDate: nowStr
-                        }
-                    });
-                }
-            } else {
-                // Determine regression status for normal records
-                let nextStatus = RecordStatus.IN_PROGRESS;
-
-                // Normal Record
-                const updatedRecord: RecordFile = {
+            const currentArchive = archiveRecords.find(r => r.id === record.id);
+            if (currentArchive) {
+                 const oldHistory = Array.isArray(currentArchive.data?.history) ? currentArchive.data.history : [];
+                 const newHistory = [...oldHistory, historyEntry];
+                 
+                 await saveArchiveRecord({
+                     id: record.id,
+                     status: 'assigned',
+                     noi_nhan_gui: currentArchive.noi_nhan_gui,
+                     so_hieu: currentArchive.so_hieu,
+                     trich_yeu: currentArchive.trich_yeu,
+                     ngay_thang: currentArchive.ngay_thang,
+                     type: currentArchive.type,
+                     data: {
+                         ...currentArchive.data,
+                         history: newHistory,
+                         notes: updatedNotes
+                     }
+                 });
+                 
+                 const saoluc = await fetchArchiveRecords('saoluc');
+                 const congvan = await fetchArchiveRecords('congvan');
+                 setArchiveRecords([...saoluc, ...congvan]);
+            }
+        } else {
+            if (onUpdateRecord) {
+                await onUpdateRecord({
                     ...record,
-                    status: nextStatus,
-                    notes: currentNotes,
-                    privateNotes: currentPrivateNotes,
-                    hasDefect: true,
-                    defectReason: reason,
-                    defectDate: nowStr
-                };
-
-                if (onUpdateRecord) {
-                    await onUpdateRecord(updatedRecord);
-                } else {
-                    await updateRecordApi(updatedRecord);
-                    onUpdateStatus(record, nextStatus);
-                }
+                    status: RecordStatus.ASSIGNED,
+                    notes: updatedNotes
+                });
+            } else {
+                onUpdateStatus(record, RecordStatus.ASSIGNED);
             }
         }
-
-        // Refresh archive data
-        const saoluc = await fetchArchiveRecords('saoluc');
-        const congvan = await fetchArchiveRecords('congvan');
-        setArchiveRecords([...saoluc, ...congvan]);
-
-        setIsReturnModalOpen(false);
-        setReturnTargetRecords([]);
-        alert("Đã trả hồ sơ thành công!");
-    } catch (error) {
-        console.error("Error returning records:", error);
-        alert("Có lỗi xảy ra khi trả hồ sơ.");
     }
   };
 
-  const handleRecallRecord = async (record: RecordFile) => {
-    if (await confirmAction(`Xác nhận thu hồi hồ sơ ${record.code}?\nHồ sơ sẽ chuyển lại về trạng thái "Đang thực hiện".`)) {
-        try {
-            if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
-                const historyEntry = {
-                    action: 'Thu hồi',
-                    status: 'assigned',
-                    timestamp: new Date().toISOString(),
-                    user: user.name
-                };
+  const handleOpenRejectModal = (record: RecordFile) => {
+      setRejectTargetRecord(record);
+      setIsRejectModalOpen(true);
+  };
 
-                const currentArchive = archiveRecords.find(r => r.id === record.id);
-                if (currentArchive) {
-                    const oldHistory = Array.isArray(currentArchive.data?.history) ? currentArchive.data.history : [];
-                    const newHistory = [...oldHistory, historyEntry];
-                    await saveArchiveRecord({
-                        id: record.id,
-                        status: 'assigned',
-                        data: { ...currentArchive.data, history: newHistory }
-                    });
-                }
-            } else {
-                // Normal Record
-                const updatedRecord: RecordFile = {
-                    ...record,
-                    status: RecordStatus.IN_PROGRESS
-                };
+  const handleOpenReturnStepModal = (record: RecordFile) => {
+      setReturnStepTargetRecord(record);
+      setIsReturnStepModalOpen(true);
+  };
 
-                if (onUpdateRecord) {
-                    await onUpdateRecord(updatedRecord);
-                } else {
-                    await updateRecordApi(updatedRecord);
-                    onUpdateStatus(record, RecordStatus.IN_PROGRESS);
-                }
-            }
+  const handleConfirmReturnStep = async (reason: string) => {
+      if (!returnStepTargetRecord) return;
+      try {
+          const dateStr = new Date().toISOString();
+          let currentNotesObj: any = {};
+          if (returnStepTargetRecord.notes) {
+              try {
+                  currentNotesObj = JSON.parse(returnStepTargetRecord.notes);
+              } catch (e) {
+                  // ignore
+              }
+          }
+          const updatedNotesObj = {
+              ...currentNotesObj,
+              isStepReturned: true,
+              stepReturnReason: reason,
+              stepReturnDate: dateStr
+          };
+          const updatedNotes = JSON.stringify(updatedNotesObj);
+          
+          const formattedDate = new Date().toLocaleDateString('vi-VN');
+          const returnPrefix = `[Yêu cầu sửa lại ngày ${formattedDate}]: ${reason}`;
+          const updatedPrivateNotes = returnStepTargetRecord.privateNotes 
+              ? `${returnPrefix}\n${returnStepTargetRecord.privateNotes}` 
+              : returnPrefix;
 
-            // Refresh archive data
-            const saoluc = await fetchArchiveRecords('saoluc');
-            const congvan = await fetchArchiveRecords('congvan');
-            setArchiveRecords([...saoluc, ...congvan]);
+          const updatedRecord = {
+              ...returnStepTargetRecord,
+              status: RecordStatus.ASSIGNED,
+              notes: updatedNotes,
+              privateNotes: updatedPrivateNotes,
+              pendingCheckDate: null,
+              checkedBy: null,
+              checkedDate: null,
+              submissionDate: null,
+              submittedTo: null,
+              approvalDate: null,
+              completedDate: null,
+              completedWorkDate: null
+          };
 
-            alert("Đã thu hồi hồ sơ thành công!");
-        } catch (error) {
-            console.error("Error recalling record:", error);
-            alert("Có lỗi xảy ra khi thu hồi.");
-        }
-    }
+          if (returnStepTargetRecord.recordType === 'Sao lục' || returnStepTargetRecord.recordType === 'Công văn') {
+              const historyEntry = {
+                  action: 'Trả về sửa lại',
+                  status: 'assigned',
+                  timestamp: dateStr,
+                  user: user.name,
+                  reason: reason
+              };
+              const currentArchive = archiveRecords.find(r => r.id === returnStepTargetRecord.id);
+              if (currentArchive) {
+                  const oldHistory = Array.isArray(currentArchive.data?.history) ? currentArchive.data.history : [];
+                  const newHistory = [...oldHistory, historyEntry];
+                  
+                  await saveArchiveRecord({
+                      id: returnStepTargetRecord.id,
+                      status: 'assigned',
+                      data: { 
+                          ...currentArchive.data, 
+                          history: newHistory,
+                          notes: updatedNotes,
+                          privateNotes: updatedPrivateNotes,
+                          pending_check_date: null,
+                          checked_by: null,
+                          checked_date: null,
+                          submission_date: null,
+                          submitted_to: null,
+                          approval_date: null,
+                          completed_date: null,
+                          completed_work_date: null
+                      }
+                  });
+              }
+              const saoluc = await fetchArchiveRecords('saoluc');
+              const congvan = await fetchArchiveRecords('congvan');
+              setArchiveRecords([...saoluc, ...congvan]);
+          } else {
+              if (onUpdateRecord) {
+                  await onUpdateRecord(updatedRecord);
+              } else {
+                  await updateRecordApi(updatedRecord);
+                  onUpdateStatus(returnStepTargetRecord, RecordStatus.ASSIGNED);
+              }
+          }
+
+          setIsReturnStepModalOpen(false);
+          setReturnStepTargetRecord(null);
+      } catch (error) {
+          console.error("Error returning step for record:", error);
+          alert("Có lỗi xảy ra khi trả về hồ sơ.");
+      }
+  };
+
+  const handleConfirmReject = async (reason: string) => {
+      if (!rejectTargetRecord) return;
+      try {
+          const dateStr = new Date().toISOString();
+          let currentNotesObj: any = {};
+          if (rejectTargetRecord.notes) {
+              try {
+                  currentNotesObj = JSON.parse(rejectTargetRecord.notes);
+              } catch (e) {
+                  // ignore
+              }
+          }
+          const updatedNotesObj = {
+              ...currentNotesObj,
+              rejectReason: reason,
+              rejectDate: dateStr
+          };
+          const updatedNotes = JSON.stringify(updatedNotesObj);
+          
+          const formattedDate = new Date().toLocaleDateString('vi-VN');
+          const rejectPrefix = `[Trả hồ sơ ngày ${formattedDate}]: ${reason}`;
+          const updatedPrivateNotes = rejectTargetRecord.privateNotes 
+              ? `${rejectPrefix}\n${rejectTargetRecord.privateNotes}` 
+              : rejectPrefix;
+
+          const updatedRecord = {
+              ...rejectTargetRecord,
+              status: RecordStatus.REJECTED,
+              notes: updatedNotes,
+              privateNotes: updatedPrivateNotes,
+              rejectDate: dateStr,
+              rejectReason: reason,
+              pendingCheckDate: null,
+              checkedBy: null,
+              checkedDate: null,
+              submissionDate: null,
+              submittedTo: null,
+              approvalDate: null,
+              completedDate: null,
+              completedWorkDate: null
+          };
+
+          if (rejectTargetRecord.recordType === 'Sao lục' || rejectTargetRecord.recordType === 'Công văn') {
+              const historyEntry = {
+                  action: 'Trả hồ sơ',
+                  status: 'rejected',
+                  timestamp: dateStr,
+                  user: user.name,
+                  reason: reason
+              };
+              const currentArchive = archiveRecords.find(r => r.id === rejectTargetRecord.id);
+              if (currentArchive) {
+                  const oldHistory = Array.isArray(currentArchive.data?.history) ? currentArchive.data.history : [];
+                  const newHistory = [...oldHistory, historyEntry];
+                  
+                  await saveArchiveRecord({
+                      id: rejectTargetRecord.id,
+                      status: 'rejected',
+                      data: { 
+                          ...currentArchive.data, 
+                          history: newHistory,
+                          notes: updatedNotes,
+                          privateNotes: updatedPrivateNotes,
+                          pending_check_date: null,
+                          checked_by: null,
+                          checked_date: null,
+                          submission_date: null,
+                          submitted_to: null,
+                          approval_date: null,
+                          completed_date: null,
+                          completed_work_date: null
+                      }
+                  });
+              }
+              const saoluc = await fetchArchiveRecords('saoluc');
+              const congvan = await fetchArchiveRecords('congvan');
+              setArchiveRecords([...saoluc, ...congvan]);
+          } else {
+              if (onUpdateRecord) {
+                  await onUpdateRecord(updatedRecord);
+              } else {
+                  await updateRecordApi(updatedRecord);
+                  onUpdateStatus(rejectTargetRecord, RecordStatus.REJECTED);
+              }
+          }
+
+          setIsRejectModalOpen(false);
+          setRejectTargetRecord(null);
+      } catch (error) {
+          console.error("Error rejecting record:", error);
+          alert("Có lỗi xảy ra khi trả hồ sơ.");
+      }
   };
 
   const handleExportAnnex = async (record: RecordFile) => {
@@ -1015,11 +1162,26 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
 
                                     <td className="p-3 text-center align-middle">
                                         <StatusBadge status={r.status} />
-                                        {r.hasDefect && (
+                                        {r.status === RecordStatus.REJECTED && (
                                             <span className="mt-1 block text-[10px] font-bold bg-red-100 text-red-800 px-1 py-0.5 rounded border border-red-200 text-center mx-auto max-w-[100px]">
-                                                Có lỗi (Trả)
+                                                Hồ sơ bị trả
                                             </span>
                                         )}
+                                        {(() => {
+                                            if (r.notes) {
+                                                try {
+                                                    const notesObj = JSON.parse(r.notes);
+                                                    if (notesObj.isStepReturned) {
+                                                        return (
+                                                            <span className="mt-1 block text-[10px] font-bold bg-amber-100 text-amber-800 px-1 py-0.5 rounded border border-amber-200 text-center mx-auto max-w-[100px]" title={`Lý do: ${notesObj.stepReturnReason || ''}`}>
+                                                                Yêu cầu sửa
+                                                            </span>
+                                                        );
+                                                    }
+                                                } catch (e) {}
+                                            }
+                                            return null;
+                                        })()}
                                     </td>
                                     
                                     <td className="p-3 text-center align-middle">
@@ -1045,53 +1207,64 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                                 Chi tiết
                                             </button>
                                             
+                                            {/* Nút Thanh lý */}
+                                            {onCreateLiquidation && (r.recordType?.includes('Trích đo') || r.recordType?.includes('đo đạc')) && (
+                                                <button onClick={() => onCreateLiquidation(r)} className="px-2 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-md hover:bg-green-100 text-xs font-bold flex items-center gap-1 shadow-sm transition-all" title="Thanh lý hợp đồng">
+                                                    <FileCheck size={14} /> Thanh lý
+                                                </button>
+                                            )}
+
+                                            {/* Nút Phụ lục gia hạn HĐ - Chỉ áp dụng cho Nhân viên Tổ đo đạc */}
+                                            {isMeasurementTeam && !(r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn') && (
+                                                <button onClick={() => { setAnnexTargetRecord(r); setIsAnnexModalOpen(true); }} className="px-2 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md hover:bg-rose-100 text-xs font-bold flex items-center gap-1 shadow-sm transition-all" title="In phụ lục hợp đồng hệ thống">
+                                                    <FileDown size={14} /> Phụ lục
+                                                </button>
+                                            )}
+
                                             {/* Logic nút chuyển trạng thái theo từng Tab */}
                                             {activeTab === 'pending' && (
-                                                <div className="flex gap-1.5 animate-fade-in">
-                                                    {r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn' ? (
-                                                        <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-sign-${r.id}`}>
+                                                <>
+                                                    {(r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn') ? (
+                                                        <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
                                                             <Send size={14} /> Trình ký
                                                         </button>
                                                     ) : (
-                                                        <button onClick={() => handleForwardToCheck(r)} title="Trình kiểm tra" className="px-3 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-check-${r.id}`}>
-                                                            <Send size={14} /> Trình kiểm tra
+                                                        <button onClick={() => handleForwardToCheck(r)} title="Trình kiểm tra" className="px-3 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                            <ClipboardList size={14} /> Trình kiểm tra
                                                         </button>
                                                     )}
-                                                </div>
+                                                    <button onClick={() => handleOpenRejectModal(r)} title="Trả hồ sơ" className="px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                        <AlertTriangle size={14} /> Trả hồ sơ
+                                                    </button>
+                                                </>
                                             )}
-                                            {activeTab === 'pending_check' && (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) && (
-                                                <div className="flex gap-1.5">
-                                                    {r.checkedBy === effectiveId && isChecker && (
-                                                        <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-sig-check-${r.id}`}>
-                                                            <Send size={14} /> Trình ký
-                                                        </button>
-                                                    )}
-                                                    {r.checkedBy === effectiveId && isChecker && (
-                                                        <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-${r.id}`}>
-                                                            <CornerUpLeft size={14} /> Trả hồ sơ
-                                                        </button>
-                                                    )}
-                                                    {r.assignedTo === effectiveId && r.status === RecordStatus.PENDING_CHECK && (
-                                                        <button onClick={() => handleRecallRecord(r)} title="Thu hồi hồ sơ đã trình" className="px-2.5 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md hover:bg-amber-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-recall-${r.id}`}>
-                                                            <RotateCcw size={14} /> Thu hồi
-                                                        </button>
-                                                     )}
-                                                </div>
+                                            {activeTab === 'pending_check' && (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) && (r.checkedBy === user.employeeId || user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN) && (
+                                                <>
+                                                    <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                        <Send size={14} /> Trình ký
+                                                    </button>
+                                                    <button onClick={() => handleOpenReturnStepModal(r)} title="Trả về bước trước" className="px-3 py-1.5 bg-amber-600 text-white rounded-md hover:bg-amber-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                        <RotateCcw size={14} /> Trả về
+                                                    </button>
+                                                    <button onClick={() => handleOpenRejectModal(r)} title="Trả hồ sơ" className="px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                        <AlertTriangle size={14} /> Trả hồ sơ
+                                                    </button>
+                                                </>
                                             )}
-                                            
-                                            {activeTab === 'pending_sign' && r.status === RecordStatus.PENDING_SIGN && (
-                                                <div className="flex gap-1.5 animate-fade-in">
-                                                    {r.submittedTo === effectiveId && (
-                                                        <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-sign-${r.id}`}>
-                                                            <CornerUpLeft size={14} /> Trả hồ sơ
-                                                        </button>
-                                                    )}
-                                                    {(r.checkedBy === effectiveId || (r.assignedTo === effectiveId && (r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn' || !r.checkedBy))) && (
-                                                        <button onClick={() => handleRecallRecord(r)} title="Thu hồi hồ sơ đã trình" className="px-2.5 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md hover:bg-amber-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-recall-sign-${r.id}`}>
-                                                            <RotateCcw size={14} /> Thu hồi
-                                                        </button>
-                                                    )}
-                                                </div>
+                                            {activeTab === 'pending_check' && r.status === RecordStatus.PENDING_CHECK && r.assignedTo === user.employeeId && (
+                                                <button onClick={() => handleWithdraw(r)} title="Thu hồi hồ sơ" className="px-3 py-1.5 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                    <RotateCcw size={14} /> Thu hồi
+                                                </button>
+                                            )}
+                                            {activeTab === 'pending_sign' && (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN) && (
+                                                <>
+                                                    <button onClick={() => handleOpenReturnStepModal(r)} title="Trả về bước trước" className="px-3 py-1.5 bg-amber-600 text-white rounded-md hover:bg-amber-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                        <RotateCcw size={14} /> Trả về
+                                                    </button>
+                                                    <button onClick={() => handleOpenRejectModal(r)} title="Trả hồ sơ" className="px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                        <AlertTriangle size={14} /> Trả hồ sơ
+                                                    </button>
+                                                </>
                                             )}
                                         </div>
                                     </td>
@@ -1189,14 +1362,24 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
           }}
       />
 
-      <ReturnReasonModal 
-          isOpen={isReturnModalOpen}
+      <RejectReasonModal 
+          isOpen={isRejectModalOpen}
           onClose={() => {
-              setIsReturnModalOpen(false);
-              setReturnTargetRecords([]);
+              setIsRejectModalOpen(false);
+              setRejectTargetRecord(null);
           }}
-          records={returnTargetRecords}
-          onConfirm={handleConfirmReturn}
+          record={rejectTargetRecord}
+          onConfirm={handleConfirmReject}
+      />
+
+      <ReturnStepReasonModal 
+          isOpen={isReturnStepModalOpen}
+          onClose={() => {
+              setIsReturnStepModalOpen(false);
+              setReturnStepTargetRecord(null);
+          }}
+          record={returnStepTargetRecord}
+          onConfirm={handleConfirmReturnStep}
       />
 
       {isAnnexModalOpen && annexTargetRecord && (
