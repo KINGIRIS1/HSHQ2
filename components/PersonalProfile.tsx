@@ -1061,17 +1061,17 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                             )}
                                             {activeTab === 'pending_check' && (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) && (
                                                 <div className="flex gap-1.5">
-                                                    {r.checkedBy === user.employeeId && (
+                                                    {r.checkedBy === effectiveId && isChecker && (
                                                         <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-sig-check-${r.id}`}>
                                                             <Send size={14} /> Trình ký
                                                         </button>
                                                     )}
-                                                    {r.checkedBy === user.employeeId && (
+                                                    {r.checkedBy === effectiveId && isChecker && (
                                                         <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-${r.id}`}>
                                                             <CornerUpLeft size={14} /> Trả hồ sơ
                                                         </button>
                                                     )}
-                                                    {r.assignedTo === user.employeeId && r.status === RecordStatus.PENDING_CHECK && (
+                                                    {r.assignedTo === effectiveId && r.status === RecordStatus.PENDING_CHECK && (
                                                         <button onClick={() => handleRecallRecord(r)} title="Thu hồi hồ sơ đã trình" className="px-2.5 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md hover:bg-amber-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-recall-${r.id}`}>
                                                             <RotateCcw size={14} /> Thu hồi
                                                         </button>
@@ -1081,12 +1081,12 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                             
                                             {activeTab === 'pending_sign' && r.status === RecordStatus.PENDING_SIGN && (
                                                 <div className="flex gap-1.5 animate-fade-in">
-                                                    {r.submittedTo === user.employeeId && (
+                                                    {r.submittedTo === effectiveId && (
                                                         <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-sign-${r.id}`}>
                                                             <CornerUpLeft size={14} /> Trả hồ sơ
                                                         </button>
                                                     )}
-                                                    {r.assignedTo === user.employeeId && (r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn') && (
+                                                    {(r.checkedBy === effectiveId || (r.assignedTo === effectiveId && (r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn' || !r.checkedBy))) && (
                                                         <button onClick={() => handleRecallRecord(r)} title="Thu hồi hồ sơ đã trình" className="px-2.5 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md hover:bg-amber-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-recall-sign-${r.id}`}>
                                                             <RotateCcw size={14} /> Thu hồi
                                                         </button>
