@@ -1,5 +1,5 @@
 
-import { RecordFile, RecordStatus } from '../types';
+import { RecordFile, RecordStatus, Employee } from '../types';
 import { STATUS_LABELS } from '../constants';
 
 // --- HÀM TIỆN ÍCH CHO PHÂN HỆ HỒ SƠ ---
@@ -157,3 +157,147 @@ export const isRecordApproaching = (record: RecordFile): boolean => {
   const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
   return diffDays >= 0 && diffDays <= 3;
 };
+
+export interface EmployeeGroup {
+  label: string;
+  key: string;
+  employees: Employee[];
+}
+
+export function groupEmployeesByDepartment(employees: Employee[]): EmployeeGroup[] {
+  const categories = [
+    { label: 'Tổ Đo đạc', key: 'dodac', keywords: ['do dac', 'do', 'ky thuat', 'dia chinh', 'noi nghiep', 'ngoai nghiep', 'do hinh'] },
+    { label: 'Tổ Cấp giấy', key: 'capgiay', keywords: ['cap giay', 'dang ky', 'bien dong', 'cap qsd', 'tham dinh'] },
+    { label: 'Tổ Lưu trữ', key: 'luutru', keywords: ['luu tru', 'sao luc', 'thong tin'] },
+    { label: 'Tổ Hành chính', key: 'hanhchinh', keywords: ['hanh chinh', 'van thu', 'tong hop', 'ke toan', 'ke hanh', 'bao ve', 'tap vu', 'tiep nhan', 'mot cua', 'lanh dao', 'giam doc'] },
+  ];
+
+  const groups: Record<string, Employee[]> = {
+    dodac: [],
+    capgiay: [],
+    luutru: [],
+    hanhchinh: [],
+    other: []
+  };
+
+  employees.forEach(emp => {
+    const d = removeVietnameseTones(emp.department || '').toLowerCase();
+    let matched = false;
+    for (const cat of categories) {
+      if (cat.keywords.some(k => d.includes(k))) {
+        groups[cat.key].push(emp);
+        matched = true;
+        break;
+      }
+    }
+    if (!matched) {
+      groups.other.push(emp);
+    }
+  });
+
+  const result: EmployeeGroup[] = [
+    { label: 'Tổ Đo đạc', key: 'dodac', employees: groups.dodac },
+    { label: 'Tổ Cấp giấy', key: 'capgiay', employees: groups.capgiay },
+    { label: 'Tổ Lưu trữ', key: 'luutru', employees: groups.luutru },
+    { label: 'Tổ Hành chính', key: 'hanhchinh', employees: groups.hanhchinh },
+  ];
+
+  if (groups.other.length > 0) {
+    result.push({ label: 'Bộ phận khác', key: 'other', employees: groups.other });
+  }
+
+  return result.filter(g => g.employees.length > 0);
+}
+
+export function fillTimelineDatesForReturn(record: RecordFile, nowStr: string): Partial<RecordFile> {
+    const isSpecialType = record.recordType === 'Cung cấp tài liệu đất đai' || 
+                          record.recordType === 'Sao lục' || 
+                          record.recordType === 'Công văn';
+    
+    // Khởi tạo các mốc thời gian theo thứ tự luồng
+    const steps = [
+        { key: 'receivedDate', val: record.receivedDate },
+        { key: 'assignedDate', val: record.assignedDate },
+        { key: 'completedWorkDate', val: record.completedWorkDate }
+    ];
+
+    if (!isSpecialType) {
+        steps.push(
+            { key: 'pendingCheckDate', val: record.pendingCheckDate },
+            { key: 'checkedDate', val: record.checkedDate }
+        );
+    }
+
+    steps.push(
+        { key: 'submissionDate', val: record.submissionDate },
+        { key: 'approvalDate', val: record.approvalDate },
+        { key: 'completedDate', val: record.completedDate || nowStr }
+    );
+
+    // Bước 1: Chuẩn hóa nhận
+    const nowMs = new Date(nowStr).getTime();
+    if (!steps[0].val) {
+        // Nếu không có ngày nhận, giả định nhận trước thời điểm hiện hành 2 ngày
+        steps[0].val = new Date(nowMs - 2 * 24 * 60 * 60 * 1000).toISOString();
+    }
+    steps[steps.length - 1].val = nowStr;
+
+    // Bước 2: Điền các giá trị trung gian bằng nội suy tuyến tính (Linear Interpolation)
+    const knownIndices: number[] = [];
+    steps.forEach((step, idx) => {
+        if (step.val) knownIndices.push(idx);
+    });
+
+    for (let i = 0; i < knownIndices.length - 1; i++) {
+        const startIdx = knownIndices[i];
+        const endIdx = knownIndices[i + 1];
+        const gap = endIdx - startIdx;
+        
+        if (gap > 1) {
+            const startTime = new Date(steps[startIdx].val!).getTime();
+            const endTime = new Date(steps[endIdx].val!).getTime();
+            
+            let adjustedEndTime = endTime;
+            if (endTime <= startTime) {
+                adjustedEndTime = startTime + gap * 15 * 60 * 1000;
+                steps[endIdx].val = new Date(adjustedEndTime).toISOString();
+            }
+
+            const stepMs = (adjustedEndTime - startTime) / gap;
+            for (let j = 1; j < gap; j++) {
+                const targetIdx = startIdx + j;
+                const targetMs = startTime + stepMs * j;
+                steps[targetIdx].val = new Date(targetMs).toISOString();
+            }
+        }
+    }
+
+    // Trả về object các mốc thời gian cập nhật
+    const updates: any = {};
+    steps.forEach(step => {
+        updates[step.key] = step.val;
+    });
+
+    return updates;
+}
+
+export function findArchiveStaffForWard(wardName: string | null | undefined, employees: Employee[]): Employee | null {
+  if (!wardName) return null;
+  
+  const normWard = removeVietnameseTones(wardName).toLowerCase().trim();
+  
+  // Lọc nhân viên Tổ Lưu trữ
+  const archiveStaff = employees.filter(emp => {
+    const d = removeVietnameseTones(emp.department || '').toLowerCase();
+    return d.includes('luu tru') || d.includes('archive');
+  });
+  
+  // Tìm nhân viên phụ trách địa bàn này
+  const matched = archiveStaff.find(emp => 
+    emp.managedWards && emp.managedWards.some(w => 
+      removeVietnameseTones(w).toLowerCase().trim() === normWard
+    )
+  );
+  
+  return matched || null;
+}

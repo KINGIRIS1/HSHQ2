@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Employee, RecordFile } from '../types';
 import { X, Check, MapPin, User, Users, Search, Briefcase } from 'lucide-react';
-import { removeVietnameseTones } from '../utils/appHelpers';
+import { removeVietnameseTones, groupEmployeesByDepartment } from '../utils/appHelpers';
 
 interface AssignModalProps {
   isOpen: boolean;
@@ -268,7 +268,7 @@ const AssignModal: React.FC<AssignModalProps> = ({ isOpen, onClose, onConfirm, e
                  
                  <div className="p-3 overflow-y-auto flex-1 custom-scrollbar">
                      {recommended.length > 0 ? (
-                         <div className="flex flex-col gap-2">
+                          <div className="flex flex-col gap-2">
                             {recommended.map(emp => (
                                 <EmployeeItem 
                                     key={emp.id} 
@@ -276,23 +276,23 @@ const AssignModal: React.FC<AssignModalProps> = ({ isOpen, onClose, onConfirm, e
                                     isRecommended={true} 
                                     isSelected={selectedEmpId === emp.id}
                                     onSelect={setSelectedEmpId}
-                                    isSurveyTeam={filterDepartment ? true : true} // Nếu lọc theo phòng ban thì coi như đúng team
+                                    isSurveyTeam={true}
                                 />
                             ))}
-                         </div>
+                          </div>
                      ) : (
-                         <div className="h-full flex flex-col items-center justify-center text-center p-4 text-gray-400 border-2 border-dashed border-blue-200 rounded-xl m-2">
-                            <MapPin size={32} className="mb-2 opacity-50" />
-                            <p className="text-sm">
-                                {filterDepartment 
-                                    ? `Không tìm thấy nhân viên thuộc ${filterDepartment}.`
-                                    : (targetWardName 
-                                        ? "Không tìm thấy nhân viên Tổ Đo đạc/Kỹ thuật phụ trách địa bàn này." 
-                                        : "Vui lòng chọn các hồ sơ cùng 1 địa bàn để nhận đề xuất chính xác."
-                                    )
-                                }
-                            </p>
-                         </div>
+                          <div className="h-full flex flex-col items-center justify-center text-center p-4 text-gray-400 border-2 border-dashed border-blue-200 rounded-xl m-2">
+                             <MapPin size={32} className="mb-2 opacity-50" />
+                             <p className="text-sm">
+                                 {filterDepartment 
+                                     ? `Không tìm thấy nhân viên thuộc ${filterDepartment}.`
+                                     : (targetWardName 
+                                         ? "Không tìm thấy nhân viên Tổ Đo đạc/Kỹ thuật phụ trách địa bàn này." 
+                                         : "Vui lòng chọn các hồ sơ cùng 1 địa bàn để nhận đề xuất chính xác."
+                                     )
+                                 }
+                             </p>
+                          </div>
                      )}
                  </div>
              </div>
@@ -302,28 +302,36 @@ const AssignModal: React.FC<AssignModalProps> = ({ isOpen, onClose, onConfirm, e
                  <div className="p-4 border-b border-gray-100 sticky top-0 bg-white z-10">
                      <div className="flex items-center gap-2 text-sm font-bold text-gray-600 uppercase tracking-wide">
                         <User size={16} />
-                        Nhân viên khác ({others.length})
+                        Nhân viên xử lý (Theo phòng ban)
                      </div>
-                     <p className="text-[11px] text-gray-400 mt-0.5">Bao gồm: Kỹ thuật khác tuyến, Văn phòng, Một cửa, Lãnh đạo...</p>
+                     <p className="text-[11px] text-gray-400 mt-0.5">Nhân viên được sắp xếp và ưu tiên theo nhóm các tổ chuyên môn</p>
                  </div>
 
-                 <div className="p-4 overflow-y-auto flex-1 custom-scrollbar bg-slate-50">
+                 <div className="p-4 overflow-y-auto flex-1 custom-scrollbar bg-slate-50 space-y-6">
                      {others.length > 0 ? (
-                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3">
-                            {others.map(emp => (
-                                <EmployeeItem 
-                                    key={emp.id} 
-                                    emp={emp}
-                                    isSelected={selectedEmpId === emp.id}
-                                    onSelect={setSelectedEmpId}
-                                    isSurveyTeam={isSurveyTeamMember(emp)}
-                                />
-                            ))}
-                         </div>
+                          groupEmployeesByDepartment(others).map(group => (
+                              <div key={group.key} className="space-y-2">
+                                  <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5 border-b pb-1 border-slate-200">
+                                      <span className="w-1.5 h-3 bg-blue-600 rounded-sm"></span>
+                                      {group.label} ({group.employees.length})
+                                  </h4>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+                                     {group.employees.map(emp => (
+                                         <EmployeeItem 
+                                             key={emp.id} 
+                                             emp={emp}
+                                             isSelected={selectedEmpId === emp.id}
+                                             onSelect={setSelectedEmpId}
+                                             isSurveyTeam={isSurveyTeamMember(emp)}
+                                         />
+                                     ))}
+                                  </div>
+                              </div>
+                          ))
                      ) : (
-                         <div className="h-64 flex flex-col items-center justify-center text-gray-400">
-                            <p>Không tìm thấy nhân viên nào khác.</p>
-                         </div>
+                          <div className="h-64 flex flex-col items-center justify-center text-gray-400">
+                             <p>Không tìm thấy nhân viên nào khác.</p>
+                          </div>
                      )}
                  </div>
              </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RecordFile, Holiday, RecordStatus, User, Employee, UserRole } from '../../types';
 import { RECORD_TYPES, REGISTRATION_PROCEDURES, STATUS_LABELS } from '../../constants';
-import { getStatusLabel, isMeasurementType, isArchiveType, removeVietnameseTones } from '../../utils/appHelpers';
+import { getStatusLabel, isMeasurementType, isArchiveType, removeVietnameseTones, groupEmployeesByDepartment } from '../../utils/appHelpers';
 import { Save, User as UserIcon, Calendar, MapPin, FileCheck, Loader2, Printer, RotateCcw, XCircle, CheckCircle, AlertCircle, X, Phone, FileText, BookOpen, Clock, Hash, Map } from 'lucide-react';
 import SimpleRecordForm from './SimpleRecordForm';
 
@@ -1478,8 +1478,14 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                                     }}
                                 >
                                     <option value="">-- Chọn nhân viên --</option>
-                                    {employees.map(emp => (
-                                        <option key={emp.id} value={emp.id}>{emp.name} - {emp.department}</option>
+                                    {groupEmployeesByDepartment(employees).map(group => (
+                                        <optgroup key={group.key} label={group.label} className="font-bold text-blue-700 bg-blue-50">
+                                            {group.employees.map(emp => (
+                                                <option key={emp.id} value={emp.id} className="text-gray-800 font-normal bg-white">
+                                                    {emp.name} ({emp.position || 'Nhân viên'})
+                                                </option>
+                                            ))}
+                                        </optgroup>
                                     ))}
                                 </select>
                             </div>

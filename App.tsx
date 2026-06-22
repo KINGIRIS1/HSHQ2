@@ -7,7 +7,7 @@ import MainLayout from './components/layout/MainLayout';
 import AppRoutes from './components/AppRoutes';
 import AppModals from './components/AppModals';
 
-import { DEFAULT_VISIBLE_COLUMNS, confirmAction } from './utils/appHelpers';
+import { DEFAULT_VISIBLE_COLUMNS, confirmAction, fillTimelineDatesForReturn } from './utils/appHelpers';
 import { exportReportToExcel, exportReturnedListToExcel } from './utils/excelExport';
 import { generateReport } from './services/geminiService';
 import { syncTemplatesFromCloud } from './services/docxService'; 
@@ -143,7 +143,7 @@ function App() {
   const { activeRemindersCount } = useReminderSystem(records, handleUpdateRecordState);
 
   // Filtering Logic
-  const recordFilterProps = useRecordFilter(records, currentUser, currentView, employees);
+  const recordFilterProps = useRecordFilter(records, currentUser, currentView, employees, users);
 
   // TỰ ĐỘNG BỎ TÍCH CHỌN KHI CHUYỂN TAB ĐỂ TRÁNH NHẦM LẪN GIAO HỒ SƠ CHỒNG CHÉO
   useEffect(() => {
@@ -304,7 +304,7 @@ function App() {
       
       const updates = {
           assignedTo: employeeId,
-          status: RecordStatus.ASSIGNED,
+          status: RecordStatus.IN_PROGRESS,
           assignedDate: nowStr,
           submissionDate: null,
           approvalDate: null,
@@ -318,7 +318,7 @@ function App() {
       await Promise.all(assignTargetRecords.map(r => updateRecordApi({ ...r, ...updates } as any)));
       setIsAssignModalOpen(false); 
       setSelectedRecordIds(new Set()); 
-      setToast({ type: 'success', message: `Đã giao ${assignTargetRecords.length} hồ sơ thành công!` });
+      setToast({ type: 'success', message: `Đã giao việc và chuyển sang Đang thực hiện cho ${assignTargetRecords.length} hồ sơ thành công!` });
   };
 
   const getUpdatesForStatusChange = (newStatus: RecordStatus, customDateStr?: string) => {
@@ -516,24 +516,41 @@ function App() {
   }, []);
 
   const advanceStatus = useCallback(async (record: RecordFile) => {
+      const isLuuTruOrCongVan = record.recordType === 'Cung cấp tài liệu đất đai' || 
+                                record.recordType === 'Sao lục' || 
+                                record.recordType === 'Công văn';
+
       if (record.status === RecordStatus.RECEIVED) { 
           setAssignTargetRecords([record]); 
           setIsAssignModalOpen(true); 
           return; 
       }
-      if (record.status === RecordStatus.COMPLETED_WORK) {
-          const isLuuTruOrCongVan = record.recordType === 'Cung cấp tài liệu đất đai' || 
-                                    record.recordType === 'Sao lục' || 
-                                    record.recordType === 'Công văn';
+      if (record.status === RecordStatus.IN_PROGRESS) {
           if (isLuuTruOrCongVan) {
-              // Đi thẳng sang Trình ký (Bỏ qua khâu kiểm tra)
-              const updates = getUpdatesForStatusChange(RecordStatus.PENDING_SIGN);
-              setRecords(prev => prev.map(r => r.id === record.id ? { ...r, ...updates } : r));
-              await updateRecordApi({ ...record, ...updates });
-              return;
+              // Lưu trữ: đi thẳng sang Trình ký (chọn Ban Giám đốc)
+              setSubmitTargetRecords([record]);
+              setIsSubmitModalOpen(true);
+          } else {
+              // Thường: đang thực hiện -> tích Trình kiểm tra (chọn Tổ trưởng)
+              setSubmitTargetRecords([record]);
+              setIsSubmitCheckModalOpen(true);
           }
+          return;
+      }
+      if (record.status === RecordStatus.PENDING_CHECK) {
+          // Trực tiếp sang Trình ký (bỏ qua bước Đã kiểm tra trung gian)
           setSubmitTargetRecords([record]);
-          setIsSubmitCheckModalOpen(true);
+          setIsSubmitModalOpen(true);
+          return;
+      }
+      if (record.status === RecordStatus.COMPLETED_WORK) {
+          if (isLuuTruOrCongVan) {
+              setSubmitTargetRecords([record]);
+              setIsSubmitModalOpen(true);
+          } else {
+              setSubmitTargetRecords([record]);
+              setIsSubmitCheckModalOpen(true);
+          }
           return;
       }
       if (record.status === RecordStatus.CHECKED) {
@@ -541,7 +558,7 @@ function App() {
           setIsSubmitModalOpen(true);
           return;
       }
-      // UPDATE: Thêm COMPLETED_WORK vào luồng
+      
       const flow = [RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.PENDING_CHECK, RecordStatus.CHECKED, RecordStatus.PENDING_SIGN, RecordStatus.SIGNED, RecordStatus.HANDOVER];
       const idx = flow.indexOf(record.status);
       if (idx < flow.length - 1) {
@@ -885,12 +902,34 @@ function App() {
             employees={employees}
             onConfirm={async (directorId) => {
                 try {
-                    const updates = submitTargetRecords.map(r => ({
-                        ...r,
-                        status: RecordStatus.PENDING_SIGN,
-                        submissionDate: new Date().toISOString(),
-                        submittedTo: directorId
-                    }));
+                    const nowStr = new Date().toISOString();
+                    const updates = submitTargetRecords.map(r => {
+                        const isLuuTru = r.recordType === 'Cung cấp tài liệu đất đai' || 
+                                         r.recordType === 'Sao lục' || 
+                                         r.recordType === 'Công văn';
+                        if (isLuuTru) {
+                            const responsibleId = r.assignedTo || currentUser?.employeeId || null;
+                            return {
+                                ...r,
+                                status: RecordStatus.PENDING_SIGN,
+                                completedWorkDate: r.completedWorkDate || nowStr,
+                                pendingCheckDate: r.pendingCheckDate || nowStr,
+                                checkedDate: r.checkedDate || nowStr,
+                                checkedBy: r.checkedBy || responsibleId,
+                                submissionDate: nowStr,
+                                submittedTo: directorId
+                            };
+                        } else {
+                            return {
+                                ...r,
+                                status: RecordStatus.PENDING_SIGN,
+                                checkedDate: r.checkedDate || nowStr,
+                                checkedBy: r.checkedBy || currentUser?.employeeId || null,
+                                submissionDate: nowStr,
+                                submittedTo: directorId
+                            };
+                        }
+                    });
                     await updateRecordsBatchById(updates);
                     setToast({ type: 'success', message: `Đã trình ký ${updates.length} hồ sơ thành công!` });
                     setIsSubmitModalOpen(false);
@@ -913,10 +952,12 @@ function App() {
             isCheckMode={true}
             onConfirm={async (checkerId) => {
                 try {
+                    const nowStr = new Date().toISOString();
                     const updates = submitTargetRecords.map(r => ({
                         ...r,
                         status: RecordStatus.PENDING_CHECK,
-                        pendingCheckDate: new Date().toISOString(),
+                        completedWorkDate: r.completedWorkDate || nowStr,
+                        pendingCheckDate: nowStr,
                         checkedBy: checkerId
                     }));
                     await updateRecordsBatchById(updates);

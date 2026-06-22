@@ -219,7 +219,7 @@ const DailyList: React.FC<DailyListProps> = ({
           for (const record of selectedRecordsForAssign) {
               const updatedRecord: RecordFile = {
                   ...record,
-                  status: RecordStatus.ASSIGNED,
+                  status: RecordStatus.IN_PROGRESS,
                   assignedTo: employeeId,
                   assignedDate: et,
                   submissionDate: null,
@@ -233,7 +233,7 @@ const DailyList: React.FC<DailyListProps> = ({
           }
           setSelectedIds(new Set());
           setIsAssignModalOpen(false);
-          alert(`Đã chuyển chuyên môn thành công cho ${successCount} hồ sơ.`);
+          alert(`Đã chuyển chuyên môn và đang thực hiện thành công cho ${successCount} hồ sơ.`);
       } catch (err) {
           console.error("Lỗi khi chuyển chuyên môn:", err);
           alert("Có lỗi xảy ra trong quá trình chuyển chuyên môn.");

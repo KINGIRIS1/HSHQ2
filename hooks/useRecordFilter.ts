@@ -8,7 +8,8 @@ export const useRecordFilter = (
     records: RecordFile[],
     currentUser: User | null,
     currentView: string,
-    employees: Employee[]
+    employees: Employee[],
+    users: User[] = []
 ) => {
     // Filter States
     // CẬP NHẬT: Sử dụng Object để lưu search term riêng cho từng view
@@ -84,6 +85,53 @@ export const useRecordFilter = (
         
         let result = Array.from(uniqueMap.values()) as RecordFile[];
 
+        // --- HELPER STRATEGIES FOR SUBADMINS ---
+        const isDirectorOrLeader = (employeeId: string | null | undefined) => {
+            if (!employeeId) return false;
+            const emp = employees.find(e => e.id === employeeId);
+            if (emp) {
+                const dept = (emp.department || '').toLowerCase();
+                const pos = (emp.position || '').toLowerCase();
+                const isDirDept = dept.includes('ban giám đốc') || dept.includes('ban lãnh đạo');
+                const isDirPos = pos.includes('giám đốc') || pos.includes('phó giám đốc') || pos.includes('lãnh đạo');
+                const isLeaderPos = pos.includes('tổ trưởng') || pos.includes('tổ phó') || pos.includes('trưởng phòng') || pos.includes('trưởng nhóm') || pos.includes('nhóm trưởng');
+                if (isDirDept || isDirPos || isLeaderPos) return true;
+            }
+            const associatedUser = users.find(u => u.employeeId === employeeId);
+            if (associatedUser) {
+                if (associatedUser.role === UserRole.TEAM_LEADER || associatedUser.role === UserRole.ADMIN) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        const isSubAdminAllowedRecord = (r: RecordFile, emp: Employee) => {
+            if (!emp.department) return false;
+            const adminDept = removeVietnameseTones(emp.department.toLowerCase());
+            
+            const isReg = (type: string | null | undefined): boolean => {
+                if (!type) return false;
+                const t = type.trim().toLowerCase();
+                const REG_PROCEDURES = [
+                    "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
+                    "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
+                ];
+                return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
+            };
+
+            if (r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục') {
+                return adminDept.includes('luu tru') || adminDept.includes('van phong') || adminDept.includes('hanh chinh');
+            }
+            if (r.recordType === 'Công văn') {
+                return adminDept.includes('cong van') || adminDept.includes('van phong') || adminDept.includes('hanh chinh');
+            }
+            if (isReg(r.recordType)) {
+                return adminDept.includes('dang ky') || adminDept.includes('cap giay');
+            }
+            return adminDept.includes('do dac') || adminDept.includes('ky thuat') || adminDept.includes('to do') || adminDept.includes('dia chinh') || adminDept.includes('noi nghiep') || adminDept.includes('ngoai nghiep');
+        };
+
         // View-based filtering
         const isCheckView = [
             'check_list', 'registration_check_list', 'archive_check_list', 'congvan_check_list', 'other_check_list'
@@ -94,6 +142,24 @@ export const useRecordFilter = (
         const isCompletedWorkView = [
             'completed_list', 'registration_completed_list', 'archive_completed_list', 'congvan_completed_list'
         ].includes(currentView);
+
+        // --- EXCLUDE DIR/LEADER RECORDS FOR SUBADMIN ---
+        if (currentUser && currentUser.role === UserRole.SUBADMIN) {
+            result = result.filter(r => {
+                const isLeaderOrDirAssigned = isDirectorOrLeader(r.assignedTo);
+                const isLeaderOrDirChecked = isDirectorOrLeader(r.checkedBy);
+                const isLeaderOrDirSubmitted = isDirectorOrLeader(r.submittedTo);
+                return !isLeaderOrDirAssigned && !isLeaderOrDirChecked && !isLeaderOrDirSubmitted;
+            });
+            
+            // --- WORKFLOW CHECK AND SIGNING DEPT BOUNDS FOR SUBADMIN ---
+            if (isCheckView || isPendingCheckView || isCompletedWorkView) {
+                const subAdminEmp = employees.find(e => e.id === currentUser.employeeId);
+                if (subAdminEmp) {
+                    result = result.filter(r => isSubAdminAllowedRecord(r, subAdminEmp));
+                }
+            }
+        }
         const isDirectorCompletedView = [
             'director_completed', 'registration_director_completed', 'archive_director_completed', 'congvan_director_completed', 'other_director_completed'
         ].includes(currentView);
@@ -274,7 +340,7 @@ export const useRecordFilter = (
         });
 
         return result;
-    }, [records, searchTerm, filterWard, filterStatus, filterEmployee, filterDate, filterSpecificDate, filterAssignedDate, filterFromDate, filterToDate, showAdvancedDateFilter, warningFilter, currentView, sortConfig, handoverTab, currentUser, employees]);
+    }, [records, searchTerm, filterWard, filterStatus, filterEmployee, filterDate, filterSpecificDate, filterAssignedDate, filterFromDate, filterToDate, showAdvancedDateFilter, warningFilter, currentView, sortConfig, handoverTab, currentUser, employees, users]);
 
     const paginatedRecords = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;

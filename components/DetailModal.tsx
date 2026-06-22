@@ -846,23 +846,33 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                                     const receiver = users.find(u => u.employeeId === record.receivedBy);
                                     if (!receiver) return undefined;
                                     const emp = employees.find(e => e.id === receiver.employeeId);
-                                    return `${receiver.name} (${emp?.position || 'Nhân viên'})`;
+                                    return `Người nhận: ${receiver.name} (${emp?.position || 'Nhân viên'})`;
                                 })() : undefined}
                             />
 
-                            <TimelineItem 
+                             <TimelineItem 
                                 date={record.assignedDate} 
                                 label="GIAO NHÂN VIÊN" 
                                 icon={UserIcon}
                                 colorClass={{text: 'text-blue-700', border: 'border-blue-600', bg: 'bg-blue-600'}}
+                                subText={record.assignedTo ? (() => {
+                                    const assigned = employees.find(e => e.id === record.assignedTo);
+                                    if (!assigned) return undefined;
+                                    return `Nhân viên thực hiện: ${assigned.name} (${assigned.position || 'Nhân viên'})`;
+                                })() : undefined}
                             />
                             
-                            <TimelineItem 
+                             <TimelineItem 
                                 date={record.completedWorkDate} 
                                 forceActive={isWorkDone}
                                 label="ĐÃ THỰC HIỆN" 
                                 icon={CheckSquare}
                                 colorClass={{text: 'text-cyan-700', border: 'border-cyan-600', bg: 'bg-cyan-600'}}
+                                subText={record.completedWorkDate && record.assignedTo ? (() => {
+                                    const assigned = employees.find(e => e.id === record.assignedTo);
+                                    if (!assigned) return undefined;
+                                    return `Nhân viên hoàn thành: ${assigned.name} (${assigned.position || 'Nhân viên'})`;
+                                })() : undefined}
                             />
 
                             {/* Ẩn mốc kiểm tra cho một số loại hồ sơ */}
@@ -874,10 +884,13 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                                         label="TRÌNH KIỂM TRA" 
                                         icon={Send}
                                         colorClass={{text: 'text-orange-700', border: 'border-orange-600', bg: 'bg-orange-600'}}
-                                        subText={record.checkedBy ? (() => {
-                                            const checker = employees.find(e => e.id === record.checkedBy);
-                                            if (!checker) return undefined;
-                                            return `${checker.name} (${checker?.position || 'Người kiểm tra'})`;
+                                        subText={record.pendingCheckDate ? (() => {
+                                            const assigned = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
+                                            const checker = record.checkedBy ? employees.find(e => e.id === record.checkedBy) : null;
+                                            let text = '';
+                                            if (assigned) text += `Người trình: ${assigned.name}`;
+                                            if (checker) text += (text ? ` \n` : '') + `Người kiểm tra: ${checker.name} (${checker.position || 'Tổ trưởng'})`;
+                                            return text || undefined;
                                         })() : undefined}
                                     />
 
@@ -887,46 +900,65 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                                         label="ĐÃ KIỂM TRA" 
                                         icon={CheckSquare}
                                         colorClass={{text: 'text-orange-700', border: 'border-orange-600', bg: 'bg-orange-600'}}
+                                        subText={record.checkedDate && record.checkedBy ? (() => {
+                                            const checker = employees.find(e => e.id === record.checkedBy);
+                                            if (!checker) return undefined;
+                                            return `Người kiểm tra: ${checker.name} (${checker.position || 'Tổ trưởng'})`;
+                                        })() : undefined}
                                     />
                                 </>
                             )}
 
-                            <TimelineItem 
+                             <TimelineItem 
                                 date={record.submissionDate} 
                                 forceActive={isPendingSignActive}
                                 label="TRÌNH KÝ" 
                                 icon={Send}
                                 colorClass={{text: 'text-purple-700', border: 'border-purple-600', bg: 'bg-purple-600'}}
-                                subText={record.submittedTo ? (() => {
-                                    const director = users.find(u => u.employeeId === record.submittedTo);
-                                    if (!director) return undefined;
-                                    const emp = employees.find(e => e.id === director.employeeId);
-                                    return `${director.name} (${emp?.position || (director.role === UserRole.ADMIN ? 'Giám đốc' : 'Phó giám đốc')})`;
+                                subText={record.submissionDate ? (() => {
+                                    const assigned = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
+                                    const director = record.submittedTo ? (users.find(u => u.employeeId === record.submittedTo) || employees.find(e => e.id === record.submittedTo)) : null;
+                                    let text = '';
+                                    if (assigned) text += `Người trình: ${assigned.name}`;
+                                    if (director) text += (text ? ` \n` : '') + `Người nhận trình: ${director.name} (${(director as any).position || 'Lãnh đạo'})`;
+                                    return text || undefined;
                                 })() : undefined}
                             />
                             
-                            <TimelineItem 
+                             <TimelineItem 
                                 date={record.approvalDate} 
                                 forceActive={isSignedActive}
                                 label="KÝ DUYỆT" 
                                 icon={FileSignature}
                                 colorClass={{text: 'text-indigo-700', border: 'border-indigo-600', bg: 'bg-indigo-600'}}
+                                subText={record.approvalDate && record.submittedTo ? (() => {
+                                    const director = users.find(u => u.employeeId === record.submittedTo) || employees.find(e => e.id === record.submittedTo);
+                                    if (!director) return undefined;
+                                    return `Người ký duyệt: ${director.name} (${(director as any).position || 'Lãnh đạo'})`;
+                                })() : undefined}
                             />
                             
-                            <TimelineItem 
+                             <TimelineItem 
                                 date={record.completedDate} 
                                 label={record.status === RecordStatus.REJECTED ? "HỒ SƠ TRẢ" : record.status === RecordStatus.WITHDRAWN ? "RÚT HỒ SƠ" : "HOÀN THÀNH"} 
                                 icon={CheckSquare}
                                 isLast={false}
                                 colorClass={{text: record.status === RecordStatus.REJECTED ? 'text-red-700' : 'text-green-700', border: record.status === RecordStatus.REJECTED ? 'border-red-600' : 'border-green-600', bg: record.status === RecordStatus.REJECTED ? 'bg-red-600' : 'bg-green-600'}}
-                            />
+                                subText={record.completedDate && record.exportBatch ? `Chốt danh sách đợt: ĐỢT ${record.exportBatch}` : undefined}
+                             />
                             
-                            <TimelineItem 
+                             <TimelineItem 
                                 date={record.resultReturnedDate} 
                                 label="TRẢ KẾT QUẢ" 
                                 icon={FileCheck}
                                 isLast={true}
                                 colorClass={{text: 'text-emerald-700', border: 'border-emerald-600', bg: 'bg-emerald-600'}}
+                                subText={record.resultReturnedDate ? (() => {
+                                    let details = '';
+                                    if (record.receiverName) details += `Người nhận: ${record.receiverName}`;
+                                    if (record.paymentAmount) details += (details ? `, ` : '') + `Lệ phí: ${record.paymentAmount.toLocaleString('vi-VN')}đ`;
+                                    return details || undefined;
+                                })() : undefined}
                             />
                         </div>
                     </div>

@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { RecordFile, RecordStatus, Employee, User, UserRole, Holiday } from '../types';
 import { GROUPS, EXTENDED_RECORD_TYPES, STATUS_LABELS, REGISTRATION_PROCEDURES } from '../constants';
-import { isArchiveType } from '../utils/appHelpers';
+import { isArchiveType, groupEmployeesByDepartment } from '../utils/appHelpers';
 import { X, Save, Lock, User as UserIcon, MapPin, FileText, Calendar, FileCheck } from 'lucide-react';
 import RecordForm from './receive-record/RecordForm';
 
@@ -521,7 +521,25 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                                     <div><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Số Trích lục</label><input type="text" className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" value={val(formData.excerptNumber)} onChange={(e) => handleChange('excerptNumber', e.target.value)} /></div>
                                 </>
                             )}
-                            <div className={isMeasurement ? 'col-span-2' : ''}><label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Giao nhân viên xử lý</label><select className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm" value={val(formData.assignedTo)} onChange={(e) => handleChange('assignedTo', e.target.value)}><option value="">-- Chưa giao --</option>{employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name} - {emp.department}</option>)}</select></div>
+                            <div className={isMeasurement ? 'col-span-2' : ''}>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">Giao nhân viên xử lý</label>
+                                <select 
+                                    className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-sm cursor-pointer bg-white" 
+                                    value={val(formData.assignedTo)} 
+                                    onChange={(e) => handleChange('assignedTo', e.target.value)}
+                                >
+                                    <option value="">-- Chưa giao --</option>
+                                    {groupEmployeesByDepartment(employees).map(group => (
+                                        <optgroup key={group.key} label={group.label} className="font-bold text-blue-700 bg-blue-50">
+                                            {group.employees.map(emp => (
+                                                <option key={emp.id} value={emp.id} className="text-gray-800 font-normal bg-white">
+                                                    {emp.name} ({emp.position || 'Nhân viên'})
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
                         {/* QUAN TRỌNG: Hiển thị thông tin xuất đợt */}
                         {hasAdminRights && (

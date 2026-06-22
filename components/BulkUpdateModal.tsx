@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { RecordFile, Employee, RecordStatus } from '../types';
 import { STATUS_LABELS } from '../constants';
-import { isArchiveType } from '../utils/appHelpers';
+import { isArchiveType, groupEmployeesByDepartment } from '../utils/appHelpers';
 import { X, CheckCircle2, AlertTriangle, Layers, ArrowRight } from 'lucide-react';
 
 interface BulkUpdateModalProps {
@@ -119,8 +119,14 @@ const BulkUpdateModal: React.FC<BulkUpdateModalProps> = ({
                             onChange={(e) => setTargetValue(e.target.value)}
                         >
                             <option value="">-- Chọn nhân viên --</option>
-                            {employees.map(emp => (
-                                <option key={emp.id} value={emp.id}>{emp.name} - {emp.department}</option>
+                            {groupEmployeesByDepartment(employees).map(group => (
+                                <optgroup key={group.key} label={group.label} className="font-bold text-blue-700 bg-blue-50">
+                                    {group.employees.map(emp => (
+                                        <option key={emp.id} value={emp.id} className="text-gray-800 font-normal bg-white">
+                                            {emp.name} ({emp.position || 'Nhân viên'})
+                                        </option>
+                                    ))}
+                                </optgroup>
                             ))}
                         </select>
                     )}

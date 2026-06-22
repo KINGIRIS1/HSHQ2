@@ -41,7 +41,7 @@ import {
   History,
   CheckSquare,
 } from "lucide-react";
-import { confirmAction, toTitleCase } from "../../utils/appHelpers";
+import { confirmAction, toTitleCase, findArchiveStaffForWard } from "../../utils/appHelpers";
 import AssignModal from "../AssignModal";
 import ArchiveDetailModal from "./ArchiveDetailModal";
 import HandoverListModal from "./HandoverListModal";
@@ -255,6 +255,54 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
     loadData();
   };
 
+  const handleAutoAssign = async () => {
+    if (selectedIds.size === 0) return;
+    const listToAssign = Array.from(selectedIds).map(id => records.find(r => r.id === id)).filter(Boolean) as ArchiveRecord[];
+    if (listToAssign.length === 0) return;
+
+    let assignedCount = 0;
+    const updatesList: { id: string; updates: any }[] = [];
+
+    for (const record of listToAssign) {
+      const ward = record.data?.xa_phuong;
+      if (ward) {
+        const matchedEmployee = findArchiveStaffForWard(ward, employees);
+        if (matchedEmployee) {
+          const historyEntry = {
+            action: "Giao việc tự động (Địa chỉ thửa đất)",
+            status: "assigned" as const,
+            timestamp: new Date().toISOString(),
+            user: currentUser.name,
+            note: `Tự động phân công cho nhân viên: ${matchedEmployee.name} (Địa bàn: ${ward})`,
+          };
+          
+          const updates = {
+            status: "assigned" as const,
+            data: {
+              ...record.data,
+              assigned_to: matchedEmployee.id,
+              assigned_date: new Date().toISOString(),
+              history: [...(Array.isArray(record.data?.history) ? record.data.history : []), historyEntry],
+            }
+          };
+          updatesList.push({ id: record.id, updates });
+          assignedCount++;
+        }
+      }
+    }
+
+    if (updatesList.length > 0) {
+      for (const item of updatesList) {
+        await updateArchiveRecordsBatch([item.id], item.updates);
+      }
+      setSelectedIds(new Set());
+      loadData();
+      alert(`Đã giao tự động thành công ${assignedCount}/${listToAssign.length} hồ sơ dựa trên địa bàn phụ trách!`);
+    } else {
+      alert("Không tìm thấy nhân viên Tổ Lưu trữ nào phụ trách các địa bàn xã/phường của các hồ sơ này.");
+    }
+  };
+
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
       setSelectedIds(new Set(filteredRecords.map((r) => r.id)));
@@ -285,10 +333,31 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
     }
 
     // Map form data về cấu trúc ArchiveRecord
+    let finalStatus = formData.status;
+    let assignedTo = undefined;
+    let assignedDate = undefined;
+    const historyEntries: any[] = [];
+
+    if (!editingId && formData.status === "draft" && formData.xa_phuong) {
+      const matchedEmployee = findArchiveStaffForWard(formData.xa_phuong, employees);
+      if (matchedEmployee) {
+        finalStatus = "assigned";
+        assignedTo = matchedEmployee.id;
+        assignedDate = new Date().toISOString();
+        historyEntries.push({
+          action: "Giao việc tự động (Địa chỉ thửa đất)",
+          status: "assigned",
+          timestamp: new Date().toISOString(),
+          user: "Hệ thống",
+          note: `Đã tự động giao cho ${matchedEmployee.name} phụ trách địa bàn ${formData.xa_phuong}`,
+        });
+      }
+    }
+
     const recordToSave: Partial<ArchiveRecord> = {
       id: editingId || undefined,
       type: "saoluc",
-      status: formData.status,
+      status: finalStatus,
       so_hieu: formData.so_hieu, // Mã hồ sơ
       noi_nhan_gui: formData.chu_su_dung, // Chủ sử dụng
       ngay_thang: formData.ngay_nhan, // Ngày nhận
@@ -304,6 +373,7 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
         receipt_number: formData.receipt_number,
         payment_status: formData.payment_status,
         result_returned_date: formData.result_returned_date,
+        ...(assignedTo ? { assigned_to: assignedTo, assigned_date: assignedDate, history: historyEntries } : {}),
       },
       created_by: currentUser.username,
     };
@@ -881,9 +951,11 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
 
         const ngay_hoan_thanh = parseExcelDate(row[8]);
         const danh_sach = row[9]?.toString() || "";
+        const xa_phuong = row[4]?.toString() || "";
 
         let status: ArchiveRecord["status"] = "draft";
         let history: any[] = [];
+        let final_assigned_to = assigned_to;
 
         // Determine status based on data
         if (ngay_hoan_thanh && danh_sach) {
@@ -895,7 +967,7 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
             user: currentUser.name,
             note: `Đã chuyển vào danh sách: ${danh_sach}`,
           });
-        } else if (assigned_to) {
+        } else if (final_assigned_to) {
           status = "assigned";
           history.push({
             action: "Giao việc (Import)",
@@ -903,6 +975,19 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
             timestamp: new Date().toISOString(),
             user: currentUser.name,
           });
+        } else if (xa_phuong) {
+          const matchedEmployee = findArchiveStaffForWard(xa_phuong, employees);
+          if (matchedEmployee) {
+            status = "assigned";
+            final_assigned_to = matchedEmployee.id;
+            history.push({
+              action: "Giao việc tự động (Địa chỉ thửa đất)",
+              status: "assigned",
+              timestamp: new Date().toISOString(),
+              user: "Hệ thống",
+              note: `Đã tự động giao cho ${matchedEmployee.name} phụ trách địa bàn ${xa_phuong}`,
+            });
+          }
         }
 
         newRecords.push({
@@ -914,8 +999,8 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
           trich_yeu: "", // Default empty
           data: {
             hen_tra: parseExcelDate(row[3]),
-            xa_phuong: row[4]?.toString() || "",
-            assigned_to: assigned_to,
+            xa_phuong: xa_phuong,
+            assigned_to: final_assigned_to,
             thua_dat: row[6]?.toString() || "",
             to_ban_do: row[7]?.toString() || "",
             ngay_hoan_thanh: ngay_hoan_thanh,
@@ -1158,12 +1243,22 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
           {(subTab === "draft" || subTab === "all") && isManager && (
             <>
               {selectedIds.size > 0 && (
-                <button
-                  onClick={handleAssign}
-                  className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-bold shadow-md transition-all animate-pulse"
-                >
-                  <Users size={18} /> Giao việc ({selectedIds.size})
-                </button>
+                <>
+                  <button
+                    onClick={handleAssign}
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-bold shadow-md transition-all"
+                    title="Giao việc thủ công"
+                  >
+                    <Users size={18} /> Giao việc ({selectedIds.size})
+                  </button>
+                  <button
+                    onClick={handleAutoAssign}
+                    className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-indigo-700 font-bold shadow-md transition-all animate-pulse"
+                    title="Tự động phân công theo địa bàn"
+                  >
+                    <MapPin size={18} /> Giao tự động ({selectedIds.size})
+                  </button>
+                </>
               )}
               <label className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-bold shadow-md transition-all cursor-pointer">
                 <FileSpreadsheet size={18} /> Import Excel

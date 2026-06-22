@@ -102,7 +102,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
         .map(r => {
             // Map status
             let status = RecordStatus.RECEIVED;
-            if (r.status === 'assigned') status = RecordStatus.ASSIGNED;
+            if (r.status === 'assigned') status = RecordStatus.IN_PROGRESS;
             else if (r.status === 'executed') status = RecordStatus.COMPLETED_WORK;
             else if (r.status === 'pending_sign') status = RecordStatus.PENDING_SIGN;
             else if (r.status === 'signed') status = RecordStatus.SIGNED;
@@ -334,6 +334,39 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
 
   // --- ACTIONS ---
 
+  const handleStartWork = async (record: RecordFile) => {
+    if (await confirmAction(`Xác nhận bắt đầu thực hiện hồ sơ ${record.code}?\nHồ sơ sẽ chuyển sang trạng thái "Đang thực hiện".`)) {
+        if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
+            const historyEntry = {
+                action: 'Bắt đầu thực hiện',
+                status: 'executing',
+                timestamp: new Date().toISOString(),
+                user: user.name
+            };
+
+            const currentArchive = archiveRecords.find(r => r.id === record.id);
+            if (currentArchive) {
+                 const oldHistory = Array.isArray(currentArchive.data?.history) ? currentArchive.data.history : [];
+                 const newHistory = [...oldHistory, historyEntry];
+                 
+                 await saveArchiveRecord({
+                     id: record.id,
+                     status: 'assigned',
+                     data: { ...currentArchive.data, history: newHistory }
+                 });
+                 
+                 // Refresh data
+                 const saoluc = await fetchArchiveRecords('saoluc');
+                 const congvan = await fetchArchiveRecords('congvan');
+                 setArchiveRecords([...saoluc, ...congvan]);
+            }
+        } else {
+            // Normal Record
+            onUpdateStatus(record, RecordStatus.IN_PROGRESS);
+        }
+    }
+  };
+
   const handleMarkAsDone = async (record: RecordFile) => {
     if (await confirmAction(`Xác nhận đã hoàn thành công việc cho hồ sơ ${record.code}?\nHồ sơ sẽ chuyển sang trạng thái "Đã thực hiện".`)) {
         if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
@@ -415,14 +448,20 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                 }
             } else {
                 // Normal Record
+                const nowStr = new Date().toISOString();
+                const isLuuTruAll = record.recordType === 'Cung cấp tài liệu đất đai' || 
+                                    record.recordType === 'Sao lục' || 
+                                    record.recordType === 'Công văn';
+                const responsibleId = record.assignedTo || user.employeeId || null;
                 const updatedRecord = {
                     ...record,
                     status: RecordStatus.PENDING_SIGN,
                     submittedTo: directorId,
-                    submissionDate: new Date().toISOString(),
-                    completedWorkDate: record.completedWorkDate || new Date().toISOString(),
-                    checkedDate: (record.status === RecordStatus.PENDING_CHECK || record.status === RecordStatus.CHECKED) ? (record.checkedDate || new Date().toISOString()) : record.checkedDate,
-                    checkedBy: (record.status === RecordStatus.PENDING_CHECK || record.status === RecordStatus.CHECKED) ? (record.checkedBy || user.employeeId) : record.checkedBy
+                    submissionDate: nowStr,
+                    completedWorkDate: record.completedWorkDate || nowStr,
+                    pendingCheckDate: isLuuTruAll ? (record.pendingCheckDate || nowStr) : record.pendingCheckDate,
+                    checkedDate: (record.status === RecordStatus.PENDING_CHECK || record.status === RecordStatus.CHECKED || isLuuTruAll) ? (record.checkedDate || nowStr) : record.checkedDate,
+                    checkedBy: (record.status === RecordStatus.PENDING_CHECK || record.status === RecordStatus.CHECKED || isLuuTruAll) ? (record.checkedBy || responsibleId) : record.checkedBy
                 };
                 
                 if (onUpdateRecord) {
@@ -946,14 +985,20 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                             {/* Logic nút chuyển trạng thái theo từng Tab */}
                                             {activeTab === 'pending' && (
                                                 <div className="flex gap-1.5 animate-fade-in">
-                                                    {r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn' ? (
-                                                        <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-sign-${r.id}`}>
-                                                            <Send size={14} /> Trình ký
+                                                    {r.status === RecordStatus.ASSIGNED ? (
+                                                        <button onClick={() => handleStartWork(r)} title="Nhận việc & bắt đầu thực hiện" className="px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all animate-pulse" id={`row-btn-start-${r.id}`}>
+                                                            <Clock size={14} /> Bắt đầu thực hiện
                                                         </button>
                                                     ) : (
-                                                        <button onClick={() => handleForwardToCheck(r)} title="Trình kiểm tra" className="px-3 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-check-${r.id}`}>
-                                                            <Send size={14} /> Trình kiểm tra
-                                                        </button>
+                                                        r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn' ? (
+                                                            <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-sign-${r.id}`}>
+                                                                <Send size={14} /> Trình ký
+                                                            </button>
+                                                        ) : (
+                                                            <button onClick={() => handleForwardToCheck(r)} title="Trình kiểm tra" className="px-3 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all" id={`row-btn-check-${r.id}`}>
+                                                                <Send size={14} /> Trình kiểm tra
+                                                            </button>
+                                                        )
                                                     )}
                                                     <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa / báo lỗi" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-pending-${r.id}`}>
                                                         <CornerUpLeft size={14} /> Trả hồ sơ
