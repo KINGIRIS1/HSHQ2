@@ -240,7 +240,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   }, [user.employeeId, employees]);
 
   useEffect(() => {
-      if (isChecker && activeTab !== 'pending_check' && activeTab !== 'finished') {
+      if (isChecker && activeTab !== 'pending_check' && activeTab !== 'finished' && activeTab !== 'pending_sign') {
           setActiveTab('pending_check');
       }
   }, [isChecker]);
@@ -272,7 +272,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   const reviewRecords = useMemo(() => {
       let list = myRecords.filter(r => 
           r.status === RecordStatus.PENDING_SIGN &&
-          r.submittedTo === effectiveId
+          (r.submittedTo === effectiveId || r.checkedBy === effectiveId || r.assignedTo === effectiveId)
       );
       return filterAndSort(list, searchTerm, sortConfig);
   }, [myRecords, searchTerm, sortConfig, effectiveId]);
@@ -861,12 +861,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                         <div className="text-2xl font-bold text-orange-700">{pendingCheckRecords.length}</div>
                         <div className="text-xs text-orange-600 uppercase font-semibold">Chờ kiểm tra</div>
                      </div>
-                     {!isChecker && (
-                         <div className="flex-1 md:flex-none text-center px-4 py-2 bg-purple-50 rounded-lg border border-purple-100 min-w-[100px]">
-                            <div className="text-2xl font-bold text-purple-700">{reviewRecords.length}</div>
-                            <div className="text-xs text-purple-600 uppercase font-semibold">Chờ ký</div>
-                         </div>
-                     )}
+                     <div className="flex-1 md:flex-none text-center px-4 py-2 bg-purple-50 rounded-lg border border-purple-100 min-w-[100px]">
+                        <div className="text-2xl font-bold text-purple-700">{reviewRecords.length}</div>
+                        <div className="text-xs text-purple-600 uppercase font-semibold">Chờ ký</div>
+                     </div>
                  </>
              )}
              <div className="flex-1 md:flex-none text-center px-4 py-2 bg-green-50 rounded-lg border border-green-100 min-w-[100px]">
@@ -902,16 +900,14 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                         </button>
                     </>
                 )}
-                {!isChecker && (
-                    <button 
-                        onClick={() => { setActiveTab('pending_sign'); setCurrentPage(1); setSearchTerm(''); }}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-all whitespace-nowrap ${
-                            activeTab === 'pending_sign' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
-                        }`}
-                    >
-                        <Send size={16} /> Chờ ký ({reviewRecords.length})
-                    </button>
-                )}
+                <button 
+                    onClick={() => { setActiveTab('pending_sign'); setCurrentPage(1); setSearchTerm(''); }}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-all whitespace-nowrap ${
+                        activeTab === 'pending_sign' ? 'bg-purple-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
+                    }`}
+                >
+                    <Send size={16} /> Chờ ký ({reviewRecords.length})
+                </button>
                 <button 
                     onClick={() => { setActiveTab('finished'); setCurrentPage(1); setSearchTerm(''); }}
                     className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-all whitespace-nowrap ${
