@@ -121,6 +121,8 @@ export interface RecordFile {
   hasDefect?: boolean;             // Đánh dấu hồ sơ có sai sót cần trả
   defectReason?: string | null;    // Lý do trả hồ sơ do phát hiện sai sót
   defectDate?: string | null;      // Ngày đánh dấu sai sót / trả hồ sơ
+  rejectDate?: string | null;      // Ngày giờ trả hồ sơ (REJECTED)
+  rejectReason?: string | null;    // Lý do trả hồ sơ (REJECTED)
   isDeptSynced?: boolean; // Đồng bộ chuyển về phòng chuyên môn
   assignedTo?: string | null;    
   notes?: string | null;         

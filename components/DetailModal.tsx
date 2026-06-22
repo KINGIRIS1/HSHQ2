@@ -402,23 +402,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
         HEN_TRA: deadlineShortString, 
         NGAY_HEN: deadlineShortString,
         DEADLINE: deadlineShortString,
-        HEN_TRA_FULL: deadlineFullString,
-        NGAY_HEN_FULL: deadlineFullString,
-        
-        // --- NHÓM CÁN BỘ ---
-        NGUOI_NHAN: val(currentUser?.name), 
-        CAN_BO: val(currentUser?.name),
-        USER: val(currentUser?.name),
-        
-        // --- NHÓM NỘI DUNG ---
-        NOI_DUNG: val(record.content),
-        CONTENT: val(record.content),
-        LOAI_HS: val(record.recordType), 
-        RECORD_TYPE: val(record.recordType),
-        GIAY_TO_KHAC: val(record.otherDocs),
-        
-        // --- NHÓM ỦY QUYỀN ---
-        NGUOI_UY_QUYEN: val(record.authorizedBy).toUpperCase(),
+           NGUOI_UY_QUYEN: val(record.authorizedBy).toUpperCase(),
         UY_QUYEN: val(record.authorizedBy).toUpperCase(),
         LOAI_UY_QUYEN: val(record.authDocType),
         
@@ -447,23 +431,35 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
   // Updated: Hỗ trợ forceActive cho các bước không có ngày tháng cụ thể
   const TimelineItem = ({ date, label, icon: Icon, isLast, colorClass, forceActive, subText }: any) => {
       const isActive = !!date || !!forceActive;
+      const isRejected = label === 'HỒ SƠ TRẢ';
+      
       return (
           <div className="relative flex gap-4">
               <div className="flex flex-col items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 z-10 bg-white ${isActive ? colorClass.border : 'border-gray-200'}`}>
-                      {isActive ? <CheckCircle2 size={16} className={colorClass.text} /> : <Circle size={16} className="text-gray-300" />}
+                      {isActive ? (
+                          isRejected ? (
+                              <Icon size={16} className={`${colorClass.text} animate-pulse`} />
+                          ) : (
+                              <CheckCircle2 size={16} className={colorClass.text} />
+                          )
+                      ) : <Circle size={16} className="text-gray-300" />}
                   </div>
                   {!isLast && <div className={`w-0.5 grow ${isActive ? colorClass.bg : 'bg-gray-100'} my-1`}></div>}
               </div>
-              <div className={`pb-6 ${!isLast ? '' : ''}`}>
+              <div className="pb-6">
                   <p className={`text-xs font-bold uppercase mb-0.5 ${isActive ? colorClass.text : 'text-gray-400'}`}>{label}</p>
                   <div className="flex items-center gap-2">
-                      <Icon size={14} className={isActive ? 'text-gray-500' : 'text-gray-300'} />
+                      <Icon size={14} className={isActive ? (isRejected ? 'text-red-500' : 'text-gray-500') : 'text-gray-300'} />
                       <span className={`text-sm font-medium ${isActive ? 'text-gray-800' : 'text-gray-400 italic'}`}>
                           {date ? formatDate(date) : (forceActive ? 'Đã hoàn tất' : 'Chưa thực hiện')}
                       </span>
                   </div>
-                  {subText && <p className="text-[11px] text-indigo-600 mt-1 italic">{subText}</p>}
+                  {subText && (
+                      <p className={`text-[11px] mt-1 italic ${isRejected ? 'text-red-600 font-semibold' : 'text-indigo-600'}`}>
+                          {subText}
+                      </p>
+                  )}
               </div>
           </div>
       );
@@ -837,6 +833,19 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                         </div>
 
                         <div className="p-6 space-y-0">
+                             {record.status === RecordStatus.REJECTED && (
+                                 <TimelineItem 
+                                     date={record.rejectDate || record.completedDate} 
+                                     label="HỒ SƠ TRẢ" 
+                                     icon={AlertTriangle}
+                                     colorClass={{text: 'text-red-700 font-bold', border: 'border-red-600 bg-red-50', bg: 'bg-red-600'}}
+                                     subText={`Lý do: ${record.rejectReason || 'Không có lý do chi tiết'} | Người được giao: ${(() => {
+                                         const assigned = employees.find(e => e.id === record.assignedTo);
+                                         return assigned ? `${assigned.name} (${assigned.position || 'Nhân viên'})` : 'Chưa giao';
+                                     })()}`}
+                                 />
+                             )}
+
                              <TimelineItem 
                                 date={record.receivedDate} 
                                 label="NHẬN HỒ SƠ" 
@@ -938,14 +947,16 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                                 })() : undefined}
                             />
                             
-                             <TimelineItem 
-                                date={record.completedDate} 
-                                label={record.status === RecordStatus.REJECTED ? "HỒ SƠ TRẢ" : record.status === RecordStatus.WITHDRAWN ? "RÚT HỒ SƠ" : "HOÀN THÀNH"} 
-                                icon={CheckSquare}
-                                isLast={false}
-                                colorClass={{text: record.status === RecordStatus.REJECTED ? 'text-red-700' : 'text-green-700', border: record.status === RecordStatus.REJECTED ? 'border-red-600' : 'border-green-600', bg: record.status === RecordStatus.REJECTED ? 'bg-red-600' : 'bg-green-600'}}
-                                subText={record.completedDate && record.exportBatch ? `Chốt danh sách đợt: ĐỢT ${record.exportBatch}` : undefined}
-                             />
+                             {record.status !== RecordStatus.REJECTED && (
+                                 <TimelineItem 
+                                     date={record.completedDate} 
+                                     label={record.status === RecordStatus.WITHDRAWN ? "RÚT HỒ SƠ" : "HOÀN THÀNH"} 
+                                     icon={CheckSquare}
+                                     isLast={false}
+                                     colorClass={{text: 'text-green-700', border: 'border-green-600', bg: 'bg-green-600'}}
+                                     subText={record.completedDate && record.exportBatch ? `Chốt danh sách đợt: ĐỢT ${record.exportBatch}` : undefined}
+                                 />
+                             )}
                             
                              <TimelineItem 
                                 date={record.resultReturnedDate} 

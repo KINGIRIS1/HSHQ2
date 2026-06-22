@@ -55,6 +55,8 @@ const ArchiveDetailModal: React.FC<ArchiveDetailModalProps> = ({
         return RecordStatus.SIGNED;
       case "completed":
         return RecordStatus.RETURNED;
+      case "rejected":
+        return RecordStatus.REJECTED;
       default:
         return RecordStatus.RECEIVED;
     }
@@ -92,7 +94,7 @@ const ArchiveDetailModal: React.FC<ArchiveDetailModalProps> = ({
           <td><b>${h.status ? STATUS_LABELS[mapStatus(h.status)] : h.action}</b></td>
           <td>${new Date(h.timestamp).toLocaleString("vi-VN")}</td>
           <td>${h.user || "Hệ thống"}</td>
-          <td>${h.note || "---"}</td>
+          <td>${h.note || h.reason || "---"}</td>
         </tr>
       `
       )
@@ -446,41 +448,56 @@ const ArchiveDetailModal: React.FC<ArchiveDetailModalProps> = ({
                   <div className="absolute left-[34px] top-6 bottom-6 w-0.5 bg-gray-100 -z-10"></div>
 
                   {history.length > 0 ? (
-                    history.map((h: any, idx: number) => (
-                      <div key={idx} className="flex gap-4 relative">
-                        <div className="flex flex-col items-center">
-                          <div
-                            className={`w-8 h-8 rounded-full flex items-center justify-center border-2 z-10 ${idx === history.length - 1 ? "bg-blue-600 border-blue-600 text-white" : "bg-white border-gray-300 text-gray-400"}`}
-                          >
-                            <CheckCircle2 size={16} />
-                          </div>
-                        </div>
-                        <div className="pb-2">
-                          <p
-                            className={`text-xs font-bold uppercase mb-0.5 ${idx === history.length - 1 ? "text-blue-700" : "text-gray-500"}`}
-                          >
-                            {h.status
-                              ? STATUS_LABELS[mapStatus(h.status)]
-                              : h.action}
-                          </p>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`text-sm font-medium ${idx === history.length - 1 ? "text-gray-800" : "text-gray-500"}`}
+                    history.map((h: any, idx: number) => {
+                      const isRejected = h.status === 'rejected';
+                      return (
+                        <div key={idx} className="flex gap-4 relative">
+                          <div className="flex flex-col items-center">
+                            <div
+                              className={`w-8 h-8 rounded-full flex items-center justify-center border-2 z-10 ${
+                                isRejected 
+                                  ? "bg-red-600 border-red-600 text-white animate-pulse" 
+                                  : idx === history.length - 1 
+                                  ? "bg-blue-600 border-blue-600 text-white" 
+                                  : "bg-white border-gray-300 text-gray-400"
+                              }`}
                             >
-                              {new Date(h.timestamp).toLocaleString("vi-VN")}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-indigo-600 mt-1 italic">
-                            Bởi: {h.user || "Hệ thống"}
-                          </p>
-                          {h.note && (
-                            <div className="text-xs text-gray-500 italic mt-1 bg-gray-50 p-2 rounded">
-                              "{h.note}"
+                              <CheckCircle2 size={16} />
                             </div>
-                          )}
+                          </div>
+                          <div className="pb-2">
+                            <p
+                              className={`text-xs font-bold uppercase mb-0.5 ${
+                                isRejected 
+                                  ? "text-red-600" 
+                                  : idx === history.length - 1 
+                                  ? "text-blue-700" 
+                                  : "text-gray-500"
+                              }`}
+                            >
+                              {h.status
+                                ? STATUS_LABELS[mapStatus(h.status)] || "Hồ sơ trả"
+                                : h.action}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-sm font-medium ${isRejected ? "text-red-800" : idx === history.length - 1 ? "text-gray-800" : "text-gray-500"}`}
+                              >
+                                {new Date(h.timestamp).toLocaleString("vi-VN")}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-indigo-600 mt-1 italic">
+                              Bởi: {h.user || "Hệ thống"}
+                            </p>
+                            {(h.note || h.reason) && (
+                              <div className={`text-xs italic mt-1 p-2.5 rounded ${isRejected ? 'text-red-700 bg-red-50 border border-red-100 font-medium' : 'text-gray-500 bg-gray-50'}`}>
+                                "{h.note || h.reason}"
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))
+                      );
+                    })
                   ) : (
                     <div className="text-sm text-gray-400 italic text-center">
                       Chưa có lịch sử ghi nhận.

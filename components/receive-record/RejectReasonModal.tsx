@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, CornerUpLeft, MessageSquare, AlertTriangle } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { RecordFile } from '../../types';
 
 interface RejectReasonModalProps {
@@ -16,59 +16,65 @@ const RejectReasonModal: React.FC<RejectReasonModalProps> = ({ isOpen, onClose, 
 
     const handleSubmit = () => {
         if (!reason.trim()) {
-            alert('Vui lòng ghi lý do trả hồ sơ.');
             return;
         }
         onConfirm(reason.trim());
         setReason('');
     };
 
+    const recordCode = record.code || record.receiptNumber || '---';
+
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all animate-fade-in-up">
-                <div className="bg-red-600 p-4 flex justify-between items-center text-white">
-                    <h2 className="text-lg font-bold flex items-center gap-2">
-                        <AlertTriangle size={20} /> Trả hoàn hồ sơ lỗi
+        <div className="fixed inset-0 bg-black bg-opacity-65 flex items-center justify-center z-[9999] p-4 backdrop-blur-xs">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden transform transition-all animate-fade-in-up">
+                {/* Header */}
+                <div className="bg-red-655 p-4 flex justify-between items-center text-white" style={{ backgroundColor: '#cc1a1a' }}>
+                    <h2 className="text-base font-bold flex items-center gap-2">
+                        <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                        </svg>
+                        Trả hồ sơ
                     </h2>
                     <button onClick={onClose} className="text-white hover:text-gray-200 transition-colors">
                         <X size={20} />
                     </button>
                 </div>
 
-                <div className="p-6">
-                    <div className="bg-red-50 border border-red-100 rounded-xl p-3 mb-4 text-red-800 text-xs font-semibold leading-relaxed">
-                        CẢNH BÁO: Hồ sơ sẽ bị chuyển về trạng thái &quot;Hồ sơ trả&quot; (REJECTED). Một cửa sẽ nhận lại để bàn giao trả lại cho người dân.
-                    </div>
-
-                    <p className="text-sm text-gray-600 mb-4 font-medium">
-                        Trả hồ sơ: <strong className="text-gray-900">{record.code || record.receiptNumber}</strong> - {record.customerName}
+                <div className="p-5">
+                    <p className="text-sm font-semibold text-gray-800 mb-1">
+                        Xác nhận trả hồ sơ: <span className="text-red-600 font-bold">{recordCode}</span>
+                    </p>
+                    <p className="text-xs text-gray-500 mb-4">
+                        Vui lòng nhập lý do trả hồ sơ để thông báo cho người tiếp nhận/giao việc:
                     </p>
 
                     <div className="mb-4">
-                        <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-1">
-                            <MessageSquare size={14} className="text-red-500" /> Lý do trả hoàn hồ sơ <span className="text-red-500">*</span>
-                        </label>
                         <textarea
-                            className="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 min-h-[100px] font-medium"
-                            placeholder="Ghi rõ chi tiết lý do hồ sơ bị trả lại không xét duyệt được..."
+                            className="w-full border border-gray-200 rounded-xl px-3.5 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 min-h-[120px] font-medium text-gray-800 placeholder-gray-400 bg-gray-50/50 resize-none"
+                            placeholder="Nhập lý do trả tại đây..."
                             value={reason}
                             onChange={(e) => setReason(e.target.value)}
                             required
                         />
                     </div>
 
-                    <div className="flex gap-3 mt-6">
+                    <div className="flex justify-end gap-3 pt-2">
                         <button
                             onClick={onClose}
-                            className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm font-bold text-gray-500 hover:bg-gray-50 transition-colors active:scale-95"
+                            className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded-full text-xs font-bold text-gray-600 transition-colors"
                         >
-                            Hủy bỏ
+                            Hủy
                         </button>
                         <button
                             onClick={handleSubmit}
-                            className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 shadow-lg shadow-red-100 transition-all active:scale-95 flex items-center justify-center gap-2"
+                            disabled={!reason.trim()}
+                            className={`px-5 py-2 rounded-full text-xs font-bold flex items-center gap-1.5 transition-all ${
+                                reason.trim() 
+                                ? 'bg-red-600 text-white hover:bg-red-700 shadow-md shadow-red-100' 
+                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                            }`}
                         >
-                            <CornerUpLeft size={16} /> Xác nhận trả
+                            <Check size={14} /> Xác nhận trả
                         </button>
                     </div>
                 </div>
