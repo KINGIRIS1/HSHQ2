@@ -46,6 +46,7 @@ function removeVietnameseTones(str: string): string {
 }
 
 const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDirector, users, employees, rolePermissions, onUpdateStatus, onUpdateRecord, onViewRecord, onCreateLiquidation, onMapCorrection }) => {
+  const effectiveId = user.employeeId || user.username || 'admin';
   const [activeTab, setActiveTab] = useState<'pending' | 'pending_check' | 'pending_sign' | 'finished' | 'reminder'>(isDirector ? 'pending_sign' : 'pending');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -75,8 +76,6 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   }, []);
 
   const myRecords = useMemo(() => {
-    const effectiveId = user.employeeId || user.username || 'admin';
-    
     const isDirectorOrLeader = (employeeId: string | null | undefined) => {
         if (!employeeId) return false;
         const emp = employees.find(e => e.id === employeeId);
@@ -209,7 +208,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
         });
 
     return [...mainRecords, ...mappedArchives];
-  }, [records, archiveRecords, user.employeeId]);
+  }, [records, archiveRecords, user.employeeId, effectiveId]);
   
   const isChecker = useMemo(() => {
       // Check via role permissions
@@ -248,9 +247,12 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
 
   // 1. Hồ sơ Đang thực hiện (ASSIGNED, IN_PROGRESS, COMPLETED_WORK)
   const pendingRecords = useMemo(() => {
-      let list = myRecords.filter(r => r.status === RecordStatus.ASSIGNED || r.status === RecordStatus.IN_PROGRESS || r.status === RecordStatus.COMPLETED_WORK);
+      let list = myRecords.filter(r => 
+          (r.status === RecordStatus.ASSIGNED || r.status === RecordStatus.IN_PROGRESS || r.status === RecordStatus.COMPLETED_WORK) &&
+          r.assignedTo === effectiveId
+      );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
   // 2. Hồ sơ Đã thực hiện (Bỏ qua - Trống)
   const completedWorkRecords = useMemo(() => {
@@ -259,27 +261,34 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
 
   // 3. Hồ sơ Chờ kiểm tra (PENDING_CHECK) - Dành cho Tổ trưởng/Tổ phó
   const pendingCheckRecords = useMemo(() => {
-      let list = myRecords.filter(r => r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED);
+      let list = myRecords.filter(r => 
+          (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) &&
+          r.checkedBy === effectiveId
+      );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
   // 4. Hồ sơ Chờ ký (PENDING_SIGN) - Chuyển thành Tab chính
   const reviewRecords = useMemo(() => {
-      let list = myRecords.filter(r => r.status === RecordStatus.PENDING_SIGN);
+      let list = myRecords.filter(r => 
+          r.status === RecordStatus.PENDING_SIGN &&
+          r.submittedTo === effectiveId
+      );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
   // 4. Hồ sơ Hoàn thành (SIGNED, HANDOVER, RETURNED, REJECTED, WITHDRAWN)
   const finishedRecords = useMemo(() => {
       let list = myRecords.filter(r => 
-          r.status === RecordStatus.SIGNED || 
-          r.status === RecordStatus.HANDOVER || 
-          r.status === RecordStatus.RETURNED ||
-          r.status === RecordStatus.REJECTED ||
-          r.status === RecordStatus.WITHDRAWN
+          (r.status === RecordStatus.SIGNED || 
+           r.status === RecordStatus.HANDOVER || 
+           r.status === RecordStatus.RETURNED ||
+           r.status === RecordStatus.REJECTED ||
+           r.status === RecordStatus.WITHDRAWN) &&
+          (r.assignedTo === effectiveId || r.checkedBy === effectiveId || r.submittedTo === effectiveId || r.receivedBy === effectiveId)
       );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
   // 5. Hồ sơ Có hẹn nhắc việc
   const reminderRecords = useMemo(() => {
