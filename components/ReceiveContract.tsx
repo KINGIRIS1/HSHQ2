@@ -2,13 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { RecordFile, Contract, PriceItem, SplitItem, User, Employee } from '../types';
 import { fetchPriceList, deleteContractApi, updateContractApi, createContractApi, fetchContracts } from '../services/api';
-import { FileSignature, LayoutList, Settings, Settings2, FileCheck, FileText, ClipboardList } from 'lucide-react';
+import { FileSignature, LayoutList, Settings, Settings2, FileCheck, FileText, ClipboardList, BookOpen } from 'lucide-react';
 import PriceConfigModal from './PriceConfigModal';
 import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../services/docxService';
 import TemplateConfigModal from './TemplateConfigModal';
 import DocxPreviewModal from './DocxPreviewModal';
 import { confirmAction, removeVietnameseTones } from '../utils/appHelpers';
 import saveAs from 'file-saver'; // Import saveAs
+import { ContractNumberingBookModal } from './ContractNumberingBookModal';
+import { getContractNumberingConfig, saveContractNumberingConfig, peekNextContractCode } from '../utils/contractNumbering';
 
 // Child Components
 import ContractForm from './receive-contract/ContractForm';
@@ -68,6 +70,7 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
   // Modal States
   const [isPriceConfigOpen, setIsPriceConfigOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [isNumberingModalOpen, setIsNumberingModalOpen] = useState(false);
   
   // Không dùng Modal Preview nữa, nhưng vẫn giữ state để tránh lỗi biên dịch nếu cần
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -77,14 +80,21 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
   const [isProcessing, setIsProcessing] = useState(false);
   
   const [editingContract, setEditingContract] = useState<Contract | undefined>(undefined);
+  const [nextCodeProposal, setNextCodeProposal] = useState<string>('');
 
   useEffect(() => { 
       loadPrices(); 
       loadContracts();
+      loadNextCodeProposal();
   }, []);
 
   const loadPrices = async () => { const prices = await fetchPriceList(); setPriceList(prices); };
   const loadContracts = async () => { const data = await fetchContracts(); setContracts(data); };
+  const loadNextCodeProposal = async () => {
+      const cfg = await getContractNumberingConfig();
+      const { code } = peekNextContractCode(cfg);
+      setNextCodeProposal(code);
+  };
 
   // --- LOGIC XỬ LÝ KHI CÓ YÊU CẦU THANH LÝ TỪ BÊN NGOÀI ---
   useEffect(() => {
@@ -183,9 +193,7 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
   }, [recordToLiquidate, contracts, priceList]);
 
   const generateContractCode = () => {
-    const year = new Date().getFullYear();
-    const randomNum = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
-    return `HĐ-${year}-${randomNum}`;
+    return nextCodeProposal || `HĐ-${new Date().getFullYear()}-TEMP`;
   };
 
   const handleEdit = (c: Contract) => { 
@@ -203,6 +211,7 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
       if(await confirmAction("Bạn có chắc chắn muốn xóa hợp đồng này không?")) {
           await deleteContractApi(id);
           loadContracts(); // Reload list
+          loadNextCodeProposal(); // Refresh sequential counter in case the slot allows reuse (though keeping sequence is fine)
       } 
   }; 
 
@@ -211,9 +220,34 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
       if (isUpdate) {
           success = await updateContractApi(contract);
       } else {
-          success = await createContractApi(contract);
+          // If the user is saving a new contract:
+          // Check if they used the automatically proposed format, or let them override it.
+          // Allocate officially from logbook!
+          let finalCode = contract.code;
+          const config = await getContractNumberingConfig();
+          const { code, nextNum, nextYear } = peekNextContractCode(config);
+          
+          if (!contract.code || contract.code === nextCodeProposal || contract.code.includes('-TEMP') || contract.code.trim() === '') {
+              finalCode = code;
+              config.currentNumber = nextNum;
+              config.year = nextYear;
+              await saveContractNumberingConfig(config);
+          }
+          
+          const contractWithFinalCode = { ...contract, code: finalCode };
+          success = await createContractApi(contractWithFinalCode);
+          loadNextCodeProposal();
       }
       if (success) loadContracts(); // Reload list
+      return success;
+  };
+
+  const handleQuickAllocate = async (skeletonContract: Contract): Promise<boolean> => {
+      const success = await createContractApi(skeletonContract);
+      if (success) {
+          loadContracts();
+          loadNextCodeProposal();
+      }
       return success;
   };
 
@@ -471,7 +505,11 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
         <div className="flex justify-between items-center p-4">
             <div><h2 className="text-xl font-bold text-gray-800 flex items-center gap-2"><FileSignature className="text-purple-600" /> Quản Lý Hợp Đồng</h2></div>
             
-            <div className="flex gap-2">
+            <div className="flex gap-2 items-center flex-wrap">
+                <button onClick={() => setIsNumberingModalOpen(true)} className="px-3 py-1.5 bg-purple-600 border border-purple-500 text-white hover:bg-purple-700 hover:border-purple-600 rounded-lg transition-all shadow-md flex items-center gap-1.5 font-bold text-xs" title="Sổ Lấy Số & Số Hợp Đồng Tự Động">
+                    <BookOpen size={14} />
+                    <span>Sổ Lấy Số (Tiếp: {nextCodeProposal})</span>
+                </button>
                 <button onClick={() => setIsPriceConfigOpen(true)} className="p-2 bg-white border border-gray-200 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors shadow-sm" title="Cấu hình Bảng giá Dịch vụ">
                     <Settings2 size={20} />
                 </button>
@@ -581,6 +619,13 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
           onClose={() => setIsPreviewOpen(false)} 
           docxBlob={previewBlob} 
           fileName={previewFileName} 
+      />
+      <ContractNumberingBookModal
+          isOpen={isNumberingModalOpen}
+          onClose={() => setIsNumberingModalOpen(false)}
+          contracts={contracts}
+          onConfigChange={loadNextCodeProposal}
+          onQuickAllocate={handleQuickAllocate}
       />
     </div>
   );
