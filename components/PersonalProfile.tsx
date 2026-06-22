@@ -110,7 +110,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
     };
 
     const mainRecords = records.filter(r => {
-        if (user.role === UserRole.SUBADMIN) {
+        if (user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN) {
             // Exclude records of directors or leaders
             if (isDirectorOrLeader(r.assignedTo) || isDirectorOrLeader(r.checkedBy) || isDirectorOrLeader(r.submittedTo)) {
                 return false;
@@ -129,7 +129,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
     
     const mappedArchives = archiveRecords
         .filter(r => {
-            if (user.role === UserRole.SUBADMIN) {
+            if (user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN) {
                 if (isDirectorOrLeader(r.data?.assigned_to) || isDirectorOrLeader(r.data?.checked_by) || isDirectorOrLeader(r.data?.submitted_to)) {
                     return false;
                 }
@@ -1050,9 +1050,11 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                                             <Send size={14} /> Trình ký
                                                         </button>
                                                     )}
-                                                    <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-${r.id}`}>
-                                                        <CornerUpLeft size={14} /> Trả hồ sơ
-                                                    </button>
+                                                    {(isChecker || isDirector || user.role === UserRole.ADMIN || r.checkedBy === user.employeeId) && (
+                                                        <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-${r.id}`}>
+                                                            <CornerUpLeft size={14} /> Trả hồ sơ
+                                                        </button>
+                                                    )}
                                                     {r.assignedTo === user.employeeId && r.status === RecordStatus.PENDING_CHECK && (
                                                         <button onClick={() => handleRecallRecord(r)} title="Thu hồi hồ sơ đã trình" className="px-2.5 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md hover:bg-amber-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-recall-${r.id}`}>
                                                             <RotateCcw size={14} /> Thu hồi
@@ -1063,9 +1065,11 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                             
                                             {activeTab === 'pending_sign' && r.status === RecordStatus.PENDING_SIGN && (
                                                 <div className="flex gap-1.5 animate-fade-in">
-                                                    <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-sign-${r.id}`}>
-                                                        <CornerUpLeft size={14} /> Trả hồ sơ
-                                                    </button>
+                                                    {(isDirector || user.role === UserRole.ADMIN || r.submittedTo === user.employeeId) && (
+                                                        <button onClick={() => handleOpenReturnModal(r)} title="Trả hồ sơ yêu cầu sửa" className="px-2.5 py-1.5 bg-red-50 text-red-700 border border-red-200 rounded-md hover:bg-red-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-return-sign-${r.id}`}>
+                                                            <CornerUpLeft size={14} /> Trả hồ sơ
+                                                        </button>
+                                                    )}
                                                     {r.assignedTo === user.employeeId && (r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn') && (
                                                         <button onClick={() => handleRecallRecord(r)} title="Thu hồi hồ sơ đã trình" className="px-2.5 py-1.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-md hover:bg-amber-100 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-all" id={`row-btn-recall-sign-${r.id}`}>
                                                             <RotateCcw size={14} /> Thu hồi
