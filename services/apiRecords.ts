@@ -505,6 +505,25 @@ export const updateRecordsBatchById = async (updates: Partial<RecordFile>[], onP
             .from('land_records')
             .upsert(rows);
 
+        if (error && (error.code === 'PGRST204' || String(error.code) === '42703' || (error.message && String(error.message).includes('does not exist')))) {
+            console.warn("⚠️ [Fallback] Database is missing columns. Retrying batch update without new columns...");
+            if (!(window as any).fallbackAlertShown) {
+                logError("updateRecordsBatchById", error);
+                (window as any).fallbackAlertShown = true;
+            }
+            const fallbackRows = updates.map(u => {
+                const fp = sanitizeData(u, RECORD_DB_COLUMNS);
+                OPTIONAL_NEW_COLUMNS.forEach(col => delete fp[col]);
+                return fp;
+            });
+            const { error: fallbackError } = await supabase
+                .from('land_records')
+                .upsert(fallbackRows);
+            if (fallbackError) throw fallbackError;
+            if (onProgress) onProgress(updates.length, updates.length);
+            return { success: true, count: updates.length };
+        }
+
         if (error) throw error;
         
         if (onProgress) onProgress(updates.length, updates.length);
