@@ -158,7 +158,7 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
 
               const newContract: Contract = {
                   id: Math.random().toString(36).substr(2, 9),
-                  code: recordToLiquidate.code || generateContractCode(),
+                  code: generateContractCode(),
                   customerName: recordToLiquidate.customerName,
                   phoneNumber: recordToLiquidate.phoneNumber,
                   address: recordToLiquidate.address,
@@ -473,25 +473,9 @@ const ReceiveContract: React.FC<ReceiveContractProps> = ({ wards, currentUser, e
       if (blob) { 
           const fileName = `${typeName.replace(/\s/g, '_')}_${dataToPrint.code}.docx`;
           
-          if (window.electronAPI && window.electronAPI.saveAndOpenFile) {
-              const reader = new FileReader();
-              reader.readAsDataURL(blob);
-              reader.onloadend = async () => {
-                  if (!window.electronAPI?.saveAndOpenFile) return;
-                  const base64Data = (reader.result as string).split(',')[1];
-                  const result = await window.electronAPI.saveAndOpenFile({
-                      fileName: fileName,
-                      base64Data: base64Data
-                  });
-                  
-                  if (!result.success) {
-                      alert(`Lỗi khi lưu file: ${result.message}`);
-                  }
-              };
-          } else {
-              // Web Fallback
-              saveAs(blob, fileName);
-          }
+          setPreviewBlob(blob);
+          setPreviewFileName(fileName);
+          setIsPreviewOpen(true);
       }
       
       setIsProcessing(false);

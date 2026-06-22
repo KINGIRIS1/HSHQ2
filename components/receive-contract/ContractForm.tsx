@@ -292,7 +292,6 @@ const ContractForm: React.FC<ContractFormProps> = ({ initialData, onSave, onPrin
 
           setFormData(prev => ({ 
               ...prev, 
-              code: found.code,
               customerName: found.customerName, 
               phoneNumber: found.phoneNumber, 
               ward: found.ward, 
