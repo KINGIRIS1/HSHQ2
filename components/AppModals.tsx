@@ -119,6 +119,7 @@ const AppModals: React.FC<AppModalsProps> = (props) => {
                 onConfirm={props.confirmAssign} 
                 employees={props.employees} 
                 selectedRecords={props.assignTargetRecords} 
+                currentUser={props.currentUser}
                 filterDepartment={(() => {
                     const view = props.currentView;
                     if (['archive_records', 'archive_assign_tasks', 'archive_completed_list', 'archive_pending_check_list', 'archive_check_list', 'archive_handover_list', 'archive_director_completed'].includes(view)) {

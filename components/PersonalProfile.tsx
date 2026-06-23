@@ -47,7 +47,17 @@ function removeVietnameseTones(str: string): string {
 }
 
 const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDirector, users, employees, rolePermissions, onUpdateStatus, onUpdateRecord, onViewRecord, onCreateLiquidation, onMapCorrection }) => {
-  const effectiveId = user.employeeId || user.username || 'admin';
+  const effectiveId = useMemo(() => {
+    if (user.employeeId) return user.employeeId;
+    // Tự động tìm nhân viên trùng khớp với tên hoặc tên đăng nhập của user nếu employeeId rỗng
+    const foundEmp = employees.find(e => 
+        e.name.trim().toLowerCase() === user.name.trim().toLowerCase() || 
+        e.id.trim().toLowerCase() === user.username.trim().toLowerCase()
+    );
+    if (foundEmp) return foundEmp.id;
+    return user.username || 'admin';
+  }, [user, employees]);
+
   const [activeTab, setActiveTab] = useState<'pending' | 'pending_check' | 'pending_sign' | 'finished' | 'reminder'>(isDirector ? 'pending_sign' : 'pending');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -243,12 +253,6 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
       if (!emp) return false;
       return emp.department?.toLowerCase().includes('đo đạc') || emp.department?.toLowerCase().includes('kỹ thuật') || emp.position?.toLowerCase().includes('đo đạc');
   }, [user.employeeId, employees]);
-
-  useEffect(() => {
-      if (isChecker && activeTab !== 'pending_check' && activeTab !== 'finished' && activeTab !== 'pending_sign') {
-          setActiveTab('pending_check');
-      }
-  }, [isChecker]);
 
   // 1. Hồ sơ Đang thực hiện (ASSIGNED, IN_PROGRESS, COMPLETED_WORK, REJECTED)
   const pendingRecords = useMemo(() => {
@@ -516,22 +520,52 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
         for (const record of submitTargetRecords) {
             if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
                  // Handle Archive Record
-                const historyEntry = {
-                    action: 'Trình ký',
-                    status: 'pending_sign',
-                    timestamp: new Date().toISOString(),
-                    user: user.name
-                };
-
+                const nowStr = new Date().toISOString();
                 const currentArchive = archiveRecords.find(r => r.id === record.id);
                 if (currentArchive) {
                      const oldHistory = Array.isArray(currentArchive.data?.history) ? currentArchive.data.history : [];
-                     const newHistory = [...oldHistory, historyEntry];
+                     
+                     // Ghi nhận 2 trạng thái của kiểm tra tự động vào quy trình lịch sử nếu chưa có
+                     const autoHistory: any[] = [];
+                     if (currentArchive.status !== 'checked' && currentArchive.status !== 'pending_sign') {
+                         autoHistory.push({
+                             action: 'Trình kiểm tra',
+                             status: 'pending_check',
+                             timestamp: nowStr,
+                             user: user.name
+                         });
+                         autoHistory.push({
+                             action: 'Đã kiểm tra',
+                             status: 'checked',
+                             timestamp: nowStr,
+                             user: user.name
+                         });
+                     }
+
+                     const historyEntry = {
+                         action: 'Trình ký',
+                         status: 'pending_sign',
+                         timestamp: nowStr,
+                         user: user.name
+                     };
+                     const newHistory = [...oldHistory, ...autoHistory, historyEntry];
+                     const assignedTo = currentArchive.data?.assigned_to || user.employeeId || null;
+
+                     const updatedData = {
+                         ...currentArchive.data,
+                         completed_work_date: currentArchive.data?.completed_work_date || nowStr,
+                         pending_check_date: currentArchive.data?.pending_check_date || nowStr,
+                         checked_date: currentArchive.data?.checked_date || nowStr,
+                         checked_by: currentArchive.data?.checked_by || assignedTo,
+                         submission_date: nowStr,
+                         submitted_to: directorId,
+                         history: newHistory
+                     };
                      
                      await saveArchiveRecord({
                          id: record.id,
                          status: 'pending_sign',
-                         data: { ...currentArchive.data, history: newHistory, submitted_to: directorId }
+                         data: updatedData
                      });
                 }
             } else {

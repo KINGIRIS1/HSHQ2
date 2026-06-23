@@ -10,6 +10,70 @@ import { mapRecordFromDb, saveToCache, CACHE_KEYS } from '../services/apiCore';
 import { DEFAULT_WARDS as STATIC_WARDS, APP_VERSION } from '../constants';
 import { addToOfflineQueue } from '../utils/offlineSync';
 
+// --- HELPERS FOR AUTO-TRANSITION TO TBT ---
+const getSolarDateFromLunar = (lunarDay: number, lunarMonth: number, year: number): Date | null => {
+    const lunarMapping: Record<number, Record<string, string>> = {
+        2024: { "1/1": "2024-02-10", "2/1": "2024-02-11", "3/1": "2024-02-12", "10/3": "2024-04-18" },
+        2025: { "1/1": "2025-01-29", "2/1": "2025-01-30", "3/1": "2025-01-31", "10/3": "2025-04-07" },
+        2026: { "1/1": "2026-02-17", "2/1": "2026-02-18", "3/1": "2026-02-19", "10/3": "2026-04-26" }
+    };
+    const key = `${lunarDay}/${lunarMonth}`;
+    return lunarMapping[year] && lunarMapping[year][key] ? new Date(lunarMapping[year][key]) : null;
+};
+
+const formatDateKey = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+
+const getWorkingDaysCount = (startDateStr: string, endDate: Date, listHolidays: Holiday[]): number => {
+    if (!startDateStr) return 0;
+    
+    const cleanDateStr = startDateStr.split('T')[0];
+    const parts = cleanDateStr.split('-');
+    if (parts.length < 3) return 0;
+    
+    const startDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+    const today = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+    
+    if (startDate >= today) return 0;
+    
+    const holidaySet = new Set<string>();
+    const startYear = startDate.getFullYear();
+    const endYear = today.getFullYear();
+    
+    for (let year = startYear; year <= endYear; year++) {
+        listHolidays.forEach(h => {
+            if (h.isLunar) {
+                const solar = getSolarDateFromLunar(h.day, h.month, year);
+                if (solar) holidaySet.add(formatDateKey(solar));
+            } else {
+                const solar = new Date(year, h.month - 1, h.day);
+                holidaySet.add(formatDateKey(solar));
+            }
+        });
+    }
+    
+    let workingDays = 0;
+    let current = new Date(startDate);
+    
+    while (current < today) {
+        current.setDate(current.getDate() + 1);
+        const dayOfWeek = current.getDay();
+        const dateString = formatDateKey(current);
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const isHoliday = holidaySet.has(dateString);
+        
+        if (!isWeekend && !isHoliday) {
+            workingDays++;
+        }
+    }
+    
+    return workingDays;
+};
+
 export const useAppData = (currentUser: User | null) => {
     const [records, setRecords] = useState<RecordFile[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
@@ -134,6 +198,48 @@ export const useAppData = (currentUser: User | null) => {
             supabase.removeChannel(landRecordsChannel);
         };
     }, []);
+
+    // Tự động chuyển trạng thái hồ sơ trình ký có thuế sang TBT sau 7 ngày làm việc
+    useEffect(() => {
+        if (records.length === 0) return;
+        
+        const qualifyingRecords = records.filter(r => 
+            r.status === RecordStatus.PENDING_SIGN && 
+            r.hasTax && 
+            r.submissionDate
+        );
+        
+        if (qualifyingRecords.length === 0) return;
+        
+        const today = new Date();
+        const recordsToUpdate: RecordFile[] = [];
+        
+        qualifyingRecords.forEach(r => {
+            const workingDays = getWorkingDaysCount(r.submissionDate!, today, holidays);
+            if (workingDays >= 7) {
+                recordsToUpdate.push({
+                    ...r,
+                    status: RecordStatus.TBT,
+                    completedDate: new Date().toISOString()
+                });
+            }
+        });
+        
+        if (recordsToUpdate.length > 0) {
+            setRecords(prev => prev.map(r => {
+                const updated = recordsToUpdate.find(u => u.id === r.id);
+                return updated ? updated : r;
+            }));
+            
+            recordsToUpdate.forEach(async (updatedRecord) => {
+                try {
+                    await updateRecordApi(updatedRecord);
+                } catch (err) {
+                    console.error("Lỗi tự động cập nhật trạng thái TBT cho hồ sơ:", updatedRecord.code, err);
+                }
+            });
+        }
+    }, [records, holidays]);
 
     // --- Record Handlers ---
     const handleAddOrUpdateRecord = async (recordData: any, forceDeleteOnWithdrawn: boolean = false): Promise<RecordFile | null> => {

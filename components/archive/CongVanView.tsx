@@ -2051,6 +2051,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                   status: RecordStatus.RECEIVED,
                 }) as RecordFile,
             )}
+          currentUser={currentUser}
           filterDepartment="Lưu trữ"
         />
       )}

@@ -22,6 +22,7 @@ export const STATUS_LABELS: Record<RecordStatus, string> = {
   [RecordStatus.RETURNED]: 'Đã trả kết quả',
   [RecordStatus.WITHDRAWN]: 'CSD rút hồ sơ',
   [RecordStatus.REJECTED]: 'Hồ sơ trả',
+  [RecordStatus.TBT]: 'Thông báo thuế (TBT)',
 };
 
 export const STATUS_COLORS: Record<RecordStatus, string> = {
@@ -37,6 +38,7 @@ export const STATUS_COLORS: Record<RecordStatus, string> = {
   [RecordStatus.RETURNED]: 'bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold',
   [RecordStatus.WITHDRAWN]: 'bg-slate-600 text-white',
   [RecordStatus.REJECTED]: 'bg-red-100 text-red-800',
+  [RecordStatus.TBT]: 'bg-amber-100 text-amber-800 border border-amber-300 font-bold',
 };
 
 export const GROUPS = ['Tân Khai', 'Tân Quan', 'Minh Đức', 'Tân Hưng'];

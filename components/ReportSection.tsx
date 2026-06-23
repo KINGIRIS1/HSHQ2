@@ -2,13 +2,19 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { BarChart3, FileSpreadsheet, Loader2, Sparkles, Download, CalendarDays, Printer, Layout, FileText, ListFilter, CheckCircle2, Clock, AlertTriangle, Settings, Key, X, Save, MapPin, UserCheck, ChevronLeft, ChevronRight, PieChart, CheckCircle, Ruler, FolderArchive, CalendarRange } from 'lucide-react';
 import { RecordFile, RecordStatus, Employee } from '../types';
-import { getNormalizedWard, STATUS_LABELS } from '../constants';
+import { getNormalizedWard, STATUS_LABELS, REGISTRATION_PROCEDURES } from '../constants';
 import { isRecordOverdue, removeVietnameseTones, isRecordApproaching } from '../utils/appHelpers';
 import { saveGeminiKey, getGeminiKey } from '../services/geminiService';
 import { fetchArchiveRecords } from '../services/apiArchive';
 import EmployeeStatsView from './report/EmployeeStatsView';
 import WardStatsView from './report/WardStatsView';
 import DailyStatsView from './report/DailyStatsView';
+
+const isReg = (type: string | null | undefined): boolean => {
+    if (!type) return false;
+    const t = type.trim().toLowerCase();
+    return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
+};
 import OverdueStatsView from './report/OverdueStatsView';
 
 interface ReportSectionProps {
@@ -50,8 +56,8 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
 
     const [dailyStatsRecords, setDailyStatsRecords] = useState<RecordFile[]>([]);
 
-    // --- NEW LOGIC FOR MAIN TABS (Đo đạc vs Lưu trữ) ---
-    const [mainTab, setMainTab] = useState<'measurement' | 'archive'>('measurement');
+    // --- NEW LOGIC FOR MAIN TABS (Đo đạc vs Cấp giấy vs Lưu trữ) ---
+    const [mainTab, setMainTab] = useState<'measurement' | 'archive' | 'registration'>('measurement');
     const [archiveRecords, setArchiveRecords] = useState<RecordFile[]>([]);
 
     useEffect(() => {
@@ -106,15 +112,29 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
         }
     }, [mainTab]);
 
-    const activeRecords = mainTab === 'measurement' 
-        ? records.filter(r => r.recordType !== 'Cung cấp tài liệu đất đai') 
-        : archiveRecords;
+    const activeRecords = useMemo(() => {
+        if (mainTab === 'measurement') {
+            return records.filter(r => 
+                !['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '') &&
+                !isReg(r.recordType)
+            );
+        } else if (mainTab === 'registration') {
+            return records.filter(r => isReg(r.recordType));
+        } else {
+            return archiveRecords;
+        }
+    }, [mainTab, records, archiveRecords]);
 
     const activeEmployees = useMemo(() => {
         if (mainTab === 'measurement') {
             return employees.filter(e => {
                 const dept = e.department?.toLowerCase() || '';
                 return dept.includes('đo đạc') || dept.includes('kỹ thuật');
+            });
+        } else if (mainTab === 'registration') {
+            return employees.filter(e => {
+                const dept = e.department?.toLowerCase() || '';
+                return dept.includes('cấp giấy') || dept.includes('đăng ký') || dept.includes('biến động') || dept.includes('thẩm định');
             });
         } else {
             return employees.filter(e => {
@@ -250,9 +270,13 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
 
         setActiveTab('ai');
         
-        let title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ";
-        if (reportType === 'week') title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC TUẦN" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ TUẦN";
-        if (reportType === 'month') title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC THÁNG" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ THÁNG";
+        let title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC" : mainTab === 'registration' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC CẤP GIẤY" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ";
+        if (reportType === 'week') {
+            title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC TUẦN" : mainTab === 'registration' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC CẤP GIẤY TUẦN" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ TUẦN";
+        }
+        if (reportType === 'month') {
+            title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC THÁNG" : mainTab === 'registration' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC CẤP GIẤY THÁNG" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ THÁNG";
+        }
 
         // Pass filteredData to onGenerate
         onGenerate(fromDate, toDate, title, filteredData);
@@ -260,9 +284,13 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
 
     const handleExportExcelClick = () => {
         if (!fromDate || !toDate) { alert("Vui lòng chọn đầy đủ thời gian."); return; }
-        let title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ";
-        if (reportType === 'week') title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC TUẦN" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ TUẦN";
-        if (reportType === 'month') title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC THÁNG" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ THÁNG";
+        let title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC" : mainTab === 'registration' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC CẤP GIẤY" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ";
+        if (reportType === 'week') {
+            title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC TUẦN" : mainTab === 'registration' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC CẤP GIẤY TUẦN" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ TUẦN";
+        }
+        if (reportType === 'month') {
+            title = mainTab === 'measurement' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC ĐO ĐẠC THÁNG" : mainTab === 'registration' ? "BÁO CÁO KẾT QUẢ CÔNG TÁC CẤP GIẤY THÁNG" : "BÁO CÁO KẾT QUẢ CÔNG TÁC LƯU TRỮ THÁNG";
+        }
         
         onExportExcel(fromDate, toDate, selectedWard, title, filteredData);
     };
@@ -318,6 +346,12 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
                     <Ruler size={18} /> Báo cáo Đo đạc
                 </button>
                 <button 
+                    onClick={() => setMainTab('registration')}
+                    className={`px-6 py-3 text-sm font-bold rounded-t-lg border-t border-l border-r transition-all flex items-center gap-2 ${mainTab === 'registration' ? 'bg-emerald-50 border-gray-200 text-emerald-700 border-b-transparent relative top-[1px]' : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'}`}
+                >
+                    <FileText size={18} /> Báo cáo Cấp giấy
+                </button>
+                <button 
                     onClick={() => setMainTab('archive')}
                     className={`px-6 py-3 text-sm font-bold rounded-t-lg border-t border-l border-r transition-all flex items-center gap-2 ${mainTab === 'archive' ? 'bg-orange-50 border-gray-200 text-orange-700 border-b-transparent relative top-[1px]' : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'}`}
                 >
@@ -326,18 +360,24 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
             </div>
 
             {/* Toolbar */}
-            <div className={`p-4 border-b border-gray-200 shadow-sm flex flex-col gap-4 shrink-0 z-10 ${mainTab === 'measurement' ? 'bg-blue-50' : 'bg-orange-50'}`}>
+            <div className={`p-4 border-b border-gray-200 shadow-sm flex flex-col gap-4 shrink-0 z-10 ${
+                mainTab === 'measurement' ? 'bg-blue-50' : mainTab === 'registration' ? 'bg-emerald-50' : 'bg-orange-50'
+            }`}>
                 <div className="flex flex-wrap items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
-                        <div className={`p-2.5 rounded-xl ${mainTab === 'measurement' ? 'bg-blue-200 text-blue-700' : 'bg-orange-200 text-orange-700'}`}>
+                        <div className={`p-2.5 rounded-xl ${
+                            mainTab === 'measurement' ? 'bg-blue-200 text-blue-700' : mainTab === 'registration' ? 'bg-emerald-200 text-emerald-700' : 'bg-orange-200 text-orange-700'
+                        }`}>
                             <BarChart3 size={24} />
                         </div>
                         <div>
-                            <h2 className={`font-bold text-lg ${mainTab === 'measurement' ? 'text-blue-900' : 'text-orange-900'}`}>
-                                {mainTab === 'measurement' ? 'Thống kê Hồ sơ Đo đạc' : 'Thống kê Hồ sơ Lưu trữ'}
+                            <h2 className={`font-bold text-lg ${
+                                mainTab === 'measurement' ? 'text-blue-900' : mainTab === 'registration' ? 'text-emerald-900' : 'text-orange-900'
+                            }`}>
+                                {mainTab === 'measurement' ? 'Thống kê Hồ sơ Đo đạc' : mainTab === 'registration' ? 'Thống kê Hồ sơ Cấp giấy' : 'Thống kê Hồ sơ Lưu trữ'}
                             </h2>
                             <p className="text-xs text-gray-500">
-                                {mainTab === 'measurement' ? 'Dữ liệu từ Tổ đo đạc & Kỹ thuật' : 'Dữ liệu từ Tổ thông tin lưu trữ'}
+                                {mainTab === 'measurement' ? 'Dữ liệu từ Tổ đo đạc & Kỹ thuật' : mainTab === 'registration' ? 'Dữ liệu từ Tổ đăng ký cấp giấy' : 'Dữ liệu từ Tổ thông tin lưu trữ'}
                             </p>
                         </div>
                     </div>

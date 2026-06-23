@@ -64,7 +64,10 @@ const RecordRow: React.FC<RecordRowProps> = ({
   // LOGIC MỚI: Tự động xác định trạng thái hiển thị
   // Nếu có thông tin xuất (Batch/Date) và chưa hoàn thành (Trả/Rút/Từ chối), coi như là Đã giao 1 cửa
   const getDisplayStatus = (r: RecordFile) => {
-      if ((r.exportBatch || r.exportDate) && r.status !== RecordStatus.WITHDRAWN && r.status !== RecordStatus.RETURNED && r.status !== RecordStatus.REJECTED) {
+      if ((r.hasDefect || r.status === RecordStatus.REJECTED) && r.status !== RecordStatus.RETURNED && r.status !== RecordStatus.WITHDRAWN && r.status !== RecordStatus.HANDOVER) {
+          return RecordStatus.REJECTED;
+      }
+      if ((r.exportBatch || r.exportDate) && r.status !== RecordStatus.WITHDRAWN && r.status !== RecordStatus.RETURNED) {
           return RecordStatus.HANDOVER;
       }
       return r.status;
@@ -288,7 +291,7 @@ const RecordRow: React.FC<RecordRowProps> = ({
                 </button>
             )}
 
-            {displayStatus !== RecordStatus.HANDOVER && displayStatus !== RecordStatus.WITHDRAWN && displayStatus !== RecordStatus.REJECTED && !record.resultReturnedDate && currentUser?.role !== 'ONEDOOR' && (
+            {record.status !== RecordStatus.HANDOVER && record.status !== RecordStatus.WITHDRAWN && record.status !== RecordStatus.RETURNED && !record.resultReturnedDate && currentUser?.role !== 'ONEDOOR' && (
               <button onClick={() => onAdvanceStatus(record)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Chuyển bước"><ArrowRight size={16} /></button>
             )}
             <button onClick={() => onEdit(record)} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Sửa"><Pencil size={16} /></button>

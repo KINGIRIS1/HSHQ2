@@ -482,7 +482,18 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
               <div className="flex justify-between items-center mb-4">
                 <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Trạng thái</span>
-                <StatusBadge status={record.status} />
+                {(() => {
+                  const getDisplayStatus = (r: RecordFile) => {
+                      if ((r.hasDefect || r.status === RecordStatus.REJECTED) && r.status !== RecordStatus.RETURNED && r.status !== RecordStatus.WITHDRAWN && r.status !== RecordStatus.HANDOVER) {
+                          return RecordStatus.REJECTED;
+                      }
+                      if ((r.exportBatch || r.exportDate) && r.status !== RecordStatus.WITHDRAWN && r.status !== RecordStatus.RETURNED) {
+                          return RecordStatus.HANDOVER;
+                      }
+                      return r.status;
+                  };
+                  return <StatusBadge status={getDisplayStatus(record)} />;
+                })()}
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">

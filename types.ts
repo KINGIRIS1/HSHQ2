@@ -12,7 +12,8 @@ export enum RecordStatus {
   HANDOVER = 'HANDOVER',         // Giao 1 cửa (Hoàn thành nội bộ)
   RETURNED = 'RETURNED',         // Đã trả kết quả (Hoàn thành trả dân)
   WITHDRAWN = 'WITHDRAWN',       // CSD rút hồ sơ (Kết thúc)
-  REJECTED = 'REJECTED'          // Hồ sơ trả (Trả về OneDoor)
+  REJECTED = 'REJECTED',          // Hồ sơ trả (Trả về OneDoor)
+  TBT = 'TBT'                    // Đã có thuế (Thông báo thuế)
 }
 
 export enum UserRole {
@@ -35,33 +36,65 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
 };
 
 export const AVAILABLE_PERMISSIONS = [
+  // Nhóm Hồ Sơ
   { id: 'VIEW_RECORDS', label: 'Xem hồ sơ' },
-  { id: 'ADD_RECORDS', label: 'Thêm hồ sơ' },
+  { id: 'ADD_RECORDS', label: 'Thêm hồ sơ mới' },
   { id: 'EDIT_RECORDS', label: 'Sửa hồ sơ' },
   { id: 'DELETE_RECORDS', label: 'Xóa hồ sơ' },
-  { id: 'ASSIGN_RECORDS', label: 'Giao hồ sơ' },
-  { id: 'CHECK_RECORDS', label: 'Kiểm tra hồ sơ' },
-  { id: 'SIGN_RECORDS', label: 'Ký duyệt hồ sơ' },
-  { id: 'HANDOVER_RECORDS', label: 'Bàn giao hồ sơ' },
-  { id: 'RETURN_RECORDS', label: 'Trả kết quả hồ sơ' },
-  { id: 'EXPORT_RECORDS', label: 'Xuất danh sách hồ sơ' },
-  { id: 'VIEW_CONTRACTS', label: 'Xem hợp đồng' },
-  { id: 'ADD_CONTRACTS', label: 'Thêm hợp đồng' },
-  { id: 'EDIT_CONTRACTS', label: 'Sửa hợp đồng' },
-  { id: 'DELETE_CONTRACTS', label: 'Xóa hợp đồng' },
-  { id: 'EXPORT_CONTRACTS', label: 'Xuất danh sách hợp đồng' },
-  { id: 'VIEW_EXCERPTS', label: 'Xem trích lục' },
-  { id: 'MANAGE_EXCERPTS', label: 'Quản lý trích lục' },
-  { id: 'VIEW_ARCHIVE', label: 'Xem lưu trữ' },
-  { id: 'MANAGE_ARCHIVE', label: 'Quản lý lưu trữ' },
-  { id: 'VIEW_REPORTS', label: 'Xem báo cáo' },
-  { id: 'MANAGE_USERS', label: 'Quản lý người dùng' },
-  { id: 'MANAGE_EMPLOYEES', label: 'Quản lý nhân sự' },
-  { id: 'SYSTEM_SETTINGS', label: 'Cài đặt hệ thống' },
-  { id: 'VIEW_CHAT', label: 'Sử dụng nội bộ' },
-  { id: 'VIEW_SCHEDULE', label: 'Xem lịch công tác' },
-  { id: 'MANAGE_SCHEDULE', label: 'Quản lý lịch công tác' },
-  { id: 'VIEW_PERSONAL_PROFILE', label: 'Xem hồ sơ cá nhân' }
+  { id: 'RESTORE_RECORDS', label: 'Khôi phục hồ sơ đã xóa' },
+  { id: 'ASSIGN_RECORDS', label: 'Phân công / Giao việc hồ sơ' },
+  { id: 'WITHDRAW_RECORDS', label: 'Rút / Thu hồi hồ sơ đã giao' },
+  { id: 'IMPORT_RECORDS', label: 'Nhập hồ sơ từ file Excel' },
+  { id: 'EXPORT_RECORDS', label: 'Xuất danh sách hồ sơ (Excel)' },
+
+  // Nhóm Nghiệp Vụ - Đo Đạc & Kỹ Thuật
+  { id: 'SURVEY_RECORDS', label: 'Đo đạc / Khảo sát hiện trường' },
+  { id: 'DRAW_RECORDS', label: 'Vẽ bản đồ / Bản vẽ kỹ thuật' },
+  { id: 'CHECK_RECORDS', label: 'Kiểm tra hồ sơ kỹ thuật' },
+  { id: 'SIGN_RECORDS', label: 'Ký duyệt hồ sơ bản vẽ kỹ thuật' },
+  { id: 'UPDATE_WARD_MANAGEMENT', label: 'Cập nhật địa bàn phụ trách của cán bộ' },
+
+  // Nhóm Bàn Giao & Trả Kết Quả
+  { id: 'HANDOVER_RECORDS', label: 'Bàn giao hồ sơ hoàn thành' },
+  { id: 'RETURN_RECORDS', label: 'Trả kết quả hồ sơ cho người dân' },
+  { id: 'PRINT_HANDOVER_REPORTS', label: 'In biểu mẫu / Phiếu giao nhận hồ sơ' },
+
+  // Nhóm Hợp Đồng
+  { id: 'VIEW_CONTRACTS', label: 'Xem danh sách hợp đồng' },
+  { id: 'ADD_CONTRACTS', label: 'Tạo mới hợp đồng dịch vụ' },
+  { id: 'EDIT_CONTRACTS', label: 'Chỉnh sửa thông tin hợp đồng' },
+  { id: 'SIGN_CONTRACTS', label: 'Ký duyệt hợp đồng dịch vụ' },
+  { id: 'DELETE_CONTRACTS', label: 'Xóa hợp đồng khỏi hệ thống' },
+  { id: 'EXPORT_CONTRACTS', label: 'Xuất danh sách hợp đồng (Excel)' },
+
+  // Nhóm Trích Lục
+  { id: 'VIEW_EXCERPTS', label: 'Xem cơ sở dữ liệu trích lục' },
+  { id: 'MANAGE_EXCERPTS', label: 'Tạo và quản lý phiếu cấp trích lục' },
+  { id: 'APPROVE_EXCERPTS', label: 'Ký duyệt cấp trích lục bản đồ' },
+
+  // Nhóm Kho Lưu Trữ
+  { id: 'VIEW_ARCHIVE', label: 'Xem kho hồ sơ số hóa lưu trữ' },
+  { id: 'MANAGE_ARCHIVE', label: 'Biên mục và quản lý lưu trữ số' },
+
+  // Nhóm Báo Cáo & Số Liệu
+  { id: 'VIEW_REPORTS', label: 'Xem báo cáo tiến độ tổng quát' },
+  { id: 'TRACK_KPI', label: 'Theo dõi chỉ số KPI hiệu suất phòng/tổ' },
+  { id: 'EXPORT_REPORTS', label: 'Xuất biểu đồ/báo cáo định kỳ' },
+
+  // Nhóm Giao Tiếp & Công Việc
+  { id: 'VIEW_CHAT', label: 'Sử dụng khung chat nội bộ' },
+  { id: 'MANAGE_CHAT', label: 'Quản lý, tạo mới nhóm chat chung' },
+  { id: 'VIEW_SCHEDULE', label: 'Xem lịch công tác tuần/tháng' },
+  { id: 'MANAGE_SCHEDULE', label: 'Tạo/Chỉnh sửa lịch công tác cơ quan' },
+
+  // Nhóm Cài Đặt & Quản Trị Hệ Thống
+  { id: 'VIEW_PERSONAL_PROFILE', label: 'Xem thông tin hồ sơ cá nhân' },
+  { id: 'MANAGE_USERS', label: 'Quản lý tài khoản người dùng đăng nhập' },
+  { id: 'MANAGE_EMPLOYEES', label: 'Quản lý thông tin & danh sách nhân viên' },
+  { id: 'SYSTEM_SETTINGS', label: 'Cài đặt các tham số hệ thống' },
+  { id: 'EDIT_SYSTEM_HOLIDAYS', label: 'Cấu hình lịch nghỉ lễ của năm' },
+  { id: 'VIEW_AUDIT_LOGS', label: 'Tra cứu nhật ký hoạt động hệ thống' },
+  { id: 'DELETE_SYSTEM_DATA', label: 'Xóa sạch dữ liệu (Reset hệ thống)' }
 ];
 
 export interface User {
@@ -153,6 +186,10 @@ export interface RecordFile {
 
   // Tính năng Chỉnh lý bản đồ (Mới)
   needsMapCorrection?: boolean; // True nếu cần lập danh sách chỉnh lý
+
+  // Tính năng Hồ sơ Cấp giấy có thuế
+  hasTax?: boolean;             // Hồ sơ có thuế
+  transferToDNLis?: boolean;    // Chuyển qua DNLis
 
   // Giá trực tiếp cho hồ sơ
   price?: number | null;

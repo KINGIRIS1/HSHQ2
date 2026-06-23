@@ -532,9 +532,14 @@ function App() {
   }, []);
 
   const advanceStatus = useCallback(async (record: RecordFile) => {
-      const isLuuTruOrCongVan = record.recordType === 'Cung cấp tài liệu đất đai' || 
-                                record.recordType === 'Sao lục' || 
-                                record.recordType === 'Công văn';
+      if (record.status === RecordStatus.REJECTED) {
+          const updates = getUpdatesForStatusChange(RecordStatus.IN_PROGRESS);
+          updates.hasDefect = true;
+          setRecords(prev => prev.map(r => r.id === record.id ? { ...r, ...updates } : r));
+          await updateRecordApi({ ...record, ...updates });
+          setToast({ type: 'success', message: `Hồ sơ trả ${record.code} đã được tiếp nhận lại và chuyển sang Đang thực hiện.` });
+          return;
+      }
 
       if (record.status === RecordStatus.RECEIVED) { 
           setAssignTargetRecords([record]); 
@@ -542,15 +547,9 @@ function App() {
           return; 
       }
       if (record.status === RecordStatus.IN_PROGRESS) {
-          if (isLuuTruOrCongVan) {
-              // Lưu trữ: đi thẳng sang Trình ký (chọn Ban Giám đốc)
-              setSubmitTargetRecords([record]);
-              setIsSubmitModalOpen(true);
-          } else {
-              // Thường: đang thực hiện -> tích Trình kiểm tra (chọn Tổ trưởng)
-              setSubmitTargetRecords([record]);
-              setIsSubmitCheckModalOpen(true);
-          }
+          // Tất cả các loại hồ sơ (kể cả Lưu trữ, Công văn) đều đồng bộ đi sang Trình kiểm tra
+          setSubmitTargetRecords([record]);
+          setIsSubmitCheckModalOpen(true);
           return;
       }
       if (record.status === RecordStatus.PENDING_CHECK) {
@@ -560,13 +559,8 @@ function App() {
           return;
       }
       if (record.status === RecordStatus.COMPLETED_WORK) {
-          if (isLuuTruOrCongVan) {
-              setSubmitTargetRecords([record]);
-              setIsSubmitModalOpen(true);
-          } else {
-              setSubmitTargetRecords([record]);
-              setIsSubmitCheckModalOpen(true);
-          }
+          setSubmitTargetRecords([record]);
+          setIsSubmitCheckModalOpen(true);
           return;
       }
       if (record.status === RecordStatus.CHECKED) {
@@ -653,7 +647,8 @@ function App() {
              status: RecordStatus.REJECTED, 
              completedDate: r.completedDate || nowStr,
              rejectDate: nowStr,
-             rejectReason: reason
+             rejectReason: reason,
+             hasDefect: true
          };
          
          let currentNotesObj: any = {};

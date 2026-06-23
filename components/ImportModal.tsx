@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { RecordFile, RecordStatus, Employee, Holiday } from '../types';
-import { RECORD_TYPES } from '../constants';
+import { RECORD_TYPES, REGISTRATION_PROCEDURES } from '../constants';
 import { fetchHolidays } from '../services/api';
 import { X, Upload, FileSpreadsheet, Save, Loader2, AlertCircle, Check, RefreshCw, PlusCircle, AlertTriangle } from 'lucide-react';
 
@@ -79,7 +79,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
       return '';
   };
 
-  const calculateDeadline = (type: string, receivedDateStr: string) => {
+  const calculateDeadline = (type: string, receivedDateStr: string, hasTax?: boolean) => {
       if(!receivedDateStr) return '';
       let daysToAdd = 30; 
       const lowerType = (type || '').toLowerCase();
@@ -87,6 +87,13 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
       else if (lowerType.includes('trích lục')) daysToAdd = 10; 
       else if (lowerType.includes('trích đo chỉnh lý')) daysToAdd = 15; 
       else if (lowerType.includes('trích đo') || lowerType.includes('đo đạc') || lowerType.includes('cắm mốc') || lowerType.includes('tách thửa')) daysToAdd = 30; 
+      
+      const t = (type || '').trim().toLowerCase();
+      const isReg = t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
+
+      if (isReg && hasTax) {
+          daysToAdd += 10;
+      }
       
       const startDate = new Date(receivedDateStr);
       let count = 0;

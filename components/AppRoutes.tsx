@@ -10,6 +10,7 @@ import {
 } from "../types";
 import { STATUS_LABELS } from "../constants";
 import { COLUMN_DEFS, removeVietnameseTones } from "../utils/appHelpers";
+import { getEmployeeTeam, getRoleCategory, isViewAllowedForUser } from "./AssignModal";
 
 // Components
 import DashboardView from "./DashboardView";
@@ -57,6 +58,7 @@ import {
   UserPlus as UserPlusIcon,
   ClipboardList,
   Send,
+  ShieldAlert,
 } from "lucide-react";
 
 interface AppRoutesProps {
@@ -208,10 +210,17 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
 
     if (currentUser.employeeId && employees) {
       const emp = employees.find((e) => e.id === currentUser.employeeId);
-      if (emp && emp.department) {
-        const empDeptLower = emp.department.trim().toLowerCase();
+      if (emp) {
+        const teamName = getEmployeeTeam(emp);
+        const cat = getRoleCategory(emp.position);
+        const roleLabel = cat.key === 'director' ? 'Giám đốc/Lãnh đạo'
+                        : cat.key === 'leader' ? 'Tổ trưởng'
+                        : cat.key === 'vice_leader' ? 'Tổ phó'
+                        : 'Nhân viên';
+        
+        const compositeKey = `${teamName} - ${roleLabel}`;
         const matchingKey = Object.keys(departmentPermissions).find(
-          (k) => k.trim().toLowerCase() === empDeptLower,
+          (k) => k.trim().toLowerCase() === compositeKey.toLowerCase(),
         );
         if (matchingKey) {
           const deptPerms = departmentPermissions[matchingKey] || [];
@@ -273,6 +282,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
       "archive_records",
       "archive_assign_tasks",
       "archive_completed_list",
+      "archive_pending_check_list",
       "archive_check_list",
       "archive_handover_list",
       "archive_director_completed",
@@ -282,6 +292,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
       "congvan_records",
       "congvan_assign_tasks",
       "congvan_completed_list",
+      "congvan_pending_check_list",
       "congvan_check_list",
       "congvan_handover_list",
       "congvan_director_completed",
@@ -336,7 +347,9 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
 
     const isPendingCheckAny = [
       "pending_check_list",
-      "registration_pending_check_list"
+      "registration_pending_check_list",
+      "archive_pending_check_list",
+      "congvan_pending_check_list"
     ].includes(currentView);
 
     const isAllRecordsAny = [
@@ -366,7 +379,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
     else if (currentView === "other_records") title = "Hồ sơ khác";
 
     const subAdminEmp = employees.find((e) => e.id === currentUser.employeeId);
-    let isSubAdminAllowedTab = true;
+    let isSubAdminAllowedTab = isViewAllowedForUser(currentUser, currentView, employees);
     if (isSubadmin) {
       if (!subAdminEmp) {
         isSubAdminAllowedTab = false;
@@ -383,20 +396,56 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
 
         if (isMeasurementView) {
           isSubAdminAllowedTab =
+            isSubAdminAllowedTab && (
             cleanDept.includes("do dac") ||
             cleanDept.includes("ky thuat") ||
             cleanDept.includes("to do") ||
             cleanDept.includes("dia chinh") ||
             cleanDept.includes("noi nghiep") ||
-            cleanDept.includes("ngoai nghiep");
+            cleanDept.includes("ngoai nghiep"));
         } else if (isRegistrationView) {
-          isSubAdminAllowedTab = cleanDept.includes("dang ky") || cleanDept.includes("cap giay");
+          isSubAdminAllowedTab = isSubAdminAllowedTab && (cleanDept.includes("dang ky") || cleanDept.includes("cap giay"));
         } else if (isArchiveView) {
-          isSubAdminAllowedTab = cleanDept.includes("luu tru") || cleanDept.includes("van phong") || cleanDept.includes("hanh chinh");
+          isSubAdminAllowedTab = isSubAdminAllowedTab && (cleanDept.includes("luu tru") || cleanDept.includes("van phong") || cleanDept.includes("hanh chinh"));
         } else if (isCongVanView) {
-          isSubAdminAllowedTab = cleanDept.includes("cong van") || cleanDept.includes("van phong") || cleanDept.includes("hanh chinh");
+          isSubAdminAllowedTab = isSubAdminAllowedTab && (cleanDept.includes("cong van") || cleanDept.includes("van phong") || cleanDept.includes("hanh chinh"));
         }
       }
+    }
+
+    if (!isSubAdminAllowedTab) {
+      const emp = employees.find((e) => e.id === currentUser.employeeId);
+      const teamName = emp ? getEmployeeTeam(emp) : '';
+      let allowedTabName = '';
+      if (teamName === 'Tổ Đo đạc') allowedTabName = 'Hồ sơ đo đạc';
+      if (teamName === 'Tổ Cấp giấy') allowedTabName = 'Hồ sơ cấp giấy';
+      if (teamName === 'Tổ Lưu trữ') allowedTabName = 'Hồ sơ lưu trữ';
+
+      return (
+        <div className="flex flex-col items-center justify-center p-12 bg-white rounded-xl shadow-sm border border-gray-100 flex-1 h-full text-center">
+          <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-6 ring-8 ring-red-50/50">
+            <ShieldAlert size={36} />
+          </div>
+          <h3 className="text-xl font-bold text-gray-800 mb-2">Quyền Truy Cập Hạn Chế</h3>
+          <p className="text-gray-500 max-w-md mb-6 leading-relaxed text-sm">
+            Bạn là tổ trưởng/tổ phó thuộc <strong className="text-blue-700">{teamName}</strong>. Theo quy định phân quyền, bạn chỉ được phép quản lý và giải quyết hồ sơ trong phạm vi tab thuộc tổ của mình.
+          </p>
+          {allowedTabName && (
+            <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl flex items-center gap-3 max-w-md mx-auto mb-4">
+              <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
+                <FileText size={20} />
+              </div>
+              <div className="text-left">
+                <p className="text-xs text-blue-500 font-bold uppercase tracking-wider">Tab được phép truy cập</p>
+                <p className="text-sm font-bold text-blue-900">{allowedTabName}</p>
+              </div>
+            </div>
+          )}
+          <span className="text-xs text-gray-400 italic max-w-sm block">
+            (*) Ban lãnh đạo, Tổ hành chính và Bộ phận Một cửa được quyền xem hồ sơ ở tất cả các tab để theo dõi tiến độ.
+          </span>
+        </div>
+      );
     }
 
     const tabAllowedCanPerformAction = canPerformAction && isSubAdminAllowedTab;
@@ -574,6 +623,13 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 >
                   <CheckSquare size={16} /> Đã thực hiện
                 </button>
+
+                <button
+                  onClick={() => props.setCurrentView("archive_pending_check_list")}
+                  className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "archive_pending_check_list" ? "border-orange-600 text-orange-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                >
+                  <ClipboardList size={16} /> Kiểm tra
+                </button>
               </>
             )}
 
@@ -637,6 +693,13 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_completed_list" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
                 >
                   <CheckSquare size={16} /> Đã thực hiện
+                </button>
+
+                <button
+                  onClick={() => props.setCurrentView("congvan_pending_check_list")}
+                  className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_pending_check_list" ? "border-orange-600 text-orange-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                >
+                  <ClipboardList size={16} /> Kiểm tra
                 </button>
               </>
             )}
@@ -1136,7 +1199,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </button>
               )}
             {tabAllowedCanPerformAction &&
-              (currentView === "completed_list") &&
+              isCompletedAny &&
               props.selectedRecordIds.size > 0 && (
                 <button
                   onClick={() => {
@@ -1153,7 +1216,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </button>
               )}
             {tabAllowedCanPerformAction &&
-              (currentView === "archive_completed_list") &&
+              isPendingCheckAny &&
               props.selectedRecordIds.size > 0 && (
                 <button
                   onClick={() => {
@@ -1170,30 +1233,9 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </button>
               )}
             {tabAllowedCanPerformAction &&
-              (currentView === "pending_check_list" ||
-                currentView === "archive_pending_check_list") &&
-              props.selectedRecordIds.size > 0 && (
-                <button
-                  onClick={() => {
-                    const targets = records.filter((r) =>
-                      props.selectedRecordIds.has(r.id),
-                    );
-                    props.setSubmitTargetRecords(targets);
-                    props.setIsSubmitModalOpen(true);
-                  }}
-                  className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-bold shadow-md transition-all animate-pulse"
-                >
-                  <FileSignature size={18} /> Trình Ký Duyệt (
-                  {props.selectedRecordIds.size})
-                </button>
-              )}
-            {tabAllowedCanPerformAction &&
-              (currentView === "assign_tasks" ||
-                currentView === "other_assign_tasks" ||
-                currentView === "archive_assign_tasks" ||
-                currentView === "all_records" ||
-                currentView === "other_records" ||
-                currentView === "archive_records") &&
+              (isAssignAny ||
+                isAllRecordsAny ||
+                currentView === "other_records") &&
               props.selectedRecordIds.size > 0 && (
                 <>
                   <button
@@ -1219,16 +1261,11 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   </button>
                 </>
               )}
-            {((currentView !== "handover_list" &&
-              currentView !== "other_handover_list" &&
-              currentView !== "archive_handover_list") ||
+            {((!isHandoverAny) ||
               props.handoverTab !== "returned") &&
-              currentView !== "assign_tasks" &&
-              currentView !== "other_assign_tasks" &&
-              currentView !== "archive_assign_tasks" &&
-              currentView !== "all_records" &&
-              currentView !== "other_records" &&
-              currentView !== "archive_records" && (
+              !isAssignAny &&
+              !isAllRecordsAny &&
+              currentView !== "other_records" && (
                 <button
                   onClick={() => {
                     props.setExportModalType(

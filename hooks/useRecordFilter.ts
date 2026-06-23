@@ -186,9 +186,10 @@ export const useRecordFilter = (
             result = result.filter(r => r.submittedTo === currentUser?.employeeId && r.status !== RecordStatus.PENDING_SIGN && r.status !== RecordStatus.RECEIVED && r.status !== RecordStatus.ASSIGNED && r.status !== RecordStatus.IN_PROGRESS && r.status !== RecordStatus.COMPLETED_WORK);
         } else if (isHandoverView) {
             if (handoverTab === 'today') {
-                // Tab chờ giao: Bao gồm Đã ký HOẶC (Đã rút VÀ chưa có đợt xuất) HOẶC Hồ sơ trả (REJECTED)
+                // Tab chờ giao: Bao gồm Đã ký HOẶC Đã có thuế HOẶC (Đã rút VÀ chưa có đợt xuất) HOẶC Hồ sơ trả (REJECTED)
                 result = result.filter(r => 
                     r.status === RecordStatus.SIGNED || 
+                    r.status === RecordStatus.TBT || 
                     ((r.status === RecordStatus.REJECTED || r.status === RecordStatus.WITHDRAWN) && !r.exportBatch)
                 );
             } else if (handoverTab === 'returned') {

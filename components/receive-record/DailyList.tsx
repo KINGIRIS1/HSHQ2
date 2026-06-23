@@ -678,6 +678,7 @@ const DailyList: React.FC<DailyListProps> = ({
             onConfirm={handleAssignConfirm}
             employees={employees}
             selectedRecords={selectedRecordsForAssign}
+            currentUser={currentUser}
         />
     </div>
   );

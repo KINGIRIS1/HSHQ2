@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { RecordFile, Employee, User, Holiday, RecordStatus } from '../types';
-import { getNormalizedWard } from '../constants';
+import { getNormalizedWard, REGISTRATION_PROCEDURES } from '../constants';
 import { PlusCircle, FileSpreadsheet, LayoutList, Settings, RotateCcw } from 'lucide-react';
 import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../services/docxService';
 import * as XLSX from 'xlsx-js-style';
@@ -140,7 +140,7 @@ const ReceiveRecord: React.FC<ReceiveRecordProps> = ({ onSave, onDelete, wards, 
   };
 
   // --- LOGIC TÍNH HẠN TRẢ (CẬP NHẬT FIX LỖI TIMEZONE VÀ NGÀY NGHỈ) ---
-  const calculateDeadline = (type: string, receivedDateStr: string) => {
+  const calculateDeadline = (type: string, receivedDateStr: string, hasTax?: boolean) => {
       let daysToAdd = 30; 
       const lowerType = type.toLowerCase();
 
@@ -156,6 +156,13 @@ const ReceiveRecord: React.FC<ReceiveRecordProps> = ({ onSave, onDelete, wards, 
           daysToAdd = 10;
       } else if (lowerType.includes('trích đo') || lowerType.includes('cắm mốc') || lowerType.includes('tách thửa')) {
           daysToAdd = 30;
+      }
+      
+      const t = (type || '').trim().toLowerCase();
+      const isReg = t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
+
+      if (isReg && hasTax) {
+          daysToAdd += 10;
       }
       
       const startDate = new Date(receivedDateStr);

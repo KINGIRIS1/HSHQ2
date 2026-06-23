@@ -467,7 +467,10 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
 
   // LOGIC HIỂN THỊ STATUS
   const getDisplayStatus = (r: RecordFile) => {
-      if ((r.exportBatch || r.exportDate) && r.status !== RecordStatus.WITHDRAWN && r.status !== RecordStatus.RETURNED && r.status !== RecordStatus.REJECTED) {
+      if ((r.hasDefect || r.status === RecordStatus.REJECTED) && r.status !== RecordStatus.RETURNED && r.status !== RecordStatus.WITHDRAWN && r.status !== RecordStatus.HANDOVER) {
+          return RecordStatus.REJECTED;
+      }
+      if ((r.exportBatch || r.exportDate) && r.status !== RecordStatus.WITHDRAWN && r.status !== RecordStatus.RETURNED) {
           return RecordStatus.HANDOVER;
       }
       return r.status;

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { LayoutDashboard, FileText, ClipboardList, Send, BarChart3, Settings, LogOut, UserCircle, Users, Briefcase, BookOpen, UserPlus, ShieldAlert, X, FolderInput, FileSignature, MessageSquare, Loader2, UserCog, ShieldCheck, PenTool, CalendarDays, Archive, FolderArchive, ChevronDown, Bell, FilePlus, Ruler, ChevronRight, User, Shield, Settings2, Layers } from 'lucide-react';
 import { User as UserType, UserRole, RolePermissions, DepartmentPermissions, Employee } from '../types';
+import { getEmployeeTeam, getRoleCategory, isViewAllowedForUser } from './AssignModal';
 
 interface TopNavigationProps {
   currentView: string;
@@ -50,9 +51,16 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
 
     if (currentUser.employeeId && employees) {
         const emp = employees.find(e => e.id === currentUser.employeeId);
-        if (emp && emp.department) {
-            const empDeptLower = emp.department.trim().toLowerCase();
-            const matchingKey = Object.keys(departmentPermissions).find(k => k.trim().toLowerCase() === empDeptLower);
+        if (emp) {
+            const teamName = getEmployeeTeam(emp);
+            const cat = getRoleCategory(emp.position);
+            const roleLabel = cat.key === 'director' ? 'Giám đốc/Lãnh đạo'
+                            : cat.key === 'leader' ? 'Tổ trưởng'
+                            : cat.key === 'vice_leader' ? 'Tổ phó'
+                            : 'Nhân viên';
+            
+            const compositeKey = `${teamName} - ${roleLabel}`;
+            const matchingKey = Object.keys(departmentPermissions).find(k => k.trim().toLowerCase() === compositeKey.toLowerCase());
             if (matchingKey) {
                 const deptPerms = departmentPermissions[matchingKey] || [];
                 if (deptPerms.includes('*') || deptPerms.includes(permissionId)) return true;
@@ -183,6 +191,7 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
               const hasVisibleItems = item.subItems?.some(sub => {
                  if (isOneDoor && !oneDoorAllowedViews.includes(sub.id)) return false;
                  if (isTeamLeader && !teamLeaderAllowedViews.includes(sub.id)) return false;
+                 if (!isViewAllowedForUser(currentUser, sub.id, employees)) return false;
                  return sub.visible;
               });
               
@@ -197,6 +206,7 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
                     {item.subItems?.map(sub => {
                        if (isOneDoor && !oneDoorAllowedViews.includes(sub.id)) return null;
                        if (isTeamLeader && !teamLeaderAllowedViews.includes(sub.id)) return null;
+                       if (!isViewAllowedForUser(currentUser, sub.id, employees)) return null;
                        if (!sub.visible) return null;
     
                        const isSubActive = currentView === sub.id;
@@ -247,6 +257,7 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
                       {item.subItems?.map(sub => {
                          if (isOneDoor && !oneDoorAllowedViews.includes(sub.id)) return null;
                          if (isTeamLeader && !teamLeaderAllowedViews.includes(sub.id)) return null;
+                         if (!isViewAllowedForUser(currentUser, sub.id, employees)) return null;
                          if (!sub.visible) return null;
   
                          return (

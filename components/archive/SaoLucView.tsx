@@ -1438,6 +1438,7 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
                   status: RecordStatus.RECEIVED,
                 }) as RecordFile,
             )}
+          currentUser={currentUser}
           filterDepartment="Lưu trữ"
         />
 

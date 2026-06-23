@@ -52,7 +52,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
     return `${y}-${m}-${d}`;
   };
 
-  const calculateDeadline = (type: string, receivedDateStr: string) => {
+  const calculateDeadline = (type: string, receivedDateStr: string, hasTax?: boolean) => {
     if (!receivedDateStr) return '';
     let daysToAdd = 30; 
     const lowerType = (type || '').toLowerCase();
@@ -69,6 +69,13 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
         daysToAdd = 10;
     } else if (lowerType.includes('trích đo') || lowerType.includes('cắm mốc') || lowerType.includes('tách thửa')) {
         daysToAdd = 30;
+    }
+    
+    const t = (type || '').trim().toLowerCase();
+    const isReg = t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
+
+    if (isReg && hasTax) {
+        daysToAdd += 10;
     }
     
     const startDate = new Date(receivedDateStr);
@@ -226,14 +233,16 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
         else {
             const initialType = allowedRecordTypes[0] || '';
             const initialDate = new Date().toISOString();
-            const initialDeadline = initialType ? calculateDeadline(initialType, initialDate) : '';
+            const initialDeadline = initialType ? calculateDeadline(initialType, initialDate, false) : '';
             
             setFormData({ 
               ...defaultState, 
               code: `HS-${new Date().getFullYear()}-${Math.floor(Math.random() * 1000)}`,
               recordType: initialType,
               receivedDate: initialDate,
-              deadline: initialDeadline
+              deadline: initialDeadline,
+              hasTax: false,
+              transferToDNLis: false
             });
         }
     }
@@ -383,12 +392,16 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
 
   const handleChange = (field: keyof RecordFile, value: any) => {
     setFormData(prev => {
-        const newData = { ...prev, [field]: value };
-        if (field === 'recordType' || field === 'receivedDate') {
-            const rType = field === 'recordType' ? value : prev.recordType;
-            const rDate = field === 'receivedDate' ? value : prev.receivedDate;
+        let newData = { ...prev, [field]: value };
+        if (field === 'hasTax' && !value) {
+            newData.transferToDNLis = false;
+        }
+        if (field === 'recordType' || field === 'receivedDate' || field === 'hasTax' || field === 'transferToDNLis') {
+            const rType = newData.recordType;
+            const rDate = newData.receivedDate;
+            const hTax = newData.hasTax;
             if (rType && rDate) {
-                newData.deadline = calculateDeadline(rType, rDate);
+                newData.deadline = calculateDeadline(rType, rDate, hTax);
             }
         }
         return newData;
@@ -446,6 +459,29 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                                 {allowedRecordTypes.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
+                        {isRegistrationRecord && (
+                            <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-amber-50/50 p-3 rounded-lg border border-amber-200/60 mt-1">
+                                <label className="flex items-center gap-2.5 text-sm font-bold text-amber-900 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="w-4 h-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500 cursor-pointer"
+                                        checked={!!formData.hasTax}
+                                        onChange={(e) => handleChange('hasTax', e.target.checked)}
+                                    />
+                                    Hồ sơ có thuế (Thêm 10 ngày quy trình)
+                                </label>
+                                <label className={`flex items-center gap-2.5 text-sm font-bold cursor-pointer ${formData.hasTax ? 'text-amber-900' : 'text-slate-400 opacity-60'}`}>
+                                    <input
+                                        type="checkbox"
+                                        disabled={!formData.hasTax}
+                                        className="w-4 h-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500 cursor-pointer disabled:cursor-not-allowed"
+                                        checked={!!formData.transferToDNLis}
+                                        onChange={(e) => handleChange('transferToDNLis', e.target.checked)}
+                                    />
+                                    Chuyển qua DNLis (1 ngày nếu chuyển, không chuyển 3 ngày Phiếu chuyển)
+                                </label>
+                            </div>
+                        )}
                         {hasAdminRights && (
                             <>
                                 <div><label className="block text-xs font-bold text-gray-700 mb-1">Ngày nhận</label><input type="date" required className="w-full border border-gray-300 rounded-md px-3 py-2" value={dateVal(formData.receivedDate)} onChange={(e) => handleChange('receivedDate', e.target.value)} /></div>
