@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { RecordFile, Employee, User, UserRole, SplitItem, RecordStatus } from '../../types';
+import { RecordFile, Employee, User, UserRole, SplitItem, RecordStatus, Holiday } from '../../types';
 import { getNormalizedWard } from '../../constants';
 import StatusBadge from '../StatusBadge';
 import { 
@@ -13,8 +13,19 @@ import {
 import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../../services/docxService';
 import DocxPreviewModal from '../DocxPreviewModal';
 import { updateRecordApi, fetchContracts } from '../../services/api';
+import { calculateDeadline } from '../../utils/appHelpers';
 import SystemReceiptTemplate from '../receive-record/SystemReceiptTemplate';
 import SystemAnnexTemplate from '../receive-record/SystemAnnexTemplate';
+
+const isRegType = (type: string | null | undefined): boolean => {
+    if (!type) return false;
+    const t = type.trim().toLowerCase();
+    const REG_PROCEDURES = [
+        "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
+        "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
+    ];
+    return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
+};
 
 interface MobileDetailModalProps {
   isOpen: boolean;
@@ -23,6 +34,7 @@ interface MobileDetailModalProps {
   employees: Employee[];
   users: User[];
   currentUser: User | null;
+  holidays?: Holiday[];
   onEdit?: (record: RecordFile) => void;
   onDelete?: (record: RecordFile) => void;
   onCreateLiquidation?: (record: RecordFile) => void; 
@@ -30,12 +42,15 @@ interface MobileDetailModalProps {
 }
 
 export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({ 
-  isOpen, onClose, record: initialRecord, employees, users, currentUser, onEdit, onDelete, onCreateLiquidation, onRefreshData 
+  isOpen, onClose, record: initialRecord, employees, users, currentUser, holidays, onEdit, onDelete, onCreateLiquidation, onRefreshData 
 }) => {
   const [localRecord, setLocalRecord] = useState<RecordFile | null>(null);
   const [isDefectDialogOpen, setIsDefectDialogOpen] = useState(false);
   const [defectReasonInput, setDefectReasonInput] = useState('');
   const [isSavingDefect, setIsSavingDefect] = useState(false);
+  const [isResumeDialogOpen, setIsResumeDialogOpen] = useState(false);
+  const [resumeMode, setResumeMode] = useState<'supplement' | 'simple'>('supplement');
+  const [isSavingResume, setIsSavingResume] = useState(false);
 
   useEffect(() => {
     setLocalRecord(initialRecord);
@@ -179,6 +194,7 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
     const currentNotes = activeRecord.notes ? `${activeRecord.notes}\n${formattedReason}` : formattedReason;
     const currentPrivateNotes = activeRecord.privateNotes ? `${activeRecord.privateNotes}\n${formattedReason}` : formattedReason;
     
+    const isReg = isRegType(activeRecord.recordType);
     const isArchive = activeRecord.recordType === 'Sao lục' || activeRecord.recordType === 'Công văn';
     
     let nextStatus = RecordStatus.IN_PROGRESS;
@@ -190,7 +206,7 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
     const updatedRecord: RecordFile = {
         ...activeRecord,
         status: nextStatus,
-        hasDefect: true,
+        hasDefect: isReg,
         defectReason: defectReasonInput,
         defectDate: nowStr,
         notes: currentNotes,
@@ -219,23 +235,65 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
     if (!activeRecord) return;
     
     if (activeRecord.hasDefect) {
-        if (window.confirm("Bạn có muốn hủy đánh dấu sai sót cho hồ sơ này? Hồ sơ sẽ được chuyển về luồng hoàn thành bình thường.")) {
-            const updatedRecord: RecordFile = {
-                ...activeRecord,
-                hasDefect: false,
-                defectReason: null,
-                notes: activeRecord.notes ? `${activeRecord.notes}\n[Đã sửa đổi ngày ${new Date().toLocaleDateString('vi-VN')}]: Hủy đánh dấu sai sót` : undefined
-            };
-            const result = await updateRecordApi(updatedRecord);
-            if (result) {
-                setLocalRecord(updatedRecord);
-                alert('Đã hủy trạng thái sai sót hồ sơ.');
-                onRefreshData?.();
-            }
-        }
+        // Open the re-receive option dialog instead of a simple confirm
+        setResumeMode('supplement');
+        setIsResumeDialogOpen(true);
     } else {
         setDefectReasonInput('');
         setIsDefectDialogOpen(true);
+    }
+  };
+
+  const handleConfirmResume = async () => {
+    if (!activeRecord) return;
+    setIsSavingResume(true);
+
+    let updatedRecord: RecordFile = { ...activeRecord };
+    const today = new Date();
+    const todayStr = today.toLocaleDateString('vi-VN');
+    const todayISO = today.toISOString();
+
+    if (resumeMode === 'supplement') {
+        // Re-calculate deadline and set receivedDate to today for recalculating date from scratch
+        const newDeadline = calculateDeadline(activeRecord.recordType || '', todayISO, holidays || [], !!activeRecord.hasTax);
+        
+        updatedRecord = {
+            ...activeRecord,
+            hasDefect: false,
+            defectReason: null,
+            receivedDate: todayISO,
+            deadline: newDeadline,
+            notes: activeRecord.notes 
+                ? `${activeRecord.notes}\n[Bổ sung HS - Tiếp nhận lại ngày ${todayStr}]: Tính lại ngày hẹn trả (${newDeadline}) từ đầu` 
+                : `[Bổ sung HS - Tiếp nhận lại ngày ${todayStr}]: Tính lại ngày hẹn trả (${newDeadline}) từ đầu`
+        };
+    } else {
+        // Simple resume without changing receivedDate and deadline
+        updatedRecord = {
+            ...activeRecord,
+            hasDefect: false,
+            defectReason: null,
+            notes: activeRecord.notes 
+                ? `${activeRecord.notes}\n[Đã sửa đổi ngày ${todayStr}]: Hủy đánh dấu sai sót` 
+                : `[Đã sửa đổi ngày ${todayStr}]: Hủy đánh dấu sai sót`
+        };
+    }
+
+    try {
+        const result = await updateRecordApi(updatedRecord);
+        setIsSavingResume(false);
+        setIsResumeDialogOpen(false);
+        if (result) {
+            setLocalRecord(updatedRecord);
+            alert(resumeMode === 'supplement' ? 'Đã tiếp nhận lại hồ sơ bổ sung và tính lại ngày thành công!' : 'Đã hủy trạng thái sai sót hồ sơ.');
+            onRefreshData?.();
+        } else {
+            alert('Không thể lưu thông tin hồ sơ.');
+        }
+    } catch (err) {
+        console.error(err);
+        setIsSavingResume(false);
+        alert('Có lỗi xảy ra.');
     }
   };
 
@@ -881,6 +939,91 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
             employees={employees}
             onClose={() => setIsAnnexOpen(false)}
         />
+      )}
+
+      {isResumeDialogOpen && (
+          <div className="fixed inset-0 bg-black/60 z-[70] flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-fade-in-up">
+                  <div className="bg-blue-600 px-4 py-3 text-white font-bold text-xs flex items-center gap-2">
+                       <AlertTriangle size={15} />
+                       <span>TIẾP NHẬN LẠI HỒ SƠ</span>
+                  </div>
+                  <div className="p-4">
+                      <p className="text-[11px] text-gray-600 mb-3 leading-relaxed">
+                          Hồ sơ này đang được đánh dấu có sai sót (Trình trả dân). Bạn muốn tiếp nhận lại hồ sơ bổ sung như thế nào?
+                      </p>
+
+                      <div className="space-y-2.5">
+                          <div 
+                              onClick={() => setResumeMode('supplement')}
+                              className={`block p-2.5 border rounded-xl cursor-pointer transition-all ${
+                                  resumeMode === 'supplement' 
+                                  ? 'border-blue-500 bg-blue-50/50 ring-1 ring-blue-500' 
+                                  : 'border-gray-200 hover:bg-gray-50'
+                              }`}
+                          >
+                              <div className="flex items-start gap-2">
+                                  <input 
+                                      type="radio" 
+                                      name="resumeModeMobile" 
+                                      checked={resumeMode === 'supplement'} 
+                                      onChange={() => setResumeMode('supplement')} 
+                                      className="mt-0.5 text-blue-600 focus:ring-blue-500" 
+                                  />
+                                  <div>
+                                      <p className="text-xs font-bold text-slate-800">Tiếp nhận lại (Có Bổ sung hồ sơ)</p>
+                                      <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
+                                          Hủy đánh dấu sai sót, cập nhật ngày nhận là <span className="font-semibold text-blue-600">Hôm nay</span>, và <span className="font-semibold text-blue-600">tính lại thời hạn trả từ đầu</span> cho các bước tiếp theo.
+                                      </p>
+                                  </div>
+                              </div>
+                          </div>
+
+                          <div 
+                              onClick={() => setResumeMode('simple')}
+                              className={`block p-2.5 border rounded-xl cursor-pointer transition-all ${
+                                  resumeMode === 'simple' 
+                                  ? 'border-blue-500 bg-blue-50/50 ring-1 ring-blue-500' 
+                                  : 'border-gray-200 hover:bg-gray-50'
+                              }`}
+                          >
+                              <div className="flex items-start gap-2">
+                                  <input 
+                                      type="radio" 
+                                      name="resumeModeMobile" 
+                                      checked={resumeMode === 'simple'} 
+                                      onChange={() => setResumeMode('simple')} 
+                                      className="mt-0.5 text-blue-600 focus:ring-blue-500" 
+                                  />
+                                  <div>
+                                      <p className="text-xs font-bold text-slate-800">Hủy đánh dấu sai sót (Giữ nguyên ngày)</p>
+                                      <p className="text-[10px] text-slate-500 mt-0.5 leading-relaxed">
+                                          Chỉ hủy bỏ trạng thái lỗi hồ sơ để đưa về luồng xử lý bình thường. Giữ nguyên ngày nhận và thời hạn trả gốc.
+                                      </p>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 mt-4">
+                          <button
+                              onClick={() => setIsResumeDialogOpen(false)}
+                              className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-200 transition-all border border-gray-200"
+                          >
+                              Hủy bỏ
+                          </button>
+                          <button
+                              onClick={handleConfirmResume}
+                              disabled={isSavingResume}
+                              className="px-3.5 py-1.5 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm flex items-center gap-1.5"
+                          >
+                              {isSavingResume ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                              Xác nhận tiếp nhận
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
       )}
 
       {isDefectDialogOpen && (

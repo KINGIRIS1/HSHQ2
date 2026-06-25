@@ -42,6 +42,10 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
   const [viewFilter, setViewFilter] = useState<'all' | 'valid' | 'errors'>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [selectedSheet, setSelectedSheet] = useState<string>('');
+
   const [progress, setProgress] = useState<{ processed: number, total: number } | null>(null);
 
   useEffect(() => {
@@ -51,6 +55,9 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
         setFileName('');
         setViewFilter('all');
         setProgress(null);
+        setWorkbook(null);
+        setSheetNames([]);
+        setSelectedSheet('');
         if(fileInputRef.current) fileInputRef.current.value = '';
     }
   }, [isOpen]);
@@ -140,285 +147,24 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
       try {
         const ab = evt.target?.result;
         const wb = XLSX.read(ab, { type: 'array' });
-        const wsname = wb.SheetNames[0];
-        const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
-
-        let headerRowIndex = 0;
-        for (let i = 0; i < Math.min(data.length, 20); i++) {
-            const row = data[i] as any[];
-            if (row && row.some(cell => String(cell).toLowerCase().includes('mã') || String(cell).toLowerCase().includes('chủ sử dụng'))) {
-                headerRowIndex = i;
-                break;
-            }
+        setWorkbook(wb);
+        
+        const allSheets = wb.SheetNames;
+        setSheetNames(allSheets);
+        
+        // Auto-select the first sheet that is NOT an instruction sheet
+        let defaultSheet = allSheets[0];
+        const importableSheets = allSheets.filter(name => {
+            const upper = name.toUpperCase();
+            return !upper.includes('HUONG DAN') && !upper.includes('GUIDE') && !upper.includes('HƯỚNG DẪN');
+        });
+        
+        if (importableSheets.length > 0) {
+            defaultSheet = importableSheets[0];
         }
-
-        const headers = (data[headerRowIndex] as string[]).map(h => String(h).toUpperCase().trim());
-        const mappedRecords: any[] = []; // Dùng any để linh hoạt cho Update object
-
-        const typeMapping: Record<string, string> = {
-            'TL': 'Trích lục bản đồ địa chính', 'TRÍCH LỤC': 'Trích lục bản đồ địa chính',
-            'TĐ': 'Trích đo bản đồ địa chính', 'TRÍCH ĐO': 'Trích đo bản đồ địa chính',
-            'ĐĐ': 'Đo đạc', 'ĐO ĐẠC': 'Đo đạc', 'CM': 'Cắm mốc', 'CẮM MỐC': 'Cắm mốc',
-            'CL': 'Trích đo chỉnh lý bản đồ địa chính', 'CHỈNH LÝ': 'Trích đo chỉnh lý bản đồ địa chính'
-        };
-
-        for (let i = headerRowIndex + 1; i < data.length; i++) {
-            const row = data[i] as any[];
-            if (!row || row.length === 0) continue;
-
-            // Hàm helper: Trả về undefined nếu cột không tồn tại, trả về giá trị nếu có
-            const getVal = (possibleHeaders: string[]) => {
-                // Ưu tiên khớp chính xác (exact match)
-                let idx = headers.findIndex(h => {
-                    const hUpper = h.trim().toUpperCase();
-                    return possibleHeaders.some(ph => hUpper === ph.toUpperCase());
-                });
-                // Nếu không có khớp chính xác, tìm khớp chứa chuỗi (contains)
-                if (idx === -1) {
-                    idx = headers.findIndex(h => {
-                        const hUpper = h.trim().toUpperCase();
-                        return possibleHeaders.some(ph => hUpper.includes(ph.toUpperCase()));
-                    });
-                }
-                return idx !== -1 ? row[idx] : undefined;
-            };
-
-            const codeRaw = getVal(['MÃ HỒ SƠ', 'MÃ HS', 'CODE', 'code']);
-            const code = codeRaw ? String(codeRaw).trim() : undefined;
-            
-            if (mode === 'update' && !code) continue; // Update bắt buộc phải có mã
-            
-            // Xây dựng object record. Với Update, chỉ điền field nào có trong Excel.
-            const record: any = {};
-            
-            // 1. CÁC TRƯỜNG CƠ BẢN
-            if (code) record.code = code;
-            else if (mode === 'create') record.code = `AUTO-${Math.floor(Math.random()*10000)}`;
-
-            const nameRaw = getVal(['CHỦ SỬ DỤNG', 'TÊN', 'HỌ TÊN', 'CUSTOMER', 'customername', 'customer_name', 'customerName']);
-            if (nameRaw !== undefined) record.customerName = String(nameRaw);
-            else if (mode === 'create') record.customerName = 'Chưa cập nhật';
-
-            const phoneRaw = getVal(['SĐT', 'ĐIỆN THOẠI', 'phonenumber', 'phone_number', 'phoneNumber']);
-            if (phoneRaw !== undefined) record.phoneNumber = String(phoneRaw);
-
-            const addressRaw = getVal(['ĐỊA CHỈ', 'ADDRESS', 'customeraddress', 'customer_address', 'customerAddress', 'address']);
-            if (addressRaw !== undefined) record.customerAddress = String(addressRaw);
-
-            const cccdRaw = getVal(['CCCD', 'CMND', 'cccd']);
-            if (cccdRaw !== undefined) record.cccd = String(cccdRaw);
-
-            const authByRaw = getVal(['NGƯỜI ỦY QUYỀN', 'ỦY QUYỀN', 'authorizedby', 'authorized_by', 'authorizedBy']);
-            const authTypeRaw = getVal(['LOẠI ỦY QUYỀN', 'GIẤY ỦY QUYỀN', 'authdoctype', 'auth_doc_type', 'authDocType']);
-            if (authByRaw !== undefined || authTypeRaw !== undefined) {
-                record.authDocType = `${authByRaw || ''}|${authTypeRaw || ''}`;
-            }
-
-            const wardRaw = getVal(['XÃ', 'PHƯỜNG', 'WARD', 'ward']);
-            if (wardRaw !== undefined) record.ward = String(wardRaw);
-
-            const mapSheetRaw = getVal(['TỜ', 'BẢN ĐỒ SỐ', 'mapsheet', 'map_sheet', 'mapSheet']);
-            if (mapSheetRaw !== undefined) record.mapSheet = String(mapSheetRaw);
-
-            const landPlotRaw = getVal(['THỬA', 'THỬA ĐẤT SỐ', 'landplot', 'land_plot', 'landPlot']);
-            if (landPlotRaw !== undefined) record.landPlot = String(landPlotRaw);
-
-            const errors: string[] = [];
-
-            const rawArea = getVal(['DIỆN TÍCH', 'AREA', 'area']);
-            if (rawArea !== undefined && rawArea !== null && rawArea !== '') {
-                const parsedArea = parseFloat(String(rawArea));
-                record.area = isNaN(parsedArea) ? 0 : parsedArea;
-                if (isNaN(parsedArea)) {
-                    errors.push(`Diện tích "${rawArea}" không hợp lệ.`);
-                }
-            } else if (rawArea !== undefined) {
-                record.area = null;
-            }
-
-            const rawResArea = getVal(['ĐẤT Ở', 'THỔ CƯ', 'residentialarea', 'residential_area', 'residentialArea']);
-            if (rawResArea !== undefined && rawResArea !== null && rawResArea !== '') {
-                 const parsedResArea = parseFloat(String(rawResArea));
-                 record.residentialArea = isNaN(parsedResArea) ? 0 : parsedResArea;
-                 if (isNaN(parsedResArea)) {
-                     errors.push(`Đất ở "${rawResArea}" không hợp lệ.`);
-                 }
-            } else if (rawResArea !== undefined) {
-                 record.residentialArea = null;
-            }
-
-            const issueNumRaw = getVal(['SỐ PHÁT HÀNH', 'issuenumber', 'issue_number', 'issueNumber']);
-            if (issueNumRaw !== undefined) record.issueNumber = String(issueNumRaw);
-
-            const entryNumRaw = getVal(['SỐ VÀO SỔ', 'entrynumber', 'entry_number', 'entryNumber']);
-            if (entryNumRaw !== undefined) record.entryNumber = String(entryNumRaw);
-
-            const issueDateRaw = getVal(['NGÀY CẤP', 'issuedate', 'issue_date', 'issueDate']);
-            if (issueDateRaw !== undefined) record.issueDate = parseExcelDate(issueDateRaw);
-
-            const contentRaw = getVal(['NỘI DUNG', 'GHI CHÚ', 'content', 'notes']);
-            if (contentRaw !== undefined) record.content = String(contentRaw);
-
-            const otherDocsRaw = getVal(['GIẤY TỜ KÈM THEO', 'GIẤY TỜ', 'otherdocs', 'other_docs', 'otherDocs']);
-            if (otherDocsRaw !== undefined) record.otherDocs = String(otherDocsRaw);
-
-            // 2. NGÀY THÁNG CỦA TỪNG TRẠNG THÁI & THÔNG TIN CHUNG
-            const receivedRaw = getVal(['NGÀY NHẬN', 'NGÀY NỘP', 'receiveddate', 'received_date', 'receivedDate']);
-            if (receivedRaw !== undefined) record.receivedDate = parseExcelDate(receivedRaw);
-            else if (mode === 'create') record.receivedDate = new Date().toISOString();
-
-            const deadlineRaw = getVal(['HẸN TRẢ', 'DEADLINE', 'deadline']);
-            if (deadlineRaw !== undefined) record.deadline = parseExcelDate(deadlineRaw);
-
-            const completedWorkDateRaw = getVal(['NGÀY THỰC HIỆN', 'NGÀY ĐÃ THỰC HIỆN', 'completedworkdate', 'completed_work_date', 'completedWorkDate']);
-            if (completedWorkDateRaw !== undefined) record.completedWorkDate = parseExcelDate(completedWorkDateRaw);
-
-            const pendingCheckDateRaw = getVal(['NGÀY TRÌNH KIỂM TRA', 'NGÀY CHỜ KIỂM TRA', 'pendingcheckdate', 'pending_check_date', 'pendingCheckDate']);
-            if (pendingCheckDateRaw !== undefined) record.pendingCheckDate = parseExcelDate(pendingCheckDateRaw);
-
-            const checkedDateRaw = getVal(['NGÀY ĐÃ KIỂM TRA', 'checkeddate', 'checked_date', 'checkedDate']);
-            if (checkedDateRaw !== undefined) record.checkedDate = parseExcelDate(checkedDateRaw);
-
-            const submissionDateRaw = getVal(['NGÀY TRÌNH KÝ', 'submissiondate', 'submission_date', 'submissionDate']);
-            if (submissionDateRaw !== undefined) record.submissionDate = parseExcelDate(submissionDateRaw);
-
-            const approvalDateRaw = getVal(['NGÀY KÝ DUYỆT', 'NGÀY KÝ', 'approvaldate', 'approval_date', 'approvalDate']);
-            if (approvalDateRaw !== undefined) record.approvalDate = parseExcelDate(approvalDateRaw);
-
-            const completedDateRaw = getVal(['NGÀY HOÀN THÀNH', 'completeddate', 'completed_date', 'completedDate', 'NGÀY GIAO 1 CỬA']);
-            if (completedDateRaw !== undefined) record.completedDate = parseExcelDate(completedDateRaw);
-
-            const resultReturnedDateRaw = getVal(['NGÀY TRẢ DÂN', 'resultreturneddate', 'result_returned_date', 'resultReturnedDate']);
-            if (resultReturnedDateRaw !== undefined) record.resultReturnedDate = parseExcelDate(resultReturnedDateRaw);
-
-            // 3. LOẠI HỒ SƠ
-            const typeRaw = getVal(['LOẠI HỒ SƠ', 'LOAI HO SO', 'recordtype', 'record_type']);
-            if (typeRaw !== undefined) {
-                record.recordType = String(typeRaw).trim();
-            } else if (mode === 'create') {
-                record.recordType = RECORD_TYPES[0];
-            }
-
-            if (mode === 'create' && !record.deadline && record.recordType && record.receivedDate) {
-                record.deadline = calculateDeadline(record.recordType, record.receivedDate);
-            }
-
-            if (record.recordType === 'Cung cấp tài liệu đất đai') {
-                record.price = 310000;
-            }
-
-            // 4. THÔNG TIN XUẤT (QUAN TRỌNG CHO VIỆC TỰ ĐỘNG HANDOVER)
-            const exportBatchRaw = getVal(['ĐỢT', 'BATCH', 'exportbatch', 'export_batch', 'exportBatch']);
-            if (exportBatchRaw !== undefined) {
-                const numStr = String(exportBatchRaw).replace(/[^0-9]/g, '');
-                if (numStr) record.exportBatch = parseInt(numStr, 10);
-            }
-
-            const exportDateRaw = getVal(['NGÀY XUẤT', 'EXPORT DATE', 'NGÀY TRẢ', 'exportdate', 'export_date', 'exportDate']);
-            if (exportDateRaw !== undefined) {
-                record.exportDate = parseExcelDate(exportDateRaw);
-            }
-
-            // 5. TRẠNG THÁI & NGƯỜI XỬ LÝ
-            // Logic ưu tiên: Nếu có cột Trạng Thái được điền trực tiếp từ Excel -> Ưu tiên dùng cột Trạng Thái trước.
-            // Nếu không có, mới dùng logic suy diễn dựa trên các cột mốc ngày đã điền.
-            let explicitStatus: RecordStatus | undefined = undefined;
-
-            // Kiểm tra cột trạng thái từ Excel trước
-            const statusRaw = getVal(['TRẠNG THÁI', 'STATUS', 'status']);
-            if (statusRaw !== undefined && String(statusRaw).trim() !== '') {
-                let sStr = String(statusRaw).toUpperCase();
-                if (sStr.includes('GIAO NHÂN VIÊN') || sStr.includes('PASSED_TO') || sStr.includes('ASSIGNED')) explicitStatus = RecordStatus.ASSIGNED;
-                else if (sStr.includes('ĐANG') || sStr.includes('PROGRESS')) explicitStatus = RecordStatus.IN_PROGRESS;
-                else if (sStr.includes('ĐÃ THỰC HIỆN') || sStr.includes('THỰC HIỆN XONG') || sStr.includes('COMPLETED_WORK')) explicitStatus = RecordStatus.COMPLETED_WORK;
-                else if (sStr.includes('CHỜ KIỂM TRA') || sStr.includes('PENDING_CHECK')) explicitStatus = RecordStatus.PENDING_CHECK;
-                else if (sStr.includes('ĐÃ KIỂM TRA') || sStr.includes('CHECKED')) explicitStatus = RecordStatus.CHECKED;
-                else if (sStr.includes('CHỜ KÝ') || sStr.includes('PENDING_SIGN') || sStr.includes('TRÌNH KÝ')) explicitStatus = RecordStatus.PENDING_SIGN;
-                else if (sStr.includes('ĐÃ KÝ') || sStr.includes('SIGNED') || sStr.includes('KÝ DUYỆT')) explicitStatus = RecordStatus.SIGNED;
-                else if (sStr.includes('XONG') || sStr.includes('HOÀN THÀNH') || sStr.includes('HANDOVER') || sStr.includes('GIAO 1 CỬA')) explicitStatus = RecordStatus.HANDOVER;
-                else if (sStr.includes('TRẢ DÂN') || sStr.includes('RETURNED') || sStr.includes('ĐÃ TRẢ')) explicitStatus = RecordStatus.RETURNED;
-                else if (sStr.includes('TIẾP NHẬN') || sStr.includes('RECEIVED') || sStr.includes('MỚI NHẬN')) explicitStatus = RecordStatus.RECEIVED;
-            }
-
-            // Gán trạng thái theo độ ưu tiên
-            if (explicitStatus !== undefined) {
-                record.status = explicitStatus;
-                
-                // Điền tự động các trường ngày tương ứng với trạng thái đã chọn nếu trường ngày đó chưa có giá trị
-                const nowStr = new Date().toISOString();
-                if (explicitStatus === RecordStatus.HANDOVER) {
-                    if (!record.completedDate) record.completedDate = nowStr;
-                } else if (explicitStatus === RecordStatus.RETURNED) {
-                    if (!record.resultReturnedDate) record.resultReturnedDate = nowStr;
-                } else if (explicitStatus === RecordStatus.SIGNED) {
-                    if (!record.approvalDate) record.approvalDate = nowStr;
-                } else if (explicitStatus === RecordStatus.PENDING_SIGN) {
-                    if (!record.submissionDate) record.submissionDate = nowStr;
-                } else if (explicitStatus === RecordStatus.CHECKED) {
-                    if (!record.checkedDate) record.checkedDate = nowStr;
-                } else if (explicitStatus === RecordStatus.PENDING_CHECK) {
-                    if (!record.pendingCheckDate) record.pendingCheckDate = nowStr;
-                } else if (explicitStatus === RecordStatus.COMPLETED_WORK) {
-                    if (!record.completedWorkDate) record.completedWorkDate = nowStr;
-                } else if (explicitStatus === RecordStatus.ASSIGNED || explicitStatus === RecordStatus.IN_PROGRESS) {
-                    if (!record.assignedDate) record.assignedDate = nowStr;
-                }
-            } else {
-                // Nếu KHÔNG có cột TRẠNG THÁI cụ thể, ta dùng LOGIC SUY DIỄN DỰA TRÊN NGÀY THÁNG
-                if (record.exportBatch || record.exportDate || record.completedDate) {
-                    record.status = RecordStatus.HANDOVER;
-                    if (!record.completedDate && record.exportDate) {
-                        record.completedDate = record.exportDate;
-                    }
-                } else if (record.resultReturnedDate) {
-                    record.status = RecordStatus.RETURNED;
-                } else if (record.approvalDate) {
-                    record.status = RecordStatus.SIGNED;
-                } else if (record.submissionDate) {
-                    record.status = RecordStatus.PENDING_SIGN;
-                } else if (record.checkedDate) {
-                    record.status = RecordStatus.CHECKED;
-                } else if (record.pendingCheckDate) {
-                    record.status = RecordStatus.PENDING_CHECK;
-                } else if (record.completedWorkDate) {
-                    record.status = RecordStatus.COMPLETED_WORK;
-                } else if (mode === 'create') {
-                    record.status = RecordStatus.RECEIVED;
-                }
-            }
-
-            const assigneeRaw = getVal(['NGƯỜI XỬ LÝ', 'NHÂN VIÊN', 'assignedto', 'assigned_to', 'assignedTo']);
-            if (assigneeRaw !== undefined) {
-                const emp = employees.find(e => e.name.toLowerCase().includes(String(assigneeRaw).toLowerCase()));
-                if (emp) {
-                    record.assignedTo = emp.id;
-                    if (mode === 'create') record.assignedDate = record.receivedDate;
-                }
-            }
-
-            const assignedDateRaw = getVal(['NGÀY GIAO', 'NGÀY GIAO VIỆC', 'assigneddate', 'assigned_date', 'assignedDate']);
-            if (assignedDateRaw !== undefined) {
-                record.assignedDate = parseExcelDate(assignedDateRaw);
-            }
-
-            // ID giả lập cho preview
-            record.id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
-            
-            if (mode === 'create') {
-                if (!record.customerName) errors.push("Thiếu tên Chủ sử dụng.");
-                if (!record.recordType) errors.push("Thiếu Loại hồ sơ.");
-            } else {
-                if (!record.code) errors.push("Thiếu Mã HS (Bắt buộc để cập nhật).");
-            }
-
-            record._errors = errors;
-            mappedRecords.push(record);
-        }
-
-        setPreviewData(mappedRecords as PreviewRecord[]);
-        setLoading(false);
-
+        
+        setSelectedSheet(defaultSheet);
+        loadSheetData(defaultSheet, wb);
       } catch (error) {
         console.error("Lỗi đọc Excel:", error);
         alert("Có lỗi khi đọc file Excel.");
@@ -426,6 +172,298 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
       }
     };
     reader.readAsArrayBuffer(file);
+  };
+
+  const loadSheetData = (sheetName: string, activeWb?: XLSX.WorkBook) => {
+      const currentWb = activeWb || workbook;
+      if (!currentWb) return;
+      
+      setLoading(true);
+      try {
+          const ws = currentWb.Sheets[sheetName];
+          const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+          
+          let headerRowIndex = -1;
+          for (let i = 0; i < Math.min(data.length, 20); i++) {
+              const row = data[i] as any[];
+              if (row && row.some(cell => {
+                  const s = String(cell || '').toLowerCase();
+                  return s.includes('mã') || s.includes('chủ sử dụng') || s.includes('chủ sử') || s.includes('customer') || s.includes('tên') || s.includes('họ tên');
+              })) {
+                  headerRowIndex = i;
+                  break;
+              }
+          }
+          
+          if (headerRowIndex === -1) {
+              headerRowIndex = 0;
+          }
+
+          const headers = (data[headerRowIndex] as string[] || []).map(h => String(h || '').toUpperCase().trim());
+          const mappedRecords: any[] = [];
+
+          const typeMapping: Record<string, string> = {
+              'TL': 'Trích lục bản đồ địa chính', 'TRÍCH LỤC': 'Trích lục bản đồ địa chính',
+              'TĐ': 'Trích đo bản đồ địa chính', 'TRÍCH ĐO': 'Trích đo bản đồ địa chính',
+              'ĐĐ': 'Đo đạc', 'ĐO ĐẠC': 'Đo đạc', 'CM': 'Cắm mốc', 'CẮM MỐC': 'Cắm mốc',
+              'CL': 'Trích đo chỉnh lý bản đồ địa chính', 'CHỈNH LÝ': 'Trích đo chỉnh lý bản đồ địa chính'
+          };
+
+          for (let i = headerRowIndex + 1; i < data.length; i++) {
+              const row = data[i] as any[];
+              if (!row || row.length === 0 || row.every(cell => cell === null || cell === undefined || cell === '')) continue;
+
+              const getVal = (possibleHeaders: string[]) => {
+                  let idx = headers.findIndex(h => {
+                      const hUpper = h.trim().toUpperCase();
+                      return possibleHeaders.some(ph => hUpper === ph.toUpperCase());
+                  });
+                  if (idx === -1) {
+                      idx = headers.findIndex(h => {
+                          const hUpper = h.trim().toUpperCase();
+                          return possibleHeaders.some(ph => hUpper.includes(ph.toUpperCase()));
+                      });
+                  }
+                  return idx !== -1 ? row[idx] : undefined;
+              };
+
+              const codeRaw = getVal(['MÃ HỒ SƠ', 'MÃ HS', 'CODE', 'code']);
+              const code = codeRaw ? String(codeRaw).trim() : undefined;
+              
+              if (mode === 'update' && !code) continue;
+
+              const record: any = {};
+              
+              if (code) record.code = code;
+              else if (mode === 'create') record.code = `AUTO-${Math.floor(Math.random()*100000)}`;
+
+              const nameRaw = getVal(['CHỦ SỬ DỤNG', 'TÊN', 'HỌ TÊN', 'CUSTOMER', 'customername', 'customer_name', 'customerName']);
+              if (nameRaw !== undefined) record.customerName = String(nameRaw).trim();
+              else if (mode === 'create') record.customerName = 'Chưa cập nhật';
+
+              const phoneRaw = getVal(['SĐT', 'ĐIỆN THOẠI', 'phonenumber', 'phone_number', 'phoneNumber']);
+              if (phoneRaw !== undefined) record.phoneNumber = String(phoneRaw).trim();
+
+              const addressRaw = getVal(['ĐỊA CHỈ', 'ADDRESS', 'customeraddress', 'customer_address', 'customerAddress', 'address']);
+              if (addressRaw !== undefined) record.customerAddress = String(addressRaw).trim();
+
+              const cccdRaw = getVal(['CCCD', 'CMND', 'cccd']);
+              if (cccdRaw !== undefined) record.cccd = String(cccdRaw).trim();
+
+              const authByRaw = getVal(['NGƯỜI ỦY QUYỀN', 'ỦY QUYỀN', 'authorizedby', 'authorized_by', 'authorizedBy']);
+              const authTypeRaw = getVal(['LOẠI ỦY QUYỀN', 'GIẤY ỦY QUYỀN', 'authdoctype', 'auth_doc_type', 'authDocType']);
+              if (authByRaw !== undefined || authTypeRaw !== undefined) {
+                  record.authDocType = `${authByRaw ? String(authByRaw).trim() : ''}|${authTypeRaw ? String(authTypeRaw).trim() : 'Bản chính'}`;
+              }
+
+              const wardRaw = getVal(['XÃ', 'PHƯỜNG', 'WARD', 'ward']);
+              if (wardRaw !== undefined) record.ward = String(wardRaw).trim();
+
+              const mapSheetRaw = getVal(['TỜ', 'BẢN ĐỒ SỐ', 'mapsheet', 'map_sheet', 'mapSheet']);
+              if (mapSheetRaw !== undefined) record.mapSheet = String(mapSheetRaw).trim();
+
+              const landPlotRaw = getVal(['THỬA', 'THỬA ĐẤT SỐ', 'landplot', 'land_plot', 'landPlot']);
+              if (landPlotRaw !== undefined) record.landPlot = String(landPlotRaw).trim();
+
+              const errors: string[] = [];
+
+              const rawArea = getVal(['DIỆN TÍCH', 'AREA', 'area']);
+              if (rawArea !== undefined && rawArea !== null && rawArea !== '') {
+                  const parsedArea = parseFloat(String(rawArea));
+                  record.area = isNaN(parsedArea) ? 0 : parsedArea;
+                  if (isNaN(parsedArea)) {
+                      errors.push(`Diện tích "${rawArea}" không hợp lệ.`);
+                  }
+              } else if (rawArea !== undefined) {
+                  record.area = null;
+              }
+
+              const rawResArea = getVal(['ĐẤT Ở', 'THỔ CƯ', 'residentialarea', 'residential_area', 'residentialArea']);
+              if (rawResArea !== undefined && rawResArea !== null && rawResArea !== '') {
+                   const parsedResArea = parseFloat(String(rawResArea));
+                   record.residentialArea = isNaN(parsedResArea) ? 0 : parsedResArea;
+                   if (isNaN(parsedResArea)) {
+                       errors.push(`Đất ở "${rawResArea}" không hợp lệ.`);
+                   }
+              } else if (rawResArea !== undefined) {
+                   record.residentialArea = null;
+              }
+
+              const issueNumRaw = getVal(['SỐ PHÁT HÀNH', 'issuenumber', 'issue_number', 'issueNumber']);
+              if (issueNumRaw !== undefined) record.issueNumber = String(issueNumRaw).trim();
+
+              const entryNumRaw = getVal(['SỐ VÀO SỔ', 'entrynumber', 'entry_number', 'entryNumber']);
+              if (entryNumRaw !== undefined) record.entryNumber = String(entryNumRaw).trim();
+
+              const processDateCell = (rawVal: any, label: string) => {
+                  if (rawVal === undefined || rawVal === null || rawVal === '') return undefined;
+                  const parsed = parseExcelDate(rawVal);
+                  if (parsed === '') {
+                      errors.push(`Trường "${label}" (${rawVal}) không đúng định dạng DD/MM/YYYY.`);
+                      return undefined;
+                  }
+                  return parsed;
+              };
+
+              const issueDateRaw = getVal(['NGÀY CẤP', 'issuedate', 'issue_date', 'issueDate']);
+              if (issueDateRaw !== undefined) record.issueDate = processDateCell(issueDateRaw, "Ngày cấp");
+
+              const contentRaw = getVal(['NỘI DUNG', 'GHI CHÚ', 'content', 'notes']);
+              if (contentRaw !== undefined) record.content = String(contentRaw).trim();
+
+              const otherDocsRaw = getVal(['GIẤY TỜ KÈM THEO', 'GIẤY TỜ', 'otherdocs', 'other_docs', 'otherDocs']);
+              if (otherDocsRaw !== undefined) record.otherDocs = String(otherDocsRaw).trim();
+
+              const receivedRaw = getVal(['NGÀY NHẬN', 'NGÀY NỘP', 'receiveddate', 'received_date', 'receivedDate']);
+              if (receivedRaw !== undefined) {
+                  record.receivedDate = processDateCell(receivedRaw, "Ngày nhận/nộp");
+              } else if (mode === 'create') {
+                  record.receivedDate = new Date().toISOString();
+              }
+
+              const deadlineRaw = getVal(['HẸN TRẢ', 'DEADLINE', 'deadline']);
+              if (deadlineRaw !== undefined) record.deadline = processDateCell(deadlineRaw, "Hạn trả");
+
+              const completedWorkDateRaw = getVal(['NGÀY THỰC HIỆN', 'NGÀY ĐÃ THỰC HIỆN', 'completedworkdate', 'completed_work_date', 'completedWorkDate']);
+              if (completedWorkDateRaw !== undefined) record.completedWorkDate = processDateCell(completedWorkDateRaw, "Ngày thực hiện");
+
+              const pendingCheckDateRaw = getVal(['NGÀY TRÌNH KIỂM TRA', 'NGÀY CHỜ KIỂM TRA', 'pendingcheckdate', 'pending_check_date', 'pendingCheckDate']);
+              if (pendingCheckDateRaw !== undefined) record.pendingCheckDate = processDateCell(pendingCheckDateRaw, "Ngày trình kiểm tra");
+
+              const checkedDateRaw = getVal(['NGÀY ĐÃ KIỂM TRA', 'checkeddate', 'checked_date', 'checkedDate']);
+              if (checkedDateRaw !== undefined) record.checkedDate = processDateCell(checkedDateRaw, "Ngày đã kiểm tra");
+
+              const submissionDateRaw = getVal(['NGÀY TRÌNH KÝ', 'submissiondate', 'submission_date', 'submissionDate']);
+              if (submissionDateRaw !== undefined) record.submissionDate = processDateCell(submissionDateRaw, "Ngày trình ký");
+
+              const approvalDateRaw = getVal(['NGÀY KÝ DUYỆT', 'NGÀY KÝ', 'approvaldate', 'approval_date', 'approvalDate']);
+              if (approvalDateRaw !== undefined) record.approvalDate = processDateCell(approvalDateRaw, "Ngày ký duyệt");
+
+              const completedDateRaw = getVal(['NGÀY HOÀN THÀNH', 'completeddate', 'completed_date', 'completedDate', 'NGÀY GIAO 1 CỬA']);
+              if (completedDateRaw !== undefined) record.completedDate = processDateCell(completedDateRaw, "Ngày bàn giao một cửa");
+
+              const resultReturnedDateRaw = getVal(['NGÀY TRẢ DÂN', 'resultreturneddate', 'result_returned_date', 'resultReturnedDate']);
+              if (resultReturnedDateRaw !== undefined) record.resultReturnedDate = processDateCell(resultReturnedDateRaw, "Ngày trả dân");
+
+              const typeRaw = getVal(['LOẠI HỒ SƠ', 'LOAI HO SO', 'recordtype', 'record_type']);
+              if (typeRaw !== undefined) {
+                  record.recordType = String(typeRaw).trim();
+              } else if (mode === 'create') {
+                  record.recordType = RECORD_TYPES[0];
+              }
+
+              if (mode === 'create' && !record.deadline && record.recordType && record.receivedDate) {
+                  record.deadline = calculateDeadline(record.recordType, record.receivedDate);
+              }
+
+              if (record.recordType === 'Cung cấp tài liệu đất đai' || record.recordType === '1. Cung cấp dữ liệu đất đai') {
+                  record.price = 310000;
+              }
+
+              const exportBatchRaw = getVal(['ĐỢT', 'BATCH', 'exportbatch', 'export_batch', 'exportBatch']);
+              if (exportBatchRaw !== undefined) {
+                  const numStr = String(exportBatchRaw).replace(/[^0-9]/g, '');
+                  if (numStr) record.exportBatch = parseInt(numStr, 10);
+              }
+
+              const exportDateRaw = getVal(['NGÀY XUẤT', 'EXPORT DATE', 'NGÀY TRẢ', 'exportdate', 'export_date', 'exportDate']);
+              if (exportDateRaw !== undefined) {
+                  record.exportDate = processDateCell(exportDateRaw, "Ngày xuất/trả");
+              }
+
+              let explicitStatus: RecordStatus | undefined = undefined;
+              const statusRaw = getVal(['TRẠNG THÁI', 'STATUS', 'status']);
+              if (statusRaw !== undefined && String(statusRaw).trim() !== '') {
+                  let sStr = String(statusRaw).toUpperCase();
+                  if (sStr.includes('GIAO NHÂN VIÊN') || sStr.includes('PASSED_TO') || sStr.includes('ASSIGNED')) explicitStatus = RecordStatus.ASSIGNED;
+                  else if (sStr.includes('ĐANG') || sStr.includes('PROGRESS')) explicitStatus = RecordStatus.IN_PROGRESS;
+                  else if (sStr.includes('ĐÃ THỰC HIỆN') || sStr.includes('THỰC HIỆN XONG') || sStr.includes('COMPLETED_WORK')) explicitStatus = RecordStatus.COMPLETED_WORK;
+                  else if (sStr.includes('CHỜ KIỂM TRA') || sStr.includes('PENDING_CHECK')) explicitStatus = RecordStatus.PENDING_CHECK;
+                  else if (sStr.includes('ĐÃ KIỂM TRA') || sStr.includes('CHECKED')) explicitStatus = RecordStatus.CHECKED;
+                  else if (sStr.includes('CHỜ KÝ') || sStr.includes('PENDING_SIGN') || sStr.includes('TRÌNH KÝ')) explicitStatus = RecordStatus.PENDING_SIGN;
+                  else if (sStr.includes('ĐÃ KÝ') || sStr.includes('SIGNED') || sStr.includes('KÝ DUYỆT')) explicitStatus = RecordStatus.SIGNED;
+                  else if (sStr.includes('XONG') || sStr.includes('HOÀN THÀNH') || sStr.includes('HANDOVER') || sStr.includes('GIAO 1 CỬA')) explicitStatus = RecordStatus.HANDOVER;
+                  else if (sStr.includes('TRẢ DÂN') || sStr.includes('RETURNED') || sStr.includes('ĐÃ TRẢ')) explicitStatus = RecordStatus.RETURNED;
+                  else if (sStr.includes('TIẾP NHẬN') || sStr.includes('RECEIVED') || sStr.includes('MỚI NHẬN')) explicitStatus = RecordStatus.RECEIVED;
+              }
+
+              if (explicitStatus !== undefined) {
+                  record.status = explicitStatus;
+                  const nowStr = new Date().toISOString();
+                  if (explicitStatus === RecordStatus.HANDOVER) {
+                      if (!record.completedDate) record.completedDate = nowStr;
+                  } else if (explicitStatus === RecordStatus.RETURNED) {
+                      if (!record.resultReturnedDate) record.resultReturnedDate = nowStr;
+                  } else if (explicitStatus === RecordStatus.SIGNED) {
+                      if (!record.approvalDate) record.approvalDate = nowStr;
+                  } else if (explicitStatus === RecordStatus.PENDING_SIGN) {
+                      if (!record.submissionDate) record.submissionDate = nowStr;
+                  } else if (explicitStatus === RecordStatus.CHECKED) {
+                      if (!record.checkedDate) record.checkedDate = nowStr;
+                  } else if (explicitStatus === RecordStatus.PENDING_CHECK) {
+                      if (!record.pendingCheckDate) record.pendingCheckDate = nowStr;
+                  } else if (explicitStatus === RecordStatus.COMPLETED_WORK) {
+                      if (!record.completedWorkDate) record.completedWorkDate = nowStr;
+                  } else if (explicitStatus === RecordStatus.ASSIGNED || explicitStatus === RecordStatus.IN_PROGRESS) {
+                      if (!record.assignedDate) record.assignedDate = nowStr;
+                  }
+              } else {
+                  if (record.exportBatch || record.exportDate || record.completedDate) {
+                      record.status = RecordStatus.HANDOVER;
+                      if (!record.completedDate && record.exportDate) {
+                          record.completedDate = record.exportDate;
+                      }
+                  } else if (record.resultReturnedDate) {
+                      record.status = RecordStatus.RETURNED;
+                  } else if (record.approvalDate) {
+                      record.status = RecordStatus.SIGNED;
+                  } else if (record.submissionDate) {
+                      record.status = RecordStatus.PENDING_SIGN;
+                  } else if (record.checkedDate) {
+                      record.status = RecordStatus.CHECKED;
+                  } else if (record.pendingCheckDate) {
+                      record.status = RecordStatus.PENDING_CHECK;
+                  } else if (record.completedWorkDate) {
+                      record.status = RecordStatus.COMPLETED_WORK;
+                  } else if (mode === 'create') {
+                      record.status = RecordStatus.RECEIVED;
+                  }
+              }
+
+              const assigneeRaw = getVal(['NGƯỜI XỬ LÝ', 'NHÂN VIÊN', 'assignedto', 'assigned_to', 'assignedTo']);
+              if (assigneeRaw !== undefined) {
+                  const emp = employees.find(e => e.name.toLowerCase().includes(String(assigneeRaw).toLowerCase()));
+                  if (emp) {
+                      record.assignedTo = emp.id;
+                      if (mode === 'create') record.assignedDate = record.receivedDate;
+                  }
+              }
+
+              const assignedDateRaw = getVal(['NGÀY GIAO', 'NGÀY GIAO VIỆC', 'assigneddate', 'assigned_date', 'assignedDate']);
+              if (assignedDateRaw !== undefined) {
+                  record.assignedDate = processDateCell(assignedDateRaw, "Ngày giao việc");
+              }
+
+              record.id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
+              
+              if (mode === 'create') {
+                  if (!record.customerName) errors.push("Thiếu tên Chủ sử dụng.");
+                  if (!record.recordType) errors.push("Thiếu Loại hồ sơ.");
+              } else {
+                  if (!record.code) errors.push("Thiếu Mã HS (Bắt buộc để cập nhật).");
+              }
+
+              record._errors = errors;
+              mappedRecords.push(record);
+          }
+
+          setPreviewData(mappedRecords as PreviewRecord[]);
+          setLoading(false);
+      } catch (err) {
+          console.error("Lỗi parse sheet:", err);
+          alert("Lỗi khi tải bảng dữ liệu.");
+          setLoading(false);
+      }
   };
 
   const handleSave = async () => {
@@ -442,25 +480,133 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
   };
 
   const handleDownloadTemplate = () => {
-      const headers = [
-          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ', 'NGƯỜI ỦY QUYỀN', 'LOẠI ỦY QUYỀN', 
-          'XÃ', 'THỬA', 'TỜ', 'DIỆN TÍCH', 'ĐẤT Ở', 'SỐ PHÁT HÀNH', 'SỐ VÀO SỔ', 'NGÀY CẤP', 
-          'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 
-          'TRẠNG THÁI', 'NGÀY THỰC HIỆN', 'NGÀY TRÌNH KIỂM TRA', 'NGÀY ĐÃ KIỂM TRA', 'NGÀY TRÌNH KÝ', 
-          'NGÀY KÝ DUYỆT', 'NGÀY HOÀN THÀNH', 'NGÀY TRẢ DÂN', 'NGÀY XUẤT', 'ĐỢT', 'NGƯỜI XỬ LÝ', 'NGÀY GIAO'
+      const wb = XLSX.utils.book_new();
+      
+      // 1. HUONG DAN SU DUNG
+      const instrHeaders = ["TIÊU ĐỀ / TÊN CỘT", "MÔ TẢ CHI TIẾT", "ĐỊA BÀN HOẶC ĐỊNH DẠNG", "TÍNH BẮT BUỘC"];
+      const instrRows = [
+          ["MẪU NHẬP LIỆU HỒ SƠ ĐA PHÂN HỆ QUA EXCEL", "", "", ""],
+          ["Hệ thống quản lý thông minh hồ sơ đất đai và đăng ký biến động", "", "", ""],
+          [],
+          ["[PHẦN 1] CÁC TAB BẢN MẪU HỒ SƠ CHUYÊN BIỆT:"],
+          ["- Tab '2. HO SO DAT DAI':", "Dành cho hồ sơ đo đạc, trích lục, trích đo, cấp số thửa, cung cấp dữ liệu..."],
+          ["- Tab '3. DANG KY BIEN DONG':", "Dành cho hồ sơ chuyển nhượng, tặng cho, thừa kế, thỏa thuận (quy trình 3.*)..."],
+          ["- Tab '4. SAO LUC & CONG VAN':", "Dành cho hồ sơ sao lục lưu trữ và công văn hành chính đến/đi..."],
+          ["- Tab '5. HO SO KHAC':", "Dành cho hồ sơ chuyển mục đích sử dụng (CMD), thi hành án, tòa án trưng cầu..."],
+          [],
+          ["[PHẦN 2] QUY CHUẨN ĐỊNH DẠNG HỆ THỐNG ĐỌC:"],
+          ["CHỦ SỬ DỤNG", "Họ và tên người nộp / Chủ đất. Ví dụ: Nguyễn Văn A", "Văn bản tự do", "BẮT BUỘC KHI THÊM MỚI"],
+          ["XÃ", "Tên địa bàn xã/phường nơi có thửa đất.", "Phải chọn đúng: Tân Khai, Tân Quan, Tân Hưng, Minh Đức", "BẮT BUỘC KHI THÊM MỚI"],
+          ["LOẠI HỒ SƠ", "Quy trình hồ sơ. Hệ thống dùng trường này để tự động tính thời hạn xử lý.", "VD: 2.1 Trích lục, 2.3 Trích đo, 3.3 Chuyển Nhượng, CMD, Sao lục, Công văn...", "BẮT BUỘC KHI THÊM MỚI"],
+          ["MÃ HỒ SƠ", "Mã hồ sơ định danh duy nhất.", "Cần điền chính xác nếu sử dụng chế độ 'Cập nhật thông tin'. Để trống khi Thêm mới.", "Bắt buộc khi CẬP NHẬT"],
+          ["NGÀY NHẬN", "Ngày tiếp nhận hồ sơ tại bộ phận Một cửa.", "Định dạng Ngày: YYYY-MM-DD hoặc DD/MM/YYYY (Ví dụ: 2026-06-24)", "Không bắt buộc (Tự lấy hôm nay)"],
+          ["TRẠNG THÁI", "Trạng thái hồ sơ ban đầu.", "Chọn: Tiếp nhận, Đang xử lý, Chờ kiểm tra, Đã kiểm tra, Chờ ký, Đã ký, Đã giao 1 cửa, Đã trả dân", "Không bắt buộc"],
+          [],
+          ["[PHẦN 3] QUY TẮC PHÂN BIỆT 2 CHẾ ĐỘ TRÊN HỆ THỐNG:"],
+          ["- CHẾ ĐỘ 'NHẬP HỒ SƠ MỚI':", "Thêm toàn bộ dòng mới vào hệ thống. Các trường ngày nhận, hẹn trả sẽ tự động tính nếu trống.", "", ""],
+          ["- CHẾ ĐỘ 'CẬP NHẬT THÔNG TIN':", "Sử dụng cột 'MÃ HỒ SƠ' để đối chiếu. Chỉ ghi đè dữ liệu đối với các cột xuất hiện trong file Excel.", "", ""]
       ];
       
-      const sampleData = [
-          ['HS001', 'Nguyễn Văn A', '070012345678', '0901234567', 'Tổ 1, KP 2', 'Lê Văn C', 'Giấy ủy quyền', 
-           'Tân Khai', '123', '45', '100.5', '50', 'CD 123456', 'CH 01234', '2024-01-01', 
-           'Đo đạc', 'Đo đạc cắm mốc', 'Sổ đỏ|Bản chính', '2024-01-01', '2024-01-15', 
-           'Đã nhận', '', '', '', '', '', '', '', '', '', '', '']
-      ];
+      const wsInstr = XLSX.utils.aoa_to_sheet([]);
+      XLSX.utils.sheet_add_aoa(wsInstr, instrRows, { origin: "A1" });
+      XLSX.utils.sheet_add_aoa(wsInstr, [instrHeaders], { origin: "A11" });
+      
+      wsInstr['!cols'] = [{ wch: 25 }, { wch: 45 }, { wch: 40 }, { wch: 25 }];
+      
+      if (wsInstr['A1']) {
+          wsInstr['A1'].s = {
+              font: { bold: true, color: { rgb: "1F4E79" }, sz: 14, name: "Calibri" }
+          };
+      }
+      if (wsInstr['A2']) {
+          wsInstr['A2'].s = {
+              font: { italic: true, color: { rgb: "555555" }, sz: 10, name: "Calibri" }
+          };
+      }
+      
+      const tableHeaderStyle = {
+          font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10, name: "Calibri" },
+          fill: { fgColor: { rgb: "5B9BD5" } },
+          alignment: { horizontal: "center", vertical: "center" }
+      };
+      
+      for (let c = 0; c < 4; c++) {
+          const cellRef = XLSX.utils.encode_cell({ r: 10, c });
+          if (wsInstr[cellRef]) {
+              wsInstr[cellRef].s = tableHeaderStyle;
+          }
+      }
+      
+      XLSX.utils.book_append_sheet(wb, wsInstr, '1. HUONG DAN SU DUNG');
 
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Mau_Nhap_Ho_So');
-      XLSX.writeFile(wb, 'Mau_Nhap_Ho_So.xlsx');
+      const addStyledSheet = (sheetName: string, headers: string[], rows: any[][], colWidths: number[]) => {
+          const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+          ws['!cols'] = colWidths.map(w => ({ wch: w }));
+          
+          const headerStyle = {
+              font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10, name: "Calibri" },
+              fill: { fgColor: { rgb: "1F4E79" } },
+              alignment: { horizontal: "center", vertical: "center", wrapText: true },
+              border: {
+                  top: { style: "thin", color: { rgb: "CCCCCC" } },
+                  bottom: { style: "medium", color: { rgb: "1F4E79" } },
+                  left: { style: "thin", color: { rgb: "CCCCCC" } },
+                  right: { style: "thin", color: { rgb: "CCCCCC" } }
+              }
+          };
+          
+          for (let c = 0; c < headers.length; c++) {
+              const cellRef = XLSX.utils.encode_cell({ r: 0, c });
+              if (ws[cellRef]) {
+                  ws[cellRef].s = headerStyle;
+              }
+          }
+          
+          XLSX.utils.book_append_sheet(wb, ws, sheetName);
+      };
+
+      // 2. HO SO DAT DAI
+      const landHeaders = [
+          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ', 'XÃ', 'THỬA', 'TỜ', 'DIỆN TÍCH', 'ĐẤT Ở', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI'
+      ];
+      const landRows = [
+          ['HS-DAT-001', 'Trần Văn Nam', '070012345678', '0901112222', 'Tổ 2, Tân Khai', 'Tân Khai', '105', '12', '120.5', '60', '2.1 Trích lục', 'Cung cấp trích lục bản đồ phục vụ giao dịch', 'Sổ đỏ bản gốc|CCCD photo', '2026-06-20', '2026-06-24', 'Tiếp nhận'],
+          ['HS-DAT-002', 'Lê Thị Thu', '070012345679', '0988877665', 'Ấp 3, Tân Hưng', 'Tân Hưng', '88', '5', '450.0', '100', '2.3 Trích đo', 'Trích đo bản đồ phục vụ tách thửa', 'Đơn đề nghị|Sổ hồng photo', '2026-06-22', '2026-07-06', 'Đang xử lý'],
+          ['HS-DAT-003', 'Nguyễn Minh Tiến', '070012345680', '0912345678', 'Ấp 1, Tân Quan', 'Tân Quan', '215', '20', '310.2', '', '1. Cung cấp dữ liệu đất đai', 'Xin cung cấp thông tin quy hoạch sử dụng đất', 'CCCD photo', '2026-06-23', '2026-07-05', 'Tiếp nhận']
+      ];
+      addStyledSheet('2. HO SO DAT DAI', landHeaders, landRows, [14, 20, 15, 14, 22, 12, 10, 10, 12, 10, 24, 30, 25, 12, 12, 12]);
+
+      // 3. DANG KY BIEN DONG
+      const regHeaders = [
+          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ', 'NGƯỜI ỦY QUYỀN', 'LOẠI ỦY QUYỀN', 'XÃ', 'THỬA', 'TỜ', 'DIỆN TÍCH', 'ĐẤT Ở', 'SỐ PHÁT HÀNH', 'SỐ VÀO SỔ', 'NGÀY CẤP', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI'
+      ];
+      const regRows = [
+          ['HS-BD-001', 'Phạm Minh Đức', '070012345111', '0966554433', 'Tổ 5, Minh Đức', '', '', 'Minh Đức', '12', '34', '150.0', '100', 'CC 998811', 'CH 1122', '2026-06-10', '3.3 Chuyển Nhượng', 'Chuyển nhượng quyền sử dụng đất cho Nguyễn Văn Hải', 'Hợp đồng chuyển nhượng|Sổ đỏ gốc', '2026-06-20', '2026-07-20', 'Tiếp nhận'],
+          ['HS-BD-002', 'Vũ Hoàng Quân', '070012345222', '0944332211', 'Khu phố 2, Tân Khai', 'Vũ Văn Bằng', 'Giấy ủy quyền', 'Tân Khai', '45', '16', '200.0', '200', 'DD 223344', 'CH 3344', '2026-06-12', '3.2 Tặng Cho', 'Tặng cho quyền sử dụng đất gia đình cho con trai', 'Hợp đồng tặng cho|Giấy khai sinh', '2026-06-22', '2026-07-22', 'Đang xử lý']
+      ];
+      addStyledSheet('3. DANG KY BIEN DONG', regHeaders, regRows, [14, 20, 15, 14, 22, 18, 18, 12, 10, 10, 12, 10, 15, 12, 12, 22, 30, 25, 12, 12, 12]);
+
+      // 4. SAO LUC & CONG VAN
+      const arcHeaders = [
+          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'SĐT', 'ĐỊA CHỈ', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI', 'NGƯỜI XỬ LÝ', 'NGÀY GIAO'
+      ];
+      const arcRows = [
+          ['HS-SL-001', 'Văn phòng Đăng ký Đất đai', '02713888999', 'Số 12 Trần Hưng Đạo', 'Sao lục', 'Yêu cầu sao lục hồ sơ địa chính thửa 45 tờ 16 xã Tân Khai', 'Phiếu yêu cầu', '2026-06-23', '2026-06-25', 'Chờ kiểm tra', 'Nguyễn Thị Hoa', '2026-06-23'],
+          ['HS-CV-001', 'UBND huyện Hớn Quản', '02713777888', 'Khu hành chính huyện', 'Công văn', 'Công văn số 456/UBND về việc phối hợp đo đạc phục vụ giải phóng mặt bằng', 'Công văn đính kèm', '2026-06-24', '2026-06-26', 'Tiếp nhận', 'Trần Văn Nam', '2026-06-24']
+      ];
+      addStyledSheet('4. SAO LUC & CONG VAN', arcHeaders, arcRows, [14, 25, 14, 25, 15, 35, 20, 12, 12, 12, 18, 12]);
+
+      // 5. HO SO KHAC
+      const otherHeaders = [
+          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ', 'XÃ', 'THỬA', 'TỜ', 'DIỆN TÍCH', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI'
+      ];
+      const otherRows = [
+          ['HS-KHAC-001', 'Nguyễn Văn Đạt', '070012345999', '0903999888', 'Ấp 2, Tân Quan', 'Tân Quan', '72', '8', '500.0', 'CMD', 'Chuyển mục đích sử dụng đất sang đất ở', 'Đơn xin chuyển mục đích', '2026-06-24', '2026-07-24', 'Tiếp nhận'],
+          ['HS-KHAC-002', 'Tòa án Nhân dân Hớn Quản', '', '02713555444', 'Thị trấn Tân Khai', 'Tân Khai', '11', '2', '350.2', 'Tòa án', 'Trưng cầu đo đạc giải quyết tranh chấp đất đai', 'Quyết định trưng cầu', '2026-06-24', '2026-07-24', 'Tiếp nhận']
+      ];
+      addStyledSheet('5. HO SO KHAC', otherHeaders, otherRows, [14, 25, 15, 14, 25, 12, 10, 10, 12, 15, 35, 20, 12, 12, 12]);
+
+      XLSX.writeFile(wb, 'Mau_Nhap_Lieu_Da_Phan_He.xlsx');
   };
 
   if (!isOpen) return null;
@@ -519,19 +665,38 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
                 )}
             </div>
 
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
                 <div className="relative">
                     <input type="file" ref={fileInputRef} accept=".xlsx, .xls" onChange={handleFileChange} className="hidden" />
                     <button onClick={() => fileInputRef.current?.click()} className={`flex items-center gap-2 text-white px-4 py-2 rounded-lg hover:opacity-90 transition-colors shadow-sm font-medium ${mode === 'create' ? 'bg-green-600' : 'bg-orange-600'}`}>
                         <Upload size={18} /> Chọn File Excel
                     </button>
                 </div>
+
+                {sheetNames.length > 1 && (
+                    <div className="flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 py-1.5 shadow-sm">
+                        <span className="text-xs font-semibold text-gray-700">Chọn Sheet:</span>
+                        <select 
+                            value={selectedSheet}
+                            onChange={(e) => {
+                                setSelectedSheet(e.target.value);
+                                loadSheetData(e.target.value);
+                            }}
+                            className="bg-gray-50 border border-gray-300 rounded px-2 py-1 text-xs font-medium text-gray-800 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        >
+                            {sheetNames.map((name) => (
+                                <option key={name} value={name}>{name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
                 <button onClick={handleDownloadTemplate} className="flex items-center gap-2 text-blue-600 bg-blue-50 px-4 py-2 rounded-lg hover:bg-blue-100 transition-colors shadow-sm font-medium border border-blue-200">
                     <FileSpreadsheet size={18} /> Tải File Mẫu
                 </button>
                 {fileName && <span className="text-sm text-gray-600 font-medium">{fileName}</span>}
                 {previewData.length > 0 && <div className="ml-auto flex items-center gap-2 text-sm text-blue-700 bg-blue-100 px-3 py-1.5 rounded-full">
-                    <Check size={16} /> Đã đọc <strong>{previewData.length}</strong> dòng
+                    <Check size={16} /> Đã đọc <strong>{previewData.length}</strong> dòng ({selectedSheet})
                 </div>}
             </div>
         </div>

@@ -124,6 +124,44 @@ const VPHCTab: React.FC<VPHCTabProps> = ({ currentUser, notify }) => {
             return;
         }
 
+        const isValidDateStr = (val: string): boolean => {
+            if (!val || val.trim() === '') return true;
+            const cleanStr = val.trim();
+            const regex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+            if (!regex.test(cleanStr)) return false;
+            
+            const parts = cleanStr.split('/');
+            const d = parseInt(parts[0], 10);
+            const m = parseInt(parts[1], 10);
+            const y = parseInt(parts[2], 10);
+            
+            if (m < 1 || m > 12) return false;
+            if (d < 1 || d > 31) return false;
+            if (y < 1000 || y > 9999) return false;
+            
+            const daysInMonth = new Date(y, m, 0).getDate();
+            if (d > daysInMonth) return false;
+            
+            return true;
+        };
+
+        if (!isValidDateStr(formData.NGAYSINH)) {
+            if (!silent) notify("Ngày sinh không đúng định dạng dd/mm/yyyy hoặc không hợp lệ.", "error");
+            return false;
+        }
+        if (!isValidDateStr(formData.NGAYCAP)) {
+            if (!silent) notify("Ngày cấp CCCD không đúng định dạng dd/mm/yyyy hoặc không hợp lệ.", "error");
+            return false;
+        }
+        if (!isValidDateStr(formData.NGAYCAPGCN)) {
+            if (!silent) notify("Ngày cấp GCN không đúng định dạng dd/mm/yyyy hoặc không hợp lệ.", "error");
+            return false;
+        }
+        if (!isValidDateStr(formData.NGAYCC)) {
+            if (!silent) notify("Ngày công chứng không đúng định dạng dd/mm/yyyy hoặc không hợp lệ.", "error");
+            return false;
+        }
+
         const recordToSave: Partial<VphcRecord> = {
             id: editingId || undefined, // Nếu có ID là update
             customer_name: formData.NGUOI,

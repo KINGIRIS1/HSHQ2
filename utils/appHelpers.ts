@@ -1,8 +1,91 @@
 
-import { RecordFile, RecordStatus, Employee } from '../types';
-import { STATUS_LABELS } from '../constants';
+import { RecordFile, RecordStatus, Employee, Holiday } from '../types';
+import { STATUS_LABELS, REGISTRATION_PROCEDURES } from '../constants';
 
 // --- HÀM TIỆN ÍCH CHO PHÂN HỆ HỒ SƠ ---
+export function getSolarDateFromLunar(lunarDay: number, lunarMonth: number, year: number): Date | null {
+    if (lunarMonth === 1) { 
+        if (year === 2024) return new Date(2024, 1, lunarDay + 9);
+        if (year === 2025) return new Date(2025, 0, lunarDay + 28);
+        if (year === 2026) return new Date(2026, 1, lunarDay + 16); 
+        if (year === 2027) return new Date(2027, 1, lunarDay + 5);
+    }
+    if (lunarMonth === 3 && lunarDay === 10) { 
+        if (year === 2024) return new Date(2024, 3, 18);
+        if (year === 2025) return new Date(2025, 3, 7);
+        if (year === 2026) return new Date(2026, 3, 26);
+        if (year === 2027) return new Date(2027, 3, 16);
+    }
+    return null;
+}
+
+export function formatDateKey(date: Date): string {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+}
+
+export function calculateDeadline(type: string, receivedDateStr: string, holidays: Holiday[] = [], hasTax?: boolean): string {
+    if (!receivedDateStr) return '';
+    let daysToAdd = 30; 
+    const lowerType = (type || '').toLowerCase();
+
+    if (lowerType.includes('cmđ') || lowerType.includes('cmd') || lowerType.includes('2.7 trích lục cmđ')) {
+        daysToAdd = 2;
+    } else if (lowerType.includes('cung cấp tài liệu đất đai') || 
+        lowerType.includes('cung cấp dữ liệu đất đai') || 
+        lowerType.includes('dữ liệu đất đai') || 
+        lowerType.includes('trích lục quy hoạch') || 
+        lowerType.includes('cung cấp số thửa đất') || 
+        lowerType.includes('cung cấp số thửa') || 
+        lowerType.includes('trích lục')) {
+        daysToAdd = 10;
+    } else if (lowerType.includes('trích đo') || lowerType.includes('cắm mốc') || lowerType.includes('tách thửa')) {
+        daysToAdd = 30;
+    }
+    
+    const t = (type || '').trim().toLowerCase();
+    const isReg = t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
+
+    if (isReg && hasTax) {
+        daysToAdd += 10;
+    }
+    
+    const startDate = new Date(receivedDateStr);
+    let count = 0;
+    let currentDate = new Date(startDate);
+    
+    const holidaySet = new Set<string>();
+    const currentYear = startDate.getFullYear();
+    const listHolidays = holidays || [];
+    
+    [currentYear, currentYear + 1].forEach(year => {
+        listHolidays.forEach(h => {
+            if (h.isLunar) {
+                const solar = getSolarDateFromLunar(h.day, h.month, year);
+                if (solar) holidaySet.add(formatDateKey(solar));
+            } else {
+                const solar = new Date(year, h.month - 1, h.day);
+                holidaySet.add(formatDateKey(solar));
+            }
+        });
+    });
+
+    while (count < daysToAdd) {
+        currentDate.setDate(currentDate.getDate() + 1);
+        const dayOfWeek = currentDate.getDay(); 
+        const dateString = formatDateKey(currentDate);
+        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+        const isHoliday = holidaySet.has(dateString);
+
+        if (!isWeekend && !isHoliday) {
+            count++;
+        }
+    }
+    return formatDateKey(currentDate);
+}
+
 export function getStatusLabel(status: RecordStatus, recordType?: string | null): string {
     return STATUS_LABELS[status] || status;
 }

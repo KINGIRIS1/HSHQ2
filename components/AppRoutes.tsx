@@ -26,6 +26,7 @@ import RecordRow from "./RecordRow";
 import WorkScheduleView from "./WorkScheduleView";
 import SystemView from "./SystemView";
 import BarcodeGeneratorView from "./BarcodeGeneratorView";
+import VaoSoView from "./archive/VaoSoView";
 
 // Icons
 import {
@@ -793,7 +794,13 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
           </div>
         )}
 
-        <div className="p-4 border-b border-gray-100 flex flex-col gap-4">
+        {currentView === "registration_handover_list" ? (
+          <div className="flex-1 overflow-hidden flex flex-col min-h-0 bg-white">
+            <VaoSoView currentUser={currentUser} wards={wards} />
+          </div>
+        ) : (
+          <>
+            <div className="p-4 border-b border-gray-100 flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               {title}
@@ -1452,6 +1459,8 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </button>
             </div>
           </div>
+        )}
+          </>
         )}
       </div>
     );

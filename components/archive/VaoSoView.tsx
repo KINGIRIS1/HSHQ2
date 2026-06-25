@@ -40,35 +40,35 @@ import { getSystemSetting, saveSystemSetting } from "../../services/apiSystem";
 // Định nghĩa các cột
 const COLUMNS = [
   // Nhóm thông tin hồ sơ (Read-only by default)
-  { key: "ma_ho_so", label: "Mã hồ sơ", width: "120px", readOnly: true },
+  { key: "ma_ho_so", label: "MÃ HỒ SƠ", width: "120px", readOnly: true },
   {
     key: "group_chu_su_dung",
-    label: "Thông tin chủ sử dụng",
+    label: "THÔNG TIN CHỦ SỬ DỤNG",
     width: "250px",
     readOnly: true,
   },
   {
     key: "group_thong_tin_ho_so",
-    label: "Thông tin hồ sơ",
+    label: "THÔNG TIN HỒ SƠ",
     width: "200px",
     readOnly: true,
   },
   {
     key: "group_thua_dat",
-    label: "Thông tin thửa đất",
+    label: "THÔNG TIN THỬA ĐẤT",
     width: "180px",
     readOnly: true,
   },
-  { key: "dia_danh", label: "Địa danh", width: "100px", readOnly: true },
+  { key: "dia_danh", label: "ĐỊA DANH", width: "100px", readOnly: true },
 
   // Nhóm kết quả (Always editable or specific logic)
-  { key: "loai_gcn", label: "Loại GCN", width: "120px" },
-  { key: "so_vao_so", label: "Số vào sổ", width: "120px" }, // Thay vì 50px
-  { key: "so_phat_hanh", label: "Số phát hành", width: "130px" }, // Thay vì 80px
-  { key: "ngay_ky_gcn", label: "Ngày ký GCN", width: "120px", type: "date" },
+  { key: "loai_gcn", label: "LOẠI GCN", width: "120px" },
+  { key: "so_vao_so", label: "SỐ VÀO SỔ", width: "120px" }, // Thay vì 50px
+  { key: "so_phat_hanh", label: "SỐ PHÁT HÀNH", width: "130px" }, // Thay vì 80px
+  { key: "ngay_ky_gcn", label: "NGÀY KÝ GCN", width: "120px", type: "date" },
   {
     key: "ngay_ky_phieu_tk",
-    label: "Chuyển Scan/1 Cửa",
+    label: "CHUYỂN SCAN/1 CỬA",
     width: "120px",
     type: "date",
   },
@@ -1393,17 +1393,17 @@ const VaoSoView: React.FC<VaoSoViewProps> = ({ currentUser, wards }) => {
                           return (
                             <td
                               key={`${r.id}-${col.key}`}
-                              className="p-0 border-r border-gray-200 relative"
+                              className="p-1 border-r border-gray-200 relative align-middle"
                             >
                               {isReadOnly ? (
-                                <div className="w-full h-full px-2 py-2 text-sm text-gray-700 whitespace-pre-wrap min-h-[40px] flex items-center">
+                                <div className="w-full h-full px-3 py-2 text-sm text-gray-700 whitespace-pre-wrap min-h-[40px] flex items-center">
                                   {r.data?.[col.key] || ""}
                                 </div>
                               ) : col.key === "so_vao_so" ? (
-                                <div className="flex h-full">
+                                <div className="p-1 flex items-center gap-1">
                                   <input
                                     type="text"
-                                    className="flex-1 min-w-0 px-2 py-2 text-sm bg-transparent border-none focus:ring-2 focus:ring-inset focus:ring-teal-500 outline-none"
+                                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm font-medium"
                                     value={r.data?.[col.key] || ""}
                                     onChange={(e) =>
                                       handleCellChange(
@@ -1418,7 +1418,7 @@ const VaoSoView: React.FC<VaoSoViewProps> = ({ currentUser, wards }) => {
                                   {activeTab === "all" && (
                                     <button
                                       onClick={() => handleGetBookNumber(r)}
-                                      className="px-2 bg-gray-100 hover:bg-blue-100 text-blue-600 border-l border-gray-200 transition-colors"
+                                      className="p-2 bg-gray-50 hover:bg-emerald-50 text-emerald-600 border border-gray-300 rounded-lg transition-colors shadow-sm flex items-center justify-center min-w-[34px] h-[34px]"
                                       title="Lấy số vào sổ tiếp theo"
                                     >
                                       <Hash size={14} />
@@ -1426,48 +1426,52 @@ const VaoSoView: React.FC<VaoSoViewProps> = ({ currentUser, wards }) => {
                                   )}
                                 </div>
                               ) : col.key === "ten_chu_su_dung" ? (
-                                <textarea
-                                  className="w-full h-full px-2 py-2 text-sm bg-transparent border-none focus:ring-2 focus:ring-inset focus:ring-teal-500 outline-none resize-none whitespace-pre-wrap"
-                                  value={r.data?.[col.key] || ""}
-                                  onChange={(e) =>
-                                    handleCellChange(
-                                      r.id,
-                                      col.key,
-                                      e.target.value,
-                                    )
-                                  }
-                                  onBlur={() => handleBlur(r)}
-                                  readOnly={activeTab === "scanned"}
-                                  rows={2}
-                                  style={{ minHeight: "40px" }}
-                                />
+                                <div className="p-1">
+                                  <textarea
+                                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm resize-none whitespace-pre-wrap font-medium"
+                                    value={r.data?.[col.key] || ""}
+                                    onChange={(e) =>
+                                      handleCellChange(
+                                        r.id,
+                                        col.key,
+                                        e.target.value,
+                                      )
+                                    }
+                                    onBlur={() => handleBlur(r)}
+                                    readOnly={activeTab === "scanned"}
+                                    rows={2}
+                                    style={{ minHeight: "40px" }}
+                                  />
+                                </div>
                               ) : col.key === "loai_gcn" ? (
-                                <select
-                                  className="w-full h-full px-2 py-2 text-sm bg-transparent border-none focus:ring-2 focus:ring-inset focus:ring-teal-500 outline-none"
-                                  value={r.data?.[col.key] || "GCN mới"}
-                                  onChange={(e) => {
-                                    handleCellChange(
-                                      r.id,
-                                      col.key,
-                                      e.target.value,
-                                    );
-                                    handleBlur({
-                                      ...r,
-                                      data: {
-                                        ...r.data,
-                                        [col.key]: e.target.value,
-                                      },
-                                    });
-                                  }}
-                                  disabled={activeTab === "scanned"}
-                                >
-                                  <option value="GCN mới">GCN mới</option>
-                                  <option value="GCN trang 4">
-                                    GCN trang 4
-                                  </option>
-                                </select>
+                                <div className="p-1">
+                                  <select
+                                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm cursor-pointer font-medium"
+                                    value={r.data?.[col.key] || "GCN mới"}
+                                    onChange={(e) => {
+                                      handleCellChange(
+                                        r.id,
+                                        col.key,
+                                        e.target.value,
+                                      );
+                                      handleBlur({
+                                        ...r,
+                                        data: {
+                                          ...r.data,
+                                          [col.key]: e.target.value,
+                                        },
+                                      });
+                                    }}
+                                    disabled={activeTab === "scanned"}
+                                  >
+                                    <option value="GCN mới">GCN mới</option>
+                                    <option value="GCN trang 4">
+                                      GCN trang 4
+                                    </option>
+                                  </select>
+                                </div>
                               ) : col.key === "so_phat_hanh" ? (
-                                <div className="flex flex-col p-1 gap-1 min-w-[80px]">
+                                <div className="flex flex-col p-1 gap-1.5 min-w-[120px]">
                                   {(r.data?.[col.key] || "")
                                     .split("\n")
                                     .map(
@@ -1478,11 +1482,11 @@ const VaoSoView: React.FC<VaoSoViewProps> = ({ currentUser, wards }) => {
                                       ) => (
                                         <div
                                           key={idx}
-                                          className="flex items-center gap-1 group/input"
+                                          className="flex items-center gap-1 group/input relative"
                                         >
                                           <input
                                             type="text"
-                                            className="flex-1 min-w-0 px-2 py-1 text-sm bg-transparent border-b border-gray-200 focus:border-teal-500 outline-none"
+                                            className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm font-medium pr-7"
                                             value={val}
                                             onChange={(e) => {
                                               const newArr = [...arr];
@@ -1517,7 +1521,7 @@ const VaoSoView: React.FC<VaoSoViewProps> = ({ currentUser, wards }) => {
                                                   },
                                                 });
                                               }}
-                                              className="text-gray-300 hover:text-red-500 p-1 opacity-0 group-hover/input:opacity-100 transition-opacity"
+                                              className="text-gray-400 hover:text-red-500 p-1 absolute right-2 top-1/2 -translate-y-1/2 transition-colors"
                                               tabIndex={-1}
                                               title="Xóa dòng này"
                                             >
@@ -1534,39 +1538,41 @@ const VaoSoView: React.FC<VaoSoViewProps> = ({ currentUser, wards }) => {
                                         current === "" ? "\n" : current + "\n";
                                       handleCellChange(r.id, col.key, newVal);
                                     }}
-                                    className="flex items-center justify-center gap-1 text-[10px] bg-blue-50 text-blue-600 py-1.5 rounded hover:bg-blue-100 mt-1 font-bold transition-colors w-full"
+                                    className="flex items-center justify-center gap-1 text-xs bg-blue-50/70 text-blue-600 hover:bg-blue-100/80 py-1.5 rounded-lg border border-blue-200 shadow-sm font-bold transition-colors w-full"
                                   >
                                     <Plus size={12} /> Thêm số
                                   </button>
                                 </div>
                               ) : (
-                                <input
-                                  type={col.type || "text"}
-                                  className="w-full h-full px-2 py-2 text-sm bg-transparent border-none focus:ring-2 focus:ring-inset focus:ring-teal-500 outline-none"
-                                  value={r.data?.[col.key] || ""}
-                                  onChange={(e) =>
-                                    handleCellChange(
-                                      r.id,
-                                      col.key,
-                                      e.target.value,
-                                    )
-                                  }
-                                  onBlur={() => handleBlur(r)}
-                                  readOnly={activeTab === "scanned"}
-                                />
+                                <div className="p-1">
+                                  <input
+                                    type={col.type || "text"}
+                                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none shadow-sm font-medium"
+                                    value={r.data?.[col.key] || ""}
+                                    onChange={(e) =>
+                                      handleCellChange(
+                                        r.id,
+                                        col.key,
+                                        e.target.value,
+                                      )
+                                    }
+                                    onBlur={() => handleBlur(r)}
+                                    readOnly={activeTab === "scanned"}
+                                  />
+                                </div>
                               )}
                             </td>
                           );
                         })}
                         {activeTab === "scanned" && (
                           <>
-                            <td className="p-2 border-r border-gray-200 text-xs text-gray-600">
+                            <td className="p-2 border-r border-gray-200 text-xs text-gray-600 align-middle">
                               {r.data?.scan_batch_id}
                             </td>
                           </>
                         )}
-                        <td className="p-2 text-center bg-white sticky right-0 group-hover:bg-teal-50/30 z-10 border-l border-gray-200">
-                          <div className="flex flex-col gap-2 items-center justify-center h-full w-full">
+                        <td className="p-2 text-center bg-white sticky right-0 group-hover:bg-teal-50/30 z-10 border-l border-gray-200 align-middle">
+                          <div className="flex items-center justify-center gap-1.5">
                             {activeTab === "all" && (
                               <>
                                 <button
@@ -1575,9 +1581,9 @@ const VaoSoView: React.FC<VaoSoViewProps> = ({ currentUser, wards }) => {
                                   title={editingId === r.id ? "Xong" : "Sửa"}
                                 >
                                   {editingId === r.id ? (
-                                    <CheckCircle2 size={18} />
+                                    <CheckCircle2 size={16} />
                                   ) : (
-                                    <Edit size={18} />
+                                    <Edit size={16} />
                                   )}
                                 </button>
                                 <button
@@ -1587,7 +1593,7 @@ const VaoSoView: React.FC<VaoSoViewProps> = ({ currentUser, wards }) => {
                                   className="p-2 text-indigo-600 bg-white border border-gray-200 hover:bg-indigo-50 hover:border-indigo-300 rounded-lg transition-colors shadow-sm"
                                   title="Chuyển Scan"
                                 >
-                                  <Send size={18} />
+                                  <Send size={16} />
                                 </button>
                               </>
                             )}
@@ -1596,7 +1602,7 @@ const VaoSoView: React.FC<VaoSoViewProps> = ({ currentUser, wards }) => {
                               className="p-2 text-gray-500 bg-white border border-gray-200 hover:text-red-600 hover:bg-red-50 hover:border-red-300 rounded-lg transition-colors shadow-sm"
                               title="Xóa dòng này"
                             >
-                              <Trash2 size={18} />
+                              <Trash2 size={16} />
                             </button>
                           </div>
                         </td>

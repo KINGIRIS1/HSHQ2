@@ -202,15 +202,14 @@ export const createRecordApi = async (record: RecordFile): Promise<RecordFile | 
         const { data, error } = await supabase.from('land_records').insert([payload]).select();
         
         if (error && (error.code === 'PGRST204' || String(error.code) === '42703' || (error.message && String(error.message).includes('does not exist')))) {
-            console.warn("⚠️ [Fallback] Database is missing columns. Retrying without new columns...");
-            if (!(window as any).fallbackAlertShown) {
-                logError("createRecordApi", error);
-                (window as any).fallbackAlertShown = true;
-            }
+            console.warn("⚠️ [Fallback] Database is missing columns. Retrying without new columns...", error);
             const fallbackPayload = { ...payload };
             OPTIONAL_NEW_COLUMNS.forEach(col => delete fallbackPayload[col]);
             const { data: fallbackData, error: fallbackError } = await supabase.from('land_records').insert([fallbackPayload]).select();
-            if (fallbackError) throw fallbackError;
+            if (fallbackError) {
+                logError("createRecordApi (Fallback)", fallbackError);
+                throw fallbackError;
+            }
             return mapRecordFromDb({ ...recordToSave, ...(fallbackData?.[0] || {}) }) as RecordFile;
         }
         
@@ -229,15 +228,14 @@ export const updateRecordApi = async (record: RecordFile): Promise<RecordFile | 
         const { data, error } = await supabase.from('land_records').update(payload).eq('id', record.id).select();
         
         if (error && (error.code === 'PGRST204' || String(error.code) === '42703' || (error.message && String(error.message).includes('does not exist')))) {
-            console.warn("⚠️ [Fallback] Database is missing columns. Retrying without new columns...");
-            if (!(window as any).fallbackAlertShown) {
-                logError("updateRecordApi", error);
-                (window as any).fallbackAlertShown = true;
-            }
+            console.warn("⚠️ [Fallback] Database is missing columns. Retrying without new columns...", error);
             const fallbackPayload = { ...payload };
             OPTIONAL_NEW_COLUMNS.forEach(col => delete fallbackPayload[col]);
             const { data: fallbackData, error: fallbackError } = await supabase.from('land_records').update(fallbackPayload).eq('id', record.id).select();
-            if (fallbackError) throw fallbackError;
+            if (fallbackError) {
+                logError("updateRecordApi (Fallback)", fallbackError);
+                throw fallbackError;
+            }
             return mapRecordFromDb({ ...record, ...(fallbackData?.[0] || {}) }) as RecordFile;
         }
         
@@ -288,18 +286,17 @@ export const createRecordsBatchApi = async (records: RecordFile[], onProgress?: 
             const { error } = await supabase.from('land_records').insert(chunk);
             
             if (error && (error.code === 'PGRST204' || String(error.code) === '42703' || (error.message && String(error.message).includes('does not exist')))) {
-                console.warn(`⚠️ [Fallback] Database is missing columns. Retrying batch insert chunk ${i} without new columns...`);
-                if (!(window as any).fallbackAlertShown) {
-                    logError("createRecordsBatchApi", error);
-                    (window as any).fallbackAlertShown = true;
-                }
+                console.warn(`⚠️ [Fallback] Database is missing columns. Retrying batch insert chunk ${i} without new columns...`, error);
                 const fallbackPayload = chunk.map(p => {
                     const fp = { ...p };
                     OPTIONAL_NEW_COLUMNS.forEach(col => delete fp[col]);
                     return fp;
                 });
                 const { error: fallbackError } = await supabase.from('land_records').insert(fallbackPayload);
-                if (fallbackError) throw fallbackError;
+                if (fallbackError) {
+                    logError("createRecordsBatchApi (Fallback)", fallbackError);
+                    throw fallbackError;
+                }
             } else if (error) {
                 throw error;
             }
@@ -453,18 +450,17 @@ export const forceUpdateRecordsBatchApi = async (records: RecordFile[], onProgre
                 const { error: upsertError } = await supabase.from('land_records').upsert(updatesToPush);
                 
                 if (upsertError && (upsertError.code === 'PGRST204' || String(upsertError.code) === '42703' || (upsertError.message && String(upsertError.message).includes('does not exist')))) {
-                    console.warn(`⚠️ [Fallback] Retrying chunk target upsert without new columns...`);
-                    if (!(window as any).fallbackAlertShown) {
-                        logError("forceUpdateRecordsBatchApi", upsertError);
-                        (window as any).fallbackAlertShown = true;
-                    }
+                    console.warn(`⚠️ [Fallback] Retrying chunk target upsert without new columns...`, upsertError);
                     const fallbackPayload = updatesToPush.map(p => {
                         const fp = { ...p };
                         OPTIONAL_NEW_COLUMNS.forEach(col => delete fp[col]);
                         return fp;
                     });
                     const { error: fallbackError } = await supabase.from('land_records').upsert(fallbackPayload);
-                    if (fallbackError) throw fallbackError;
+                    if (fallbackError) {
+                        logError("forceUpdateRecordsBatchApi (Fallback)", fallbackError);
+                        throw fallbackError;
+                    }
                 } else if (upsertError) {
                     throw upsertError;
                 }
@@ -506,11 +502,7 @@ export const updateRecordsBatchById = async (updates: Partial<RecordFile>[], onP
             .upsert(rows);
 
         if (error && (error.code === 'PGRST204' || String(error.code) === '42703' || (error.message && String(error.message).includes('does not exist')))) {
-            console.warn("⚠️ [Fallback] Database is missing columns. Retrying batch update without new columns...");
-            if (!(window as any).fallbackAlertShown) {
-                logError("updateRecordsBatchById", error);
-                (window as any).fallbackAlertShown = true;
-            }
+            console.warn("⚠️ [Fallback] Database is missing columns. Retrying batch update without new columns...", error);
             const fallbackRows = updates.map(u => {
                 const fp = sanitizeData(u, RECORD_DB_COLUMNS);
                 OPTIONAL_NEW_COLUMNS.forEach(col => delete fp[col]);
@@ -519,7 +511,10 @@ export const updateRecordsBatchById = async (updates: Partial<RecordFile>[], onP
             const { error: fallbackError } = await supabase
                 .from('land_records')
                 .upsert(fallbackRows);
-            if (fallbackError) throw fallbackError;
+            if (fallbackError) {
+                logError("updateRecordsBatchById (Fallback)", fallbackError);
+                throw fallbackError;
+            }
             if (onProgress) onProgress(updates.length, updates.length);
             return { success: true, count: updates.length };
         }

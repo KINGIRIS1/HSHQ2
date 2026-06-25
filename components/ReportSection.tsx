@@ -333,7 +333,15 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
         }
     };
 
-    const formatDate = (d?: string | null) => d ? new Date(d).toLocaleDateString('vi-VN') : '-';
+    const formatDate = (d?: string | null) => {
+        if (!d) return '-';
+        const date = new Date(d);
+        if (isNaN(date.getTime())) return '-';
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+    };
 
     return (
         <div className="flex flex-col h-full overflow-hidden relative bg-slate-50">

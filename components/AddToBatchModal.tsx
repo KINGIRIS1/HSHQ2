@@ -7,12 +7,60 @@ import { fetchChinhLyRecords } from '../services/apiUtilities';
 interface AddToBatchModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (batch: number, date: string, handoverWard?: string) => void;
+  onConfirm: (batch: number, date: string, handoverWard?: string, updatedRecords?: RecordFile[]) => void;
   records: RecordFile[];
   selectedCount: number;
   targetRecords?: RecordFile[]; // Prop này quan trọng để kiểm tra warning
   wards?: string[];
+  currentView?: string;
 }
+
+const getRecordGroup = (r: RecordFile): 'measurement' | 'registration' | 'archive_congvan' | 'other' => {
+    const type = r.recordType || '';
+    if (type === 'Cung cấp tài liệu đất đai' || type === 'Sao lục' || type === 'Công văn') {
+        return 'archive_congvan';
+    }
+    const isReg = (t: string | null | undefined): boolean => {
+        if (!t) return false;
+        const low = t.trim().toLowerCase();
+        const REG_PROCEDURES = [
+            "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
+            "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
+        ];
+        return low.startsWith('3.') || low === 'đăng ký' || low === 'cấp giấy' || low === 'cấp đổi' || low === 'cấp lại' || REG_PROCEDURES.some(p => low.includes(p));
+    };
+    if (isReg(type)) {
+        return 'registration';
+    }
+    if (['CMD', 'Tòa án', 'Thi hành án'].includes(type)) {
+        return 'other';
+    }
+    return 'measurement';
+};
+
+const getViewActiveGroup = (view: string): 'measurement' | 'registration' | 'archive_congvan' | 'other' => {
+    if (['archive_records', 'archive_assign_tasks', 'archive_completed_list', 'archive_pending_check_list', 'archive_check_list', 'archive_handover_list', 'archive_director_completed'].includes(view)) {
+        return 'archive_congvan';
+    }
+    if (['congvan_records', 'congvan_assign_tasks', 'congvan_completed_list', 'congvan_check_list', 'congvan_handover_list', 'congvan_director_completed'].includes(view)) {
+        return 'archive_congvan';
+    }
+    if (['registration_records', 'registration_assign_tasks', 'registration_completed_list', 'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 'registration_director_completed'].includes(view)) {
+        return 'registration';
+    }
+    if (['other_records', 'other_assign_tasks', 'other_check_list', 'other_handover_list', 'other_director_completed'].includes(view)) {
+        return 'other';
+    }
+    return 'measurement';
+};
+
+const isRegistrationRecord = (type: string | null | undefined): boolean => {
+    if (!type) return false;
+    const t = type.trim().toLowerCase();
+    const isRegPrefix = t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại';
+    if (isRegPrefix) return true;
+    return t.includes('đăng ký') || t.includes('cấp giấy') || t.includes('cấp đổi') || t.includes('cấp lại') || t.includes('chuyển nhượng') || t.includes('tặng cho') || t.includes('thừa kế');
+};
 
 const AddToBatchModal: React.FC<AddToBatchModalProps> = ({ 
   isOpen, 
@@ -21,10 +69,24 @@ const AddToBatchModal: React.FC<AddToBatchModalProps> = ({
   records, 
   selectedCount,
   targetRecords = [], // Giá trị mặc định
-  wards = []
+  wards = [],
+  currentView
 }) => {
   const [mode, setMode] = useState<'new' | 'existing'>('new');
   const [selectedExistingBatch, setSelectedExistingBatch] = useState<string>('');
+  
+  // State quản lý danh sách hồ sơ để thay đổi cờ DNLis
+  const [localRecords, setLocalRecords] = useState<RecordFile[]>([]);
+
+  useEffect(() => {
+    if (isOpen && targetRecords) {
+        setLocalRecords(targetRecords);
+    }
+  }, [isOpen, targetRecords]);
+
+  const handleToggleDNLis = (recordId: string, checked: boolean) => {
+      setLocalRecords(prev => prev.map(r => r.id === recordId ? { ...r, transferToDNLis: checked } : r));
+  };
   
   // State xác nhận danh sách chỉnh lý
   const [needsCorrectionConfirm, setNeedsCorrectionConfirm] = useState(false);
@@ -78,9 +140,16 @@ const AddToBatchModal: React.FC<AddToBatchModalProps> = ({
       checkWarnings();
   }, [isOpen, targetRecords]);
 
+  // Lọc records theo nhóm bộ phận của view hiện tại để tính đợt giao riêng biệt
+  const filteredRecordsForBatches = useMemo(() => {
+      if (!currentView) return records;
+      const activeGroup = getViewActiveGroup(currentView);
+      return records.filter(r => getRecordGroup(r) === activeGroup);
+  }, [records, currentView]);
+
   const nextBatchInfo = useMemo(() => {
       let maxBatch = 0;
-      records.forEach(r => {
+      filteredRecordsForBatches.forEach(r => {
           if (r.exportBatch && r.exportDate && r.exportDate.startsWith(todayStr)) {
               if (r.exportBatch > maxBatch) maxBatch = r.exportBatch;
           }
@@ -89,12 +158,12 @@ const AddToBatchModal: React.FC<AddToBatchModalProps> = ({
           batch: maxBatch + 1,
           date: new Date().toISOString() // Dùng ISO đầy đủ cho chính xác
       };
-  }, [records, todayStr]);
+  }, [filteredRecordsForBatches, todayStr]);
 
   const historyBatches = useMemo(() => {
       const batches: Record<string, { date: string, batch: number, count: number, fullDate: string }> = {};
       
-      records.forEach(r => {
+      filteredRecordsForBatches.forEach(r => {
           if ((r.status === RecordStatus.HANDOVER || r.status === RecordStatus.SIGNED || r.status === RecordStatus.WITHDRAWN || r.status === RecordStatus.REJECTED) && r.exportBatch && r.exportDate) {
               const datePart = r.exportDate.split('T')[0];
               const key = `${datePart}_${r.exportBatch}`;
@@ -116,7 +185,11 @@ const AddToBatchModal: React.FC<AddToBatchModalProps> = ({
           if (dateDiff !== 0) return dateDiff;
           return b.batch - a.batch;
       });
-  }, [records]);
+  }, [filteredRecordsForBatches]);
+
+  const registrationRecordsInBatch = useMemo(() => {
+      return localRecords.filter(r => isRegistrationRecord(r.recordType));
+  }, [localRecords]);
 
   useEffect(() => {
       if (mode === 'existing' && historyBatches.length > 0 && !selectedExistingBatch) {
@@ -142,7 +215,7 @@ const AddToBatchModal: React.FC<AddToBatchModalProps> = ({
       const handoverWard = isNonGeographic ? selectedHandoverWard : undefined;
 
       if (mode === 'new') {
-          onConfirm(nextBatchInfo.batch, nextBatchInfo.date, handoverWard);
+          onConfirm(nextBatchInfo.batch, nextBatchInfo.date, handoverWard, localRecords);
       } else {
           if (!selectedExistingBatch) {
               alert('Vui lòng chọn một đợt cũ.');
@@ -153,7 +226,7 @@ const AddToBatchModal: React.FC<AddToBatchModalProps> = ({
           const found = historyBatches.find(h => h.date === datePart && h.batch === batchNum);
           
           if (found) {
-              onConfirm(found.batch, found.fullDate, handoverWard);
+              onConfirm(found.batch, found.fullDate, handoverWard, localRecords);
           }
       }
       setNeedsCorrectionConfirm(false); // Reset
@@ -163,7 +236,10 @@ const AddToBatchModal: React.FC<AddToBatchModalProps> = ({
   };
 
   const formatDate = (d: string) => {
-      const parts = d.split('-');
+      if (!d) return '';
+      const dateOnly = d.includes('T') ? d.split('T')[0] : d;
+      const parts = dateOnly.split('-');
+      if (parts.length < 3) return d;
       return `${parts[2]}/${parts[1]}/${parts[0]}`;
   };
 
@@ -263,6 +339,33 @@ const AddToBatchModal: React.FC<AddToBatchModalProps> = ({
                     </div>
                 </div>
             </label>
+
+            {/* CẤU HÌNH DNLIS CHO HỒ SƠ CẤP GIẤY */}
+            {registrationRecordsInBatch.length > 0 && (
+                <div className="bg-amber-50/45 border border-amber-200/80 rounded-lg p-3 space-y-2 max-h-40 overflow-y-auto">
+                    <div className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-1.5">
+                        Xác định quy trình DNLis cho hồ sơ cấp giấy
+                    </div>
+                    <p className="text-[11px] text-gray-500">
+                        Chọn hồ sơ chạy quy trình DNLis (không chọn sẽ chạy quy trình Phiếu chuyển 3 ngày):
+                    </p>
+                    <div className="space-y-1.5 pt-1">
+                        {registrationRecordsInBatch.map(r => (
+                            <label key={r.id} className="flex items-center justify-between gap-3 p-1.5 rounded bg-white hover:bg-amber-50 border border-gray-100 transition-colors cursor-pointer">
+                                <span className="text-xs text-gray-700 font-medium truncate flex-1">
+                                    <strong>{r.code}</strong> - {r.customerName}
+                                </span>
+                                <input 
+                                    type="checkbox" 
+                                    className="w-4 h-4 text-amber-600 focus:ring-amber-500 rounded cursor-pointer"
+                                    checked={!!r.transferToDNLis}
+                                    onChange={(e) => handleToggleDNLis(r.id, e.target.checked)}
+                                />
+                            </label>
+                        ))}
+                    </div>
+                </div>
+            )}
 
             {/* Giao phi địa giới */}
             <div className="mt-4 border-t pt-4">

@@ -46,6 +46,16 @@ function removeVietnameseTones(str: string): string {
     return str;
 }
 
+const isRegType = (type: string | null | undefined): boolean => {
+    if (!type) return false;
+    const t = type.trim().toLowerCase();
+    const REG_PROCEDURES = [
+        "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
+        "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
+    ];
+    return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
+};
+
 const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDirector, users, employees, rolePermissions, onUpdateStatus, onUpdateRecord, onViewRecord, onCreateLiquidation, onMapCorrection }) => {
   const effectiveId = useMemo(() => {
     if (user.employeeId) return user.employeeId;
@@ -125,12 +135,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
 
     const mainRecords = records.filter(r => {
         if (user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN) {
-            // Exclude records of directors or leaders
-            if (isDirectorOrLeader(r.assignedTo) || isDirectorOrLeader(r.checkedBy) || isDirectorOrLeader(r.submittedTo)) {
-                return false;
-            }
+            // Chỉ hiển thị những hồ sơ được giao đích danh cho tài khoản quản trị
+            return r.assignedTo === effectiveId || r.checkedBy === effectiveId || r.submittedTo === effectiveId;
         }
-        if (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN) {
+        if (isDirector) {
             return r.submittedTo === effectiveId || r.assignedTo === effectiveId || !r.submittedTo;
         }
         // Nếu là người lãnh đạo/kiểm tra hoặc có vai trò TEAM_LEADER/Tổ trưởng/Tổ phó, họ có thể thấy hồ sơ liên quan đến họ
@@ -151,11 +159,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
     const mappedArchives = archiveRecords
         .filter(r => {
             if (user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN) {
-                if (isDirectorOrLeader(r.data?.assigned_to) || isDirectorOrLeader(r.data?.checked_by) || isDirectorOrLeader(r.data?.submitted_to)) {
-                    return false;
-                }
+                // Chỉ hiển thị những hồ sơ lưu trữ được giao đích danh cho tài khoản quản trị
+                return r.data?.assigned_to === effectiveId || r.data?.checked_by === effectiveId || r.data?.submitted_to === effectiveId;
             }
-            if (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN) {
+            if (isDirector) {
                 return r.data?.submitted_to === effectiveId || r.data?.assigned_to === effectiveId || !r.data?.submitted_to; 
             }
             const empPosition = (employees.find(e => e.id === effectiveId)?.position || '').toLowerCase();
@@ -203,8 +210,8 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                 assignedDate: r.data?.assigned_date,
                 approvalDate: null,
                 completedDate: null,
-                notes: null,
-                privateNotes: null,
+                notes: r.data?.notes || null,
+                privateNotes: r.data?.privateNotes || null,
                 personalNotes: null,
                 authorizedBy: null,
                 authDocType: null,
@@ -709,6 +716,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
               status: RecordStatus.ASSIGNED,
               notes: updatedNotes,
               privateNotes: updatedPrivateNotes,
+              hasDefect: isRegType(returnStepTargetRecord.recordType),
               pendingCheckDate: null,
               checkedBy: null,
               checkedDate: null,
@@ -803,6 +811,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
               privateNotes: updatedPrivateNotes,
               rejectDate: dateStr,
               rejectReason: reason,
+              hasDefect: isRegType(rejectTargetRecord.recordType),
               pendingCheckDate: null,
               checkedBy: null,
               checkedDate: null,
@@ -1373,13 +1382,19 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                           }
                       } else {
                           // Hồ sơ Đo đạc thường
-                          await onUpdateRecord?.({
+                          const updatedRecord = {
                               ...record,
                               status: RecordStatus.PENDING_CHECK,
                               completedWorkDate: record.completedWorkDate || new Date().toISOString(),
                               pendingCheckDate: new Date().toISOString(),
                               checkedBy: checkerId
-                          });
+                          };
+                          if (onUpdateRecord) {
+                              await onUpdateRecord(updatedRecord);
+                          } else {
+                              await updateRecordApi(updatedRecord);
+                              onUpdateStatus(record, RecordStatus.PENDING_CHECK);
+                          }
                       }
                   }
                   

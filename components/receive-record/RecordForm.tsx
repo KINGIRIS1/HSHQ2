@@ -11,7 +11,7 @@ interface RecordFormProps {
   records: RecordFile[];
   holidays: Holiday[];
   calculateDeadline: (type: string, date: string, hasTax?: boolean) => string;
-  generateCode: (ward: string, date: string) => string;
+  generateCode: (ward: string, date: string, recordType?: string) => string;
   onPrint?: (data: Partial<RecordFile>) => void;
   initialData?: RecordFile | null;
   onCancelEdit?: () => void;
@@ -399,14 +399,12 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
 
   useEffect(() => {
     if (!(initialData && initialData.id)) {
-        const isReg = isRegistration(formData.recordType);
-        if (isReg) {
-            // Chỉ xóa trắng mã khi chuyển từ loại hồ sơ khác sang loại Cấp Giấy
-            if (formData.recordType !== prevRecordTypeRef.current) {
-                setFormData(prev => ({ ...prev, code: '' }));
-            }
+        if (formData.recordType) {
+            const newCode = generateCode(processingWard, formData.receivedDate || '', formData.recordType);
+            setFormData(prev => ({ ...prev, code: newCode }));
         } else {
-            const newCode = generateCode(processingWard, formData.receivedDate || '');
+            // Default generate code with empty type or fallback
+            const newCode = generateCode(processingWard, formData.receivedDate || '', '');
             setFormData(prev => ({ ...prev, code: newCode }));
         }
     }
@@ -578,10 +576,13 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
             // Tự động bật/tắt quy trình thuế dựa trên thủ tục được chọn
             if (isDefaultTaxProcedure(value)) {
                 setHasTaxProcedure(true);
+                newData.hasTax = true;
             } else if (isRegistration(value)) {
                 setHasTaxProcedure(false);
+                newData.hasTax = false;
             } else {
                 setHasTaxProcedure(false);
+                newData.hasTax = false;
             }
         }
         return newData;
@@ -784,7 +785,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                                     onChange={(e) => handleChange('code', e.target.value)} 
                                 />
                             </div>
-                            <div className="md:col-span-3">
+                            <div className={isRegistration(formData.recordType) && !isDefaultTaxProcedure(formData.recordType) ? "md:col-span-2" : "md:col-span-3"}>
                                 <label className={labelClass}>Loại hồ sơ</label>
                                 <select 
                                     className={selectClass} 
@@ -797,26 +798,16 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                                     ))}
                                 </select>
                             </div>
-                            {isRegistration(formData.recordType) && (
-                                <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-amber-50/50 p-3 rounded-lg border border-amber-200/60 mt-2">
-                                    <label className="flex items-center gap-2.5 text-sm font-bold text-amber-900 cursor-pointer">
+                            {isRegistration(formData.recordType) && !isDefaultTaxProcedure(formData.recordType) && (
+                                <div className="md:col-span-1 flex items-center h-10 pb-0.5">
+                                    <label className="flex items-center gap-2.5 text-sm font-bold text-amber-900 cursor-pointer bg-amber-50/50 hover:bg-amber-100/50 border border-amber-200/60 px-3 py-2 rounded-md w-full justify-center transition-all">
                                         <input
                                             type="checkbox"
                                             className="w-4 h-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500 cursor-pointer"
                                             checked={!!formData.hasTax}
                                             onChange={(e) => handleChange('hasTax', e.target.checked)}
                                         />
-                                        Hồ sơ có thuế (Thêm 10 ngày quy trình)
-                                    </label>
-                                    <label className={`flex items-center gap-2.5 text-sm font-bold cursor-pointer ${formData.hasTax ? 'text-amber-900' : 'text-slate-400 opacity-60'}`}>
-                                        <input
-                                            type="checkbox"
-                                            disabled={!formData.hasTax}
-                                            className="w-4 h-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500 cursor-pointer disabled:cursor-not-allowed"
-                                            checked={!!formData.transferToDNLis}
-                                            onChange={(e) => handleChange('transferToDNLis', e.target.checked)}
-                                        />
-                                        Chuyển qua DNLis (1 ngày nếu chuyển, không chuyển 3 ngày Phiếu chuyển)
+                                        Hồ sơ có thuế
                                     </label>
                                 </div>
                             )}
@@ -878,7 +869,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                     <div className="p-4 space-y-4">
                         {/* Row 1: Loại hồ sơ (Dropdown) & Quy trình thuế */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-                            <div className="md:col-span-4">
+                            <div className={isRegistration(formData.recordType) && !isDefaultTaxProcedure(formData.recordType) ? "md:col-span-3" : "md:col-span-4"}>
                                 <label className={`${labelClass} text-blue-600`}>Loại hồ sơ / Nội dung yêu cầu (Thủ tục thực hiện) <span className="text-red-500">*</span></label>
                                 <div className="relative" ref={dropdownRef}>
                                     <input
@@ -913,26 +904,16 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                                     )}
                                 </div>
                             </div>
-                            {isRegistration(formData.recordType) && (
-                                <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-amber-50/50 p-3 rounded-lg border border-amber-200/60 mt-2">
-                                    <label className="flex items-center gap-2.5 text-sm font-bold text-amber-900 cursor-pointer">
+                            {isRegistration(formData.recordType) && !isDefaultTaxProcedure(formData.recordType) && (
+                                <div className="md:col-span-1 flex items-center h-10 pb-0.5">
+                                    <label className="flex items-center gap-2.5 text-sm font-bold text-amber-900 cursor-pointer bg-amber-50/50 hover:bg-amber-100/50 border border-amber-200/60 px-3 py-2 rounded-md w-full justify-center transition-all">
                                         <input
                                             type="checkbox"
                                             className="w-4 h-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500 cursor-pointer"
                                             checked={!!formData.hasTax}
                                             onChange={(e) => handleChange('hasTax', e.target.checked)}
                                         />
-                                        Hồ sơ có thuế (Thêm 10 ngày quy trình)
-                                    </label>
-                                    <label className={`flex items-center gap-2.5 text-sm font-bold cursor-pointer ${formData.hasTax ? 'text-amber-900' : 'text-slate-400 opacity-60'}`}>
-                                        <input
-                                            type="checkbox"
-                                            disabled={!formData.hasTax}
-                                            className="w-4 h-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500 cursor-pointer disabled:cursor-not-allowed"
-                                            checked={!!formData.transferToDNLis}
-                                            onChange={(e) => handleChange('transferToDNLis', e.target.checked)}
-                                        />
-                                        Chuyển qua DNLis (1 ngày nếu chuyển, không chuyển 3 ngày Phiếu chuyển)
+                                        Hồ sơ có thuế
                                     </label>
                                 </div>
                             )}

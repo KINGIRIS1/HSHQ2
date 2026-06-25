@@ -12,7 +12,7 @@ import { exportReportToExcel, exportReturnedListToExcel } from './utils/excelExp
 import { generateReport } from './services/geminiService';
 import { syncTemplatesFromCloud } from './services/docxService'; 
 import { updateRecordApi, saveEmployeeApi, saveUserApi, forceUpdateRecordsBatchApi, updateRecordsBatchById } from './services/api';
-import { migrateCungCapTaiLieu } from './services/apiArchive';
+import { migrateCungCapTaiLieu, saveArchiveRecord, fetchArchiveRecords } from './services/apiArchive';
 import * as XLSX from 'xlsx-js-style';
 import { CheckCircle, AlertTriangle } from 'lucide-react';
 
@@ -28,6 +28,16 @@ import SubmitModal from './components/receive-record/SubmitModal';
 import GlobalConfirmModal from './components/GlobalConfirmModal';
 import GlobalAlertModal from './components/GlobalAlertModal';
 import RejectReasonModal from './components/receive-record/RejectReasonModal';
+
+const isRegType = (type: string | null | undefined): boolean => {
+    if (!type) return false;
+    const t = type.trim().toLowerCase();
+    const REG_PROCEDURES = [
+        "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
+        "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
+    ];
+    return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
+};
 
 function App() {
   const isMobile = useIsMobile(768);
@@ -74,6 +84,48 @@ function App() {
   const [returnRecord, setReturnRecord] = useState<RecordFile | null>(null);
   const [isRejectReasonModalOpen, setIsRejectReasonModalOpen] = useState(false);
   const [rejectRecordsTarget, setRejectRecordsTarget] = useState<RecordFile[]>([]);
+
+  // States for GCN / Cấp giấy workflow additional inputs
+  const [taxModalOpen, setTaxModalOpen] = useState(false);
+  const [taxTargetRecord, setTaxTargetRecord] = useState<RecordFile | null>(null);
+  const [taxLandPlot, setTaxLandPlot] = useState('');
+  const [taxMapSheet, setTaxMapSheet] = useState('');
+  const [taxArea, setTaxArea] = useState('');
+
+  const [foilModalOpen, setFoilModalOpen] = useState(false);
+  const [foilTargetRecord, setFoilTargetRecord] = useState<RecordFile | null>(null);
+  const [foilNumber, setFoilNumber] = useState('');
+
+  // Helper to calculate the next sequence number for Vào sổ GCN (Sổ vô số cấp giấy)
+  const calculateNextVaoSoNumber = async (): Promise<string> => {
+      try {
+          const archiveRecords = await fetchArchiveRecords('vaoso');
+          let maxNum = 0;
+          if (archiveRecords && archiveRecords.length > 0) {
+              archiveRecords.forEach(r => {
+                  const val = r.data?.so_vao_so || "";
+                  if (val.startsWith("CN ")) {
+                      const numPart = val.replace("CN ", "");
+                      const num = parseInt(numPart, 10);
+                      if (!isNaN(num) && num > maxNum) {
+                          maxNum = num;
+                      }
+                  } else {
+                      const num = parseInt(val, 10);
+                      if (!isNaN(num) && num > maxNum) {
+                          maxNum = num;
+                      }
+                  }
+              });
+          }
+          const nextNum = maxNum + 1;
+          const padded = String(nextNum).padStart(6, '0');
+          return `CN ${padded}`;
+      } catch (e) {
+          console.error("Lỗi khi tính số vào sổ tiếp theo:", e);
+          return "CN 000001";
+      }
+  };
 
   // Report States
   const [globalReportContent, setGlobalReportContent] = useState('');
@@ -533,8 +585,9 @@ function App() {
 
   const advanceStatus = useCallback(async (record: RecordFile) => {
       if (record.status === RecordStatus.REJECTED) {
+          const isReg = isRegType(record.recordType);
           const updates = getUpdatesForStatusChange(RecordStatus.IN_PROGRESS);
-          updates.hasDefect = true;
+          updates.hasDefect = isReg;
           setRecords(prev => prev.map(r => r.id === record.id ? { ...r, ...updates } : r));
           await updateRecordApi({ ...record, ...updates });
           setToast({ type: 'success', message: `Hồ sơ trả ${record.code} đã được tiếp nhận lại và chuyển sang Đang thực hiện.` });
@@ -546,6 +599,77 @@ function App() {
           setIsAssignModalOpen(true); 
           return; 
       }
+
+      const isGCN = !!record.recordType && (
+          record.recordType.includes('Cấp giấy') || 
+          record.recordType.includes('cấp giấy')
+      );
+
+      if (isGCN) {
+          // 1. Bước Phiếu chuyển thuế (IN_PROGRESS -> COMPLETED_WORK): Nhập số thửa mới, tờ mới, diện tích khi trình ký thuế
+          if (record.status === RecordStatus.IN_PROGRESS && record.hasTax) {
+              setTaxTargetRecord(record);
+              setTaxLandPlot(record.landPlot || '');
+              setTaxMapSheet(record.mapSheet || '');
+              setTaxArea(record.area ? String(record.area) : '');
+              setTaxModalOpen(true);
+              return;
+          }
+
+          // 2. Bước In GCN (PENDING_CHECK -> CHECKED hoặc IN_PROGRESS -> CHECKED nếu không thuế): Nhập số phôi mới trước khi trình thẩm tra
+          if (record.status === RecordStatus.PENDING_CHECK || (record.status === RecordStatus.IN_PROGRESS && !record.hasTax)) {
+              setFoilTargetRecord(record);
+              setFoilNumber(record.issueNumber || '');
+              setFoilModalOpen(true);
+              return;
+          }
+
+          // 3. Bước Trình ký GCN (PENDING_SIGN -> SIGNED): Tự động vào sổ vô số cấp giấy và chuyển sang Chờ giao 1 cửa
+          if (record.status === RecordStatus.PENDING_SIGN) {
+              if (await confirmAction(`Xác nhận hoàn thành trình ký hồ sơ ${record.code}, tự động cập nhật vào sổ vô số cấp giấy và chuyển sang Chờ giao 1 cửa?`)) {
+                  const nowStr = new Date().toISOString();
+                  const nextVaoSoStr = await calculateNextVaoSoNumber();
+                  
+                  // Chuyển sang SIGNED (Chờ giao 1 cửa) thay vì HANDOVER (Đã giao)
+                  const recordUpdates = {
+                      ...getUpdatesForStatusChange(RecordStatus.SIGNED, nowStr),
+                      entryNumber: nextVaoSoStr
+                  };
+                  
+                  setRecords(prev => prev.map(r => r.id === record.id ? { ...r, ...recordUpdates } : r));
+                  await updateRecordApi({ ...record, ...recordUpdates });
+                  
+                  // Tự động tạo hồ sơ Sổ vô số cấp giấy (ArchiveRecord type 'vaoso')
+                  let combinedOwner = record.customerName;
+                  if (record.cccd) combinedOwner += `\nCCCD: ${record.cccd}`;
+                  if (record.customerAddress) combinedOwner += `\nĐịa chỉ: ${record.customerAddress}`;
+                  
+                  const vaoSoRecord = {
+                      type: 'vaoso' as const,
+                      status: 'completed' as const,
+                      so_hieu: record.code,
+                      trich_yeu: `Vào sổ cấp giấy chứng nhận cho hộ ông/bà ${record.customerName}`,
+                      ngay_thang: nowStr,
+                      noi_nhan_gui: record.ward || '',
+                      data: {
+                          so_vao_so: nextVaoSoStr,
+                          ma_ho_so: record.code,
+                          ten_chu_su_dung: combinedOwner,
+                          loai_bien_dong: record.recordType || 'Cấp mới GCN',
+                          loai_gcn: 'GCN mới',
+                          ngay_nhan: record.receivedDate || nowStr,
+                          so_phat_hanh: record.issueNumber || '',
+                          ngay_ky_gcn: nowStr
+                      }
+                  };
+                  
+                  await saveArchiveRecord(vaoSoRecord);
+                  setToast({ type: 'success', message: `Hồ sơ ${record.code} đã được trình ký và đưa vào Chờ giao 1 cửa, đồng thời tự động cập nhật vào sổ vô số cấp giấy với số hiệu: ${nextVaoSoStr}!` });
+              }
+              return;
+          }
+      }
+
       if (record.status === RecordStatus.IN_PROGRESS) {
           // Tất cả các loại hồ sơ (kể cả Lưu trữ, Công văn) đều đồng bộ đi sang Trình kiểm tra
           setSubmitTargetRecords([record]);
@@ -582,7 +706,7 @@ function App() {
       }
   }, []);
 
-  const executeBatchExport = async (batchNumber: number, batchDate: string, handoverWard?: string) => {
+  const executeBatchExport = async (batchNumber: number, batchDate: string, handoverWard?: string, updatedRecords?: RecordFile[]) => {
       const nowStr = new Date().toISOString();
       const candidates = selectedRecordIds.size > 0 ? records.filter(r => selectedRecordIds.has(r.id)) : recordFilterProps.filteredRecords;
       const recordsToExport = candidates.filter(r => r.status === RecordStatus.SIGNED || r.hasDefect || ((r.status === RecordStatus.REJECTED || r.status === RecordStatus.WITHDRAWN) && !r.exportBatch));
@@ -593,7 +717,19 @@ function App() {
               : (r.status === RecordStatus.REJECTED || r.hasDefect) 
                   ? RecordStatus.REJECTED 
                   : RecordStatus.HANDOVER;
-          return { ...r, exportBatch: batchNumber, exportDate: batchDate, status: nextStatus, completedDate: r.completedDate || nowStr, handoverWard: handoverWard || r.handoverWard };
+          
+          const localUpdate = updatedRecords?.find(u => u.id === r.id);
+          const transferToDNLis = localUpdate ? localUpdate.transferToDNLis : r.transferToDNLis;
+
+          return { 
+              ...r, 
+              exportBatch: batchNumber, 
+              exportDate: batchDate, 
+              status: nextStatus, 
+              completedDate: r.completedDate || nowStr, 
+              handoverWard: handoverWard || r.handoverWard,
+              transferToDNLis
+          };
       });
       setRecords(prev => prev.map(r => {
           const updated = updatesToApply.find(u => u.id === r.id);
@@ -643,12 +779,13 @@ function App() {
       const rejectPrefix = `[Trả hồ sơ ngày ${formattedDate}]: ${reason}`;
 
       const updatesToApply = rejectRecordsTarget.map(r => {
+         const isReg = isRegType(r.recordType);
          const updates: any = { 
              status: RecordStatus.REJECTED, 
              completedDate: r.completedDate || nowStr,
              rejectDate: nowStr,
              rejectReason: reason,
-             hasDefect: true
+             hasDefect: isReg
          };
          
          let currentNotesObj: any = {};
@@ -693,6 +830,142 @@ function App() {
       setIsRejectReasonModalOpen(false);
       setRejectRecordsTarget([]);
       setToast({ type: 'success', message: `Đã trả ${updatesToApply.length} hồ sơ về Bộ phận 1 cửa thành công!` });
+  };
+
+  const renderGcnWorkflowModals = () => {
+      return (
+          <>
+              {/* Tax Info Modal */}
+              {taxModalOpen && taxTargetRecord && (
+                  <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm">
+                      <div className="bg-white rounded-xl shadow-2xl border border-indigo-100 w-full max-w-md overflow-hidden animate-fade-in-up text-left">
+                          <div className="bg-indigo-600 px-5 py-3 text-white font-bold text-sm flex items-center justify-between">
+                               <span>NHẬP THÔNG TIN TRÌNH KÝ THUẾ</span>
+                               <button onClick={() => { setTaxModalOpen(false); setTaxTargetRecord(null); }} className="text-white/80 hover:text-white font-bold">✕</button>
+                          </div>
+                          <div className="p-5 space-y-4">
+                              <p className="text-xs text-gray-600 leading-relaxed">
+                                  Vui lòng nhập thông tin số thửa mới, tờ mới, diện tích cho hồ sơ <strong>{taxTargetRecord.code}</strong>:
+                              </p>
+                              <div>
+                                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Số thửa mới</label>
+                                  <input 
+                                      type="text" 
+                                      value={taxLandPlot} 
+                                      onChange={e => setTaxLandPlot(e.target.value)} 
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                      placeholder="Ví dụ: 124"
+                                  />
+                              </div>
+                              <div>
+                                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Tờ bản đồ mới</label>
+                                  <input 
+                                      type="text" 
+                                      value={taxMapSheet} 
+                                      onChange={e => setTaxMapSheet(e.target.value)} 
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                      placeholder="Ví dụ: 45"
+                                  />
+                              </div>
+                              <div>
+                                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Diện tích (m²)</label>
+                                  <input 
+                                      type="number" 
+                                      value={taxArea} 
+                                      onChange={e => setTaxArea(e.target.value)} 
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                                      placeholder="Ví dụ: 150"
+                                  />
+                              </div>
+                              <div className="flex justify-end gap-2 pt-2">
+                                  <button
+                                      onClick={() => { setTaxModalOpen(false); setTaxTargetRecord(null); }}
+                                      className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                                  >
+                                      Hủy bỏ
+                                  </button>
+                                  <button
+                                      onClick={async () => {
+                                          if (!taxTargetRecord) return;
+                                          const nowStr = new Date().toISOString();
+                                          const updates = {
+                                              status: RecordStatus.COMPLETED_WORK,
+                                              landPlot: taxLandPlot,
+                                              mapSheet: taxMapSheet,
+                                              area: taxArea ? parseFloat(taxArea) : null,
+                                              completedWorkDate: nowStr
+                                          };
+                                          setRecords(prev => prev.map(r => r.id === taxTargetRecord.id ? { ...r, ...updates } : r));
+                                          await updateRecordApi({ ...taxTargetRecord, ...updates });
+                                          setToast({ type: 'success', message: `Đã cập nhật thông tin thửa mới và chuyển sang Trình ký Thuế!` });
+                                          setTaxModalOpen(false);
+                                          setTaxTargetRecord(null);
+                                      }}
+                                      className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-lg transition-colors"
+                                  >
+                                      Xác nhận
+                                  </button>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              )}
+
+              {/* Foil Info Modal */}
+              {foilModalOpen && foilTargetRecord && (
+                  <div className="fixed inset-0 bg-black/60 z-[9999] flex items-center justify-center p-4 backdrop-blur-sm">
+                      <div className="bg-white rounded-xl shadow-2xl border border-teal-100 w-full max-w-md overflow-hidden animate-fade-in-up text-left">
+                          <div className="bg-teal-600 px-5 py-3 text-white font-bold text-sm flex items-center justify-between">
+                               <span>NHẬP SỐ PHÔI GCN MỚI</span>
+                               <button onClick={() => { setFoilModalOpen(false); setFoilTargetRecord(null); }} className="text-white/80 hover:text-white font-bold">✕</button>
+                          </div>
+                          <div className="p-5 space-y-4">
+                              <p className="text-xs text-gray-600 leading-relaxed">
+                                  Vui lòng nhập số phôi GCN mới cho hồ sơ <strong>{foilTargetRecord.code}</strong> trước khi trình thẩm tra:
+                              </p>
+                              <div>
+                                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Số phôi GCN mới</label>
+                                  <input 
+                                      type="text" 
+                                      value={foilNumber} 
+                                      onChange={e => setFoilNumber(e.target.value)} 
+                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+                                      placeholder="Ví dụ: CO 123456"
+                                  />
+                              </div>
+                              <div className="flex justify-end gap-2 pt-2">
+                                  <button
+                                      onClick={() => { setFoilModalOpen(false); setFoilTargetRecord(null); }}
+                                      className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+                                  >
+                                      Hủy bỏ
+                                  </button>
+                                  <button
+                                      onClick={async () => {
+                                          if (!foilTargetRecord) return;
+                                          const nowStr = new Date().toISOString();
+                                          const updates = {
+                                              status: RecordStatus.CHECKED,
+                                              issueNumber: foilNumber,
+                                              checkedDate: nowStr
+                                          };
+                                          setRecords(prev => prev.map(r => r.id === foilTargetRecord.id ? { ...r, ...updates } : r));
+                                          await updateRecordApi({ ...foilTargetRecord, ...updates });
+                                          setToast({ type: 'success', message: `Đã cập nhật số phôi GCN mới và chuyển sang Thẩm tra!` });
+                                          setFoilModalOpen(false);
+                                          setFoilTargetRecord(null);
+                                      }}
+                                      className="px-4 py-2 text-xs font-bold text-white bg-teal-600 hover:bg-teal-700 rounded-lg transition-colors"
+                                  >
+                                      Xác nhận
+                                  </button>
+                              </div>
+                          </div>
+                      </div>
+                  </div>
+              )}
+          </>
+      );
   };
 
   if (!currentUser) return <Login onLogin={setCurrentUser} users={users} />;
@@ -790,6 +1063,7 @@ function App() {
                 {toast.message}
             </div>
         )}
+        {renderGcnWorkflowModals()}
         <GlobalConfirmModal />
         <GlobalAlertModal />
       </MobileLayout>
@@ -1035,6 +1309,7 @@ function App() {
                 {toast.message}
             </div>
         )}
+        {renderGcnWorkflowModals()}
         <GlobalConfirmModal />
         <GlobalAlertModal />
     </MainLayout>

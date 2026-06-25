@@ -1,14 +1,25 @@
 
 import React, { useState, useEffect } from 'react';
-import { RecordFile, Employee, User, UserRole, SplitItem, RecordStatus } from '../types';
-import { getNormalizedWard } from '../constants';
+import { RecordFile, Employee, User, UserRole, SplitItem, RecordStatus, Holiday } from '../types';
+import { getNormalizedWard, REGISTRATION_PROCEDURES } from '../constants';
 import StatusBadge from './StatusBadge';
-import { X, MapPin, FileText, User as UserIcon, Receipt, DollarSign, CheckCircle2, Circle, Send, FileSignature, CheckSquare, CalendarClock, FileCheck, Calculator, Loader2, StickyNote, Save, Bell, Printer, Pencil, Trash2, Info, FileDown, AlertTriangle } from 'lucide-react';
+import { X, MapPin, FileText, User as UserIcon, Receipt, DollarSign, CheckCircle2, Circle, Send, FileSignature, CheckSquare, CalendarClock, FileCheck, Calculator, Loader2, StickyNote, Save, Bell, Printer, Pencil, Trash2, Info, FileDown, AlertTriangle, Activity, ArrowRight } from 'lucide-react';
 import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../services/docxService';
 import DocxPreviewModal from './DocxPreviewModal';
 import { updateRecordApi, fetchContracts } from '../services/api';
+import { calculateDeadline } from '../utils/appHelpers';
 import SystemReceiptTemplate from './receive-record/SystemReceiptTemplate';
 import SystemAnnexTemplate from './receive-record/SystemAnnexTemplate';
+
+const isRegType = (type: string | null | undefined): boolean => {
+    if (!type) return false;
+    const t = type.trim().toLowerCase();
+    const REG_PROCEDURES = [
+        "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
+        "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
+    ];
+    return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
+};
 
 interface DetailModalProps {
   isOpen: boolean;
@@ -17,17 +28,21 @@ interface DetailModalProps {
   employees: Employee[];
   users: User[];
   currentUser: User | null;
+  holidays?: Holiday[];
   onEdit?: (record: RecordFile) => void;
   onDelete?: (record: RecordFile) => void;
   onCreateLiquidation?: (record: RecordFile) => void; 
   onRefreshData?: () => void;
 }
 
-export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, record: initialRecord, employees, users, currentUser, onEdit, onDelete, onCreateLiquidation, onRefreshData }) => {
+export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, record: initialRecord, employees, users, currentUser, holidays, onEdit, onDelete, onCreateLiquidation, onRefreshData }) => {
   const [localRecord, setLocalRecord] = useState<RecordFile | null>(null);
   const [isDefectDialogOpen, setIsDefectDialogOpen] = useState(false);
   const [defectReasonInput, setDefectReasonInput] = useState('');
   const [isSavingDefect, setIsSavingDefect] = useState(false);
+  const [isResumeDialogOpen, setIsResumeDialogOpen] = useState(false);
+  const [resumeMode, setResumeMode] = useState<'supplement' | 'simple'>('supplement');
+  const [isSavingResume, setIsSavingResume] = useState(false);
 
   useEffect(() => {
     setLocalRecord(initialRecord);
@@ -65,6 +80,186 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       if (!emp) return false;
       return emp.department?.toLowerCase().includes('đo đạc') || emp.department?.toLowerCase().includes('kỹ thuật') || emp.position?.toLowerCase().includes('đo đạc');
   }, [currentUser, employees]);
+
+  const getWorkflowSteps = () => {
+    if (!record) return null;
+
+    const isGCN = record.recordType && (
+        record.recordType.trim().toLowerCase().startsWith('3.') || 
+        record.recordType.trim().toLowerCase() === 'đăng ký' || 
+        record.recordType.trim().toLowerCase() === 'cấp giấy' || 
+        record.recordType.trim().toLowerCase() === 'cấp đổi' || 
+        record.recordType.trim().toLowerCase() === 'cấp lại' || 
+        REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === record.recordType?.trim().toLowerCase())
+    );
+
+    const isReturned = record.hasDefect || record.status === RecordStatus.REJECTED;
+
+    if (isReturned) {
+        const currentStatus = record.status;
+        const s0 = 'completed';
+        
+        let s1: 'completed' | 'current' | 'upcoming' = 'upcoming';
+        if ([RecordStatus.PENDING_CHECK].includes(currentStatus)) s1 = 'current';
+        else if ([RecordStatus.CHECKED, RecordStatus.PENDING_SIGN, RecordStatus.SIGNED, RecordStatus.HANDOVER, RecordStatus.RETURNED].includes(currentStatus)) s1 = 'completed';
+
+        let s2: 'completed' | 'current' | 'upcoming' = 'upcoming';
+        if ([RecordStatus.CHECKED, RecordStatus.PENDING_SIGN].includes(currentStatus)) s2 = 'current';
+        else if ([RecordStatus.SIGNED, RecordStatus.HANDOVER, RecordStatus.RETURNED].includes(currentStatus)) s2 = 'completed';
+
+        let s3: 'completed' | 'current' | 'upcoming' = 'upcoming';
+        if ([RecordStatus.SIGNED].includes(currentStatus)) s3 = 'current';
+        else if ([RecordStatus.HANDOVER, RecordStatus.RETURNED].includes(currentStatus)) s3 = 'completed';
+
+        return {
+            type: 'returned',
+            title: 'Quy trình Trả hồ sơ do sai sót',
+            steps: [
+                { label: 'Trả Hồ sơ', duration: 'Bắt đầu', status: s0, desc: 'Phát hiện sai sót' },
+                { label: 'Trình kiểm tra', duration: 'Kiểm tra hồ sơ', status: s1, desc: 'Chờ/Đang kiểm tra' },
+                { label: 'Ký Phiếu trả', duration: 'Ký duyệt', status: s2, desc: 'Lãnh đạo ký phiếu trả' },
+                { label: 'Giao 1 cửa', duration: 'Bàn giao', status: s3, desc: 'Trả kết quả về 1 cửa' }
+            ]
+        };
+    }
+
+    if (isGCN) {
+        const hasTax = !!record.hasTax;
+        const transferToDNLis = !!record.transferToDNLis;
+        const currentStatus = record.status;
+
+        if (hasTax) {
+            if (transferToDNLis) {
+                const s0 = currentStatus === RecordStatus.RECEIVED ? 'current' : 'completed';
+                
+                let s1: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.ASSIGNED) s1 = 'current';
+                else if (currentStatus !== RecordStatus.RECEIVED) s1 = 'completed';
+
+                let s2: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.IN_PROGRESS) s2 = 'current';
+                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED].includes(currentStatus)) s2 = 'completed';
+
+                let s3: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.COMPLETED_WORK) s3 = 'current';
+                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS].includes(currentStatus)) s3 = 'completed';
+
+                let s4: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.TBT) s4 = 'current';
+                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK].includes(currentStatus)) s4 = 'completed';
+
+                let s5: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.PENDING_CHECK) s5 = 'current';
+                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT].includes(currentStatus)) s5 = 'completed';
+
+                let s6: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.CHECKED) s6 = 'current';
+                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK].includes(currentStatus)) s6 = 'completed';
+
+                let s7: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.PENDING_SIGN) s7 = 'current';
+                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK, RecordStatus.CHECKED].includes(currentStatus)) s7 = 'completed';
+
+                let s8: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.SIGNED) s8 = 'current';
+                else if ([RecordStatus.HANDOVER, RecordStatus.RETURNED].includes(currentStatus)) s8 = 'completed';
+
+                return {
+                    type: 'gcn_tax_dnlis',
+                    title: 'Cấp giấy (Có thuế + chạy DNLis)',
+                    steps: [
+                        { label: 'Tiếp nhận mới', duration: 'Nhận HS', status: s0 },
+                        { label: 'DNLIS', duration: '1 ngày', status: s1 },
+                        { label: 'Phiếu chuyển', duration: '2 ngày', status: s2 },
+                        { label: 'Trình ký Thuế', duration: '7 ngày*', status: s3, desc: 'Tham khảo' },
+                        { label: 'Thông báo thuế', duration: '0 ngày', status: s4 },
+                        { label: 'In GCN', duration: '38 ngày', status: s5, desc: '40 ngày - 2 ngày khâu sau' },
+                        { label: 'Thẩm tra', duration: '1 ngày', status: s6 },
+                        { label: 'Trình ký GCN', duration: '4 giờ', status: s7 },
+                        { label: 'Giao 1 cửa', duration: '4 giờ', status: s8 }
+                    ]
+                };
+            } else {
+                const s0 = currentStatus === RecordStatus.RECEIVED ? 'current' : 'completed';
+                
+                let s1: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if ([RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS].includes(currentStatus)) s1 = 'current';
+                else if (currentStatus !== RecordStatus.RECEIVED) s1 = 'completed';
+
+                let s2: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.COMPLETED_WORK) s2 = 'current';
+                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS].includes(currentStatus)) s2 = 'completed';
+
+                let s3: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.TBT) s3 = 'current';
+                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK].includes(currentStatus)) s3 = 'completed';
+
+                let s4: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.PENDING_CHECK) s4 = 'current';
+                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT].includes(currentStatus)) s4 = 'completed';
+
+                let s5: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.CHECKED) s5 = 'current';
+                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK].includes(currentStatus)) s5 = 'completed';
+
+                let s6: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.PENDING_SIGN) s6 = 'current';
+                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK, RecordStatus.CHECKED].includes(currentStatus)) s6 = 'completed';
+
+                let s7: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                if (currentStatus === RecordStatus.SIGNED) s7 = 'current';
+                else if ([RecordStatus.HANDOVER, RecordStatus.RETURNED].includes(currentStatus)) s7 = 'completed';
+
+                return {
+                    type: 'gcn_tax_no_dnlis',
+                    title: 'Cấp giấy (Có thuế + không DNLis)',
+                    steps: [
+                        { label: 'Tiếp nhận mới', duration: 'Nhận HS', status: s0 },
+                        { label: 'Phiếu chuyển', duration: '3 ngày', status: s1 },
+                        { label: 'Trình ký Thuế', duration: '7 ngày*', status: s2, desc: 'Tham khảo' },
+                        { label: 'Thông báo thuế', duration: '0 ngày', status: s3 },
+                        { label: 'In GCN', duration: '38 ngày', status: s4, desc: '40 ngày - 2 ngày khâu sau' },
+                        { label: 'Thẩm tra', duration: '1 ngày', status: s5 },
+                        { label: 'Trình ký GCN', duration: '4 giờ', status: s6 },
+                        { label: 'Giao 1 cửa', duration: '4 giờ', status: s7 }
+                    ]
+                };
+            }
+        } else {
+            const s0 = currentStatus === RecordStatus.RECEIVED ? 'current' : 'completed';
+            
+            let s1: 'completed' | 'current' | 'upcoming' = 'upcoming';
+            if ([RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.PENDING_CHECK, RecordStatus.TBT].includes(currentStatus)) s1 = 'current';
+            else if (![RecordStatus.RECEIVED].includes(currentStatus)) s1 = 'completed';
+
+            let s2: 'completed' | 'current' | 'upcoming' = 'upcoming';
+            if (currentStatus === RecordStatus.CHECKED) s2 = 'current';
+            else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK].includes(currentStatus)) s2 = 'completed';
+
+            let s3: 'completed' | 'current' | 'upcoming' = 'upcoming';
+            if (currentStatus === RecordStatus.PENDING_SIGN) s3 = 'current';
+            else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK, RecordStatus.CHECKED].includes(currentStatus)) s3 = 'completed';
+
+            let s4: 'completed' | 'current' | 'upcoming' = 'upcoming';
+            if (currentStatus === RecordStatus.SIGNED) s4 = 'current';
+            else if ([RecordStatus.HANDOVER, RecordStatus.RETURNED].includes(currentStatus)) s4 = 'completed';
+
+            return {
+                type: 'gcn_no_tax',
+                title: 'Cấp giấy (Không thuế)',
+                steps: [
+                    { label: 'Tiếp nhận mới', duration: 'Nhận HS', status: s0 },
+                    { label: 'In GCN', duration: '28 ngày', status: s1, desc: '30 ngày - 2 ngày khâu sau' },
+                    { label: 'Thẩm tra', duration: '1 ngày', status: s2 },
+                    { label: 'Trình ký GCN', duration: '4 giờ', status: s3 },
+                    { label: 'Giao 1 cửa', duration: '4 giờ', status: s4 }
+                ]
+            };
+        }
+    }
+
+    return null;
+  };
 
   useEffect(() => {
       if (record) {
@@ -212,6 +407,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       const currentNotes = activeRecord.notes ? `${activeRecord.notes}\n${formattedReason}` : formattedReason;
       const currentPrivateNotes = activeRecord.privateNotes ? `${activeRecord.privateNotes}\n${formattedReason}` : formattedReason;
       
+      const isReg = isRegType(activeRecord.recordType);
       const isArchive = activeRecord.recordType === 'Sao lục' || activeRecord.recordType === 'Công văn';
       
       let nextStatus = RecordStatus.IN_PROGRESS;
@@ -225,7 +421,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       const updatedRecord: RecordFile = {
           ...activeRecord,
           status: nextStatus,
-          hasDefect: true,
+          hasDefect: isReg,
           defectReason: defectReasonInput,
           defectDate: nowStr,
           notes: currentNotes,
@@ -254,23 +450,65 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       if (!activeRecord) return;
       
       if (activeRecord.hasDefect) {
-          if (window.confirm("Bạn có muốn hủy đánh dấu sai sót cho hồ sơ này? Hồ sơ sẽ được chuyển về luồng hoàn thành bình thường.")) {
-              const updatedRecord: RecordFile = {
-                  ...activeRecord,
-                  hasDefect: false,
-                  defectReason: null,
-                  notes: activeRecord.notes ? `${activeRecord.notes}\n[Đã sửa đổi ngày ${new Date().toLocaleDateString('vi-VN')}]: Hủy đánh dấu sai sót` : undefined
-              };
-              const result = await updateRecordApi(updatedRecord);
-              if (result) {
-                  setLocalRecord(updatedRecord);
-                  alert('Đã hủy trạng thái sai sót hồ sơ.');
-                  onRefreshData?.();
-              }
-          }
+          // Open the re-receive option dialog instead of a simple confirm
+          setResumeMode('supplement');
+          setIsResumeDialogOpen(true);
       } else {
           setDefectReasonInput('');
           setIsDefectDialogOpen(true);
+      }
+  };
+
+  const handleConfirmResume = async () => {
+      if (!activeRecord) return;
+      setIsSavingResume(true);
+
+      let updatedRecord: RecordFile = { ...activeRecord };
+      const today = new Date();
+      const todayStr = today.toLocaleDateString('vi-VN');
+      const todayISO = today.toISOString();
+
+      if (resumeMode === 'supplement') {
+          // Re-calculate deadline and set receivedDate to today for recalculating date from scratch
+          const newDeadline = calculateDeadline(activeRecord.recordType || '', todayISO, holidays || [], !!activeRecord.hasTax);
+          
+          updatedRecord = {
+              ...activeRecord,
+              hasDefect: false,
+              defectReason: null,
+              receivedDate: todayISO,
+              deadline: newDeadline,
+              notes: activeRecord.notes 
+                  ? `${activeRecord.notes}\n[Bổ sung HS - Tiếp nhận lại ngày ${todayStr}]: Tính lại ngày hẹn trả (${newDeadline}) từ đầu` 
+                  : `[Bổ sung HS - Tiếp nhận lại ngày ${todayStr}]: Tính lại ngày hẹn trả (${newDeadline}) từ đầu`
+          };
+      } else {
+          // Simple resume without changing receivedDate and deadline
+          updatedRecord = {
+              ...activeRecord,
+              hasDefect: false,
+              defectReason: null,
+              notes: activeRecord.notes 
+                  ? `${activeRecord.notes}\n[Đã sửa đổi ngày ${todayStr}]: Hủy đánh dấu sai sót` 
+                  : `[Đã sửa đổi ngày ${todayStr}]: Hủy đánh dấu sai sót`
+          };
+      }
+
+      try {
+          const result = await updateRecordApi(updatedRecord);
+          setIsSavingResume(false);
+          setIsResumeDialogOpen(false);
+          if (result) {
+              setLocalRecord(updatedRecord);
+              alert(resumeMode === 'supplement' ? 'Đã tiếp nhận lại hồ sơ bổ sung và tính lại ngày thành công!' : 'Đã hủy trạng thái sai sót hồ sơ.');
+              onRefreshData?.();
+          } else {
+              alert('Không thể lưu thông tin hồ sơ.');
+          }
+      } catch (err) {
+          console.error(err);
+          setIsSavingResume(false);
+          alert('Có lỗi xảy ra.');
       }
   };
 
@@ -598,6 +836,82 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                 </div>
             )}
             
+            {/* TRÌNH THEO DÕI QUY TRÌNH (PROCESS TRACKER) */}
+            {(() => {
+                const workflow = getWorkflowSteps();
+                if (!workflow) return null;
+
+                return (
+                    <div className="mb-6 bg-white border border-gray-200 rounded-xl p-5 shadow-sm animate-fade-in">
+                         <h3 className="text-xs font-bold text-gray-700 uppercase mb-4 flex items-center gap-2 border-l-4 border-indigo-600 pl-2">
+                              <Activity size={16} className="text-indigo-600 animate-pulse"/>
+                              <span>Quy trình xử lý: <span className="text-indigo-700 font-extrabold">{workflow.title}</span></span>
+                         </h3>
+                         
+                         <div className="relative flex items-center justify-between overflow-x-auto py-4 px-2 min-w-[700px] custom-scrollbar gap-2">
+                             {workflow.steps.map((step, idx) => {
+                                 const isLast = idx === workflow.steps.length - 1;
+                                 let circleClass = "";
+                                 let lineClass = "";
+                                 let textClass = "";
+                                 let iconNode = null;
+
+                                 if (step.status === 'completed') {
+                                     circleClass = "bg-emerald-50 border-emerald-500 text-emerald-600 shadow-[0_0_8px_rgba(16,185,129,0.2)]";
+                                     lineClass = "bg-emerald-500";
+                                     textClass = "text-emerald-700 font-bold";
+                                     iconNode = <CheckCircle2 size={16} />;
+                                 } else if (step.status === 'current') {
+                                     circleClass = "bg-blue-50 border-blue-600 text-blue-700 ring-4 ring-blue-100 shadow-[0_0_12px_rgba(37,99,235,0.4)] animate-pulse";
+                                     lineClass = "bg-gray-200";
+                                     textClass = "text-blue-700 font-extrabold scale-105 transform origin-left";
+                                     iconNode = <Loader2 size={16} className="animate-spin" />;
+                                 } else {
+                                     circleClass = "bg-gray-50 border-gray-200 text-gray-400";
+                                     lineClass = "bg-gray-100";
+                                     textClass = "text-gray-400 font-medium";
+                                     iconNode = <Circle size={14} className="opacity-40" />;
+                                 }
+
+                                 return (
+                                     <div key={idx} className="flex-1 flex items-center relative">
+                                         {/* Step body */}
+                                         <div className="flex flex-col items-center flex-1 z-10">
+                                             <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${circleClass}`}>
+                                                 {iconNode}
+                                             </div>
+                                             <div className="text-center mt-2.5 max-w-[120px]">
+                                                 <p className={`text-xs truncate transition-all leading-tight ${textClass}`} title={step.label}>
+                                                     {step.label}
+                                                 </p>
+                                                 <span className={`text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded-full font-bold ${
+                                                     step.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
+                                                     step.status === 'current' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'
+                                                 }`}>
+                                                     {step.duration}
+                                                 </span>
+                                                 {step.desc && (
+                                                     <p className="text-[9px] text-gray-400 italic mt-1 leading-none max-w-[100px] mx-auto truncate" title={step.desc}>
+                                                         {step.desc}
+                                                     </p>
+                                                 )}
+                                             </div>
+                                         </div>
+
+                                         {/* Connector line to next step */}
+                                         {!isLast && (
+                                             <div className="absolute top-[18px] left-1/2 right-[-50%] h-[2px] z-0 pointer-events-none pr-4">
+                                                 <div className={`h-full w-full transition-all duration-300 ${lineClass}`} />
+                                             </div>
+                                         )}
+                                     </div>
+                                 );
+                             })}
+                         </div>
+                    </div>
+                );
+            })()}
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 
                 {/* COLUMN 1: THÔNG TIN CHUNG */}
@@ -1013,6 +1327,91 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
             />
         )}
       </div>
+
+      {isResumeDialogOpen && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+              <div className="bg-white rounded-xl shadow-2xl border border-blue-150 w-full max-w-md overflow-hidden animate-fade-in-up">
+                  <div className="bg-blue-600 px-5 py-3 text-white font-bold text-sm flex items-center gap-2">
+                       <AlertTriangle size={16} />
+                       <span>TIẾP NHẬN LẠI HỒ SƠ</span>
+                  </div>
+                  <div className="p-5">
+                      <p className="text-xs text-gray-600 mb-4 leading-relaxed">
+                          Hồ sơ này đang được đánh dấu có sai sót (Trình trả dân). Bạn muốn tiếp nhận lại hồ sơ bổ sung như thế nào?
+                      </p>
+
+                      <div className="space-y-3">
+                          <div 
+                              onClick={() => setResumeMode('supplement')}
+                              className={`block p-3 border rounded-lg cursor-pointer transition-all ${
+                                  resumeMode === 'supplement' 
+                                  ? 'border-blue-500 bg-blue-50/50 ring-1 ring-blue-500' 
+                                  : 'border-gray-200 hover:bg-gray-50'
+                              }`}
+                          >
+                              <div className="flex items-start gap-2.5">
+                                  <input 
+                                      type="radio" 
+                                      name="resumeMode" 
+                                      checked={resumeMode === 'supplement'} 
+                                      onChange={() => setResumeMode('supplement')} 
+                                      className="mt-1 text-blue-600 focus:ring-blue-500" 
+                                  />
+                                  <div>
+                                      <p className="text-xs font-bold text-slate-800">Tiếp nhận lại (Có Bổ sung hồ sơ)</p>
+                                      <p className="text-[10.5px] text-slate-500 mt-1 leading-relaxed">
+                                          Hủy đánh dấu sai sót, cập nhật ngày nhận là <span className="font-semibold text-blue-600">Hôm nay</span>, và <span className="font-semibold text-blue-600">tính lại thời hạn trả từ đầu</span> cho các bước tiếp theo.
+                                      </p>
+                                  </div>
+                              </div>
+                          </div>
+
+                          <div 
+                              onClick={() => setResumeMode('simple')}
+                              className={`block p-3 border rounded-lg cursor-pointer transition-all ${
+                                  resumeMode === 'simple' 
+                                  ? 'border-blue-500 bg-blue-50/50 ring-1 ring-blue-500' 
+                                  : 'border-gray-200 hover:bg-gray-50'
+                              }`}
+                          >
+                              <div className="flex items-start gap-2.5">
+                                  <input 
+                                      type="radio" 
+                                      name="resumeMode" 
+                                      checked={resumeMode === 'simple'} 
+                                      onChange={() => setResumeMode('simple')} 
+                                      className="mt-1 text-blue-600 focus:ring-blue-500" 
+                                  />
+                                  <div>
+                                      <p className="text-xs font-bold text-slate-800">Hủy đánh dấu sai sót (Giữ nguyên ngày)</p>
+                                      <p className="text-[10.5px] text-slate-500 mt-1 leading-relaxed">
+                                          Chỉ hủy bỏ trạng thái lỗi hồ sơ để đưa về luồng xử lý bình thường. Giữ nguyên ngày nhận và thời hạn trả gốc.
+                                      </p>
+                                  </div>
+                              </div>
+                          </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 mt-5">
+                          <button
+                              onClick={() => setIsResumeDialogOpen(false)}
+                              className="px-3.5 py-1.5 bg-gray-100 text-gray-700 text-xs font-bold rounded hover:bg-gray-200 transition-all border border-gray-200"
+                          >
+                              Hủy bỏ
+                          </button>
+                          <button
+                              onClick={handleConfirmResume}
+                              disabled={isSavingResume}
+                              className="px-4 py-1.5 bg-blue-600 text-white text-xs font-bold rounded hover:bg-blue-700 disabled:opacity-50 transition-all shadow-sm flex items-center gap-1.5"
+                          >
+                              {isSavingResume ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                              Xác nhận tiếp nhận
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {isDefectDialogOpen && (
           <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">

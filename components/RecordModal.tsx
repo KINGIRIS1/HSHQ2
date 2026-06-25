@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { RecordFile, RecordStatus, Employee, User, UserRole, Holiday } from '../types';
 import { GROUPS, EXTENDED_RECORD_TYPES, STATUS_LABELS, REGISTRATION_PROCEDURES } from '../constants';
-import { isArchiveType, groupEmployeesByDepartment } from '../utils/appHelpers';
+import { isArchiveType, groupEmployeesByDepartment, removeVietnameseTones } from '../utils/appHelpers';
 import { X, Save, Lock, User as UserIcon, MapPin, FileText, Calendar, FileCheck } from 'lucide-react';
 import RecordForm from './receive-record/RecordForm';
 
@@ -175,35 +175,97 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
   const isOneDoor = currentUser.role === UserRole.ONEDOOR;
   const canEditResult = hasAdminRights || isOneDoor;
 
-  const generateCode = React.useCallback((wardName: string, dateStr: string) => {
+  const generateCode = React.useCallback((wardName: string, dateStr: string, recordType?: string) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
-    const year = d.getFullYear().toString();
-    const yy = year.slice(-2);
-    const mm = ('0' + (d.getMonth() + 1)).slice(-2);
-    const dd = ('0' + d.getDate()).slice(-2);
-    const datePrefix = `${yy}${mm}${dd}`;
+    const yearStr = d.getFullYear().toString();
+    const yy = yearStr.slice(-2);
     
+    const getRecordTabAbbreviation = (rType: string | null | undefined): string => {
+        if (!rType) return 'ĐĐ';
+        const t = rType.trim().toLowerCase();
+        if (rType === 'Cung cấp tài liệu đất đai' || rType === 'Sao lục') return 'LT';
+        if (rType === 'Công văn') return 'CV';
+        if (['CMD', 'Tòa án', 'Thi hành án'].includes(rType)) return 'K';
+        
+        const REG_PROCEDURES = [
+            "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
+            "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
+        ];
+        const isReg = t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
+        if (isReg) return 'ĐK';
+        return 'ĐĐ';
+    };
+
+    const deptCode = getRecordTabAbbreviation(recordType);
     let maxSeq = 0;
     
-    const checkSeq = (code: string | undefined | null) => {
+    const checkSeq = (code: string | undefined | null, rType?: string | null) => {
         if (!code) return;
-        const parts = code.split('-');
-        if (parts.length === 2 || parts.length === 3) {
-            const rDate = parts.length === 2 ? parts[0] : parts[1];
-            const rSeq = parts.length === 2 ? parts[1] : parts[2];
-            if (rDate.substring(0, 2) === yy) {
-                const seqNum = parseInt(rSeq, 10);
-                if (!isNaN(seqNum) && seqNum > maxSeq) maxSeq = seqNum;
+        
+        let rYear = '';
+        let rDept = '';
+        let rSeq = 0;
+        
+        const computedDeptOfRecord = rType ? getRecordTabAbbreviation(rType) : '';
+        
+        if (code.includes('/')) {
+            const parts = code.split('/');
+            if (parts.length === 2) {
+                const seqVal = parseInt(parts[0], 10);
+                const deptYear = parts[1].split('-');
+                if (deptYear.length === 2 && !isNaN(seqVal)) {
+                    rSeq = seqVal;
+                    rDept = deptYear[0];
+                    rYear = deptYear[1];
+                }
             }
+        } else if (code.startsWith('HS-')) {
+            const parts = code.split('-');
+            if (parts.length === 3) {
+                const yearVal = parts[1];
+                const seqVal = parseInt(parts[2], 10);
+                if (!isNaN(seqVal)) {
+                    rSeq = seqVal;
+                    rYear = yearVal;
+                    rDept = computedDeptOfRecord || 'ĐĐ';
+                }
+            }
+        } else if (code.includes('-')) {
+            const parts = code.split('-');
+            if (parts.length === 2) {
+                const left = parts[0];
+                const right = parts[1];
+                if (left.length === 6 && !isNaN(parseInt(left, 10))) {
+                    const yearPart = '20' + left.substring(0, 2);
+                    const seqVal = parseInt(right, 10);
+                    if (!isNaN(seqVal)) {
+                        rSeq = seqVal;
+                        rYear = yearPart;
+                        rDept = computedDeptOfRecord || 'ĐĐ';
+                    }
+                } else if (left === 'TĐ' || left === 'TL' || left === 'SL' || left === 'CV') {
+                    const seqVal = parseInt(right, 10);
+                    if (!isNaN(seqVal)) {
+                        rSeq = seqVal;
+                        rYear = yearStr;
+                        rDept = left === 'CV' ? 'CV' : (left === 'TL' || left === 'SL' ? 'LT' : 'ĐĐ');
+                    }
+                }
+            }
+        }
+        
+        const finalDept = rDept || computedDeptOfRecord || 'ĐĐ';
+        if (finalDept === deptCode && (rYear === yearStr || rYear === yy)) {
+            if (rSeq > maxSeq) maxSeq = rSeq;
         }
     };
 
     const targetRecords = records || [];
-    targetRecords.forEach((r: RecordFile) => checkSeq(r.code));
+    targetRecords.forEach((r: RecordFile) => checkSeq(r.code, r.recordType));
 
     const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
-    return `${datePrefix}-${nextSeq}`;
+    return `${nextSeq}/${deptCode}-${yearStr}`;
   }, [records]);
 
   const isMeasurement = React.useMemo(() => {
@@ -226,6 +288,13 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
 
     return false;
   }, [currentView, formData.recordType, initialData?.recordType]);
+
+  const isDefaultTaxProcedure = React.useMemo(() => {
+    const type = (formData.recordType || initialData?.recordType || '');
+    if (!type) return false;
+    const t = removeVietnameseTones(type).toLowerCase();
+    return ['thua ke', 'tang cho', 'chuyen nhuong', 'thoa thuan', 'chuyen muc dich khong xin phep'].some(keyword => t.includes(keyword));
+  }, [formData.recordType, initialData?.recordType]);
 
   useEffect(() => {
     if (isOpen) {
@@ -393,6 +462,18 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
   const handleChange = (field: keyof RecordFile, value: any) => {
     setFormData(prev => {
         let newData = { ...prev, [field]: value };
+        if (field === 'recordType') {
+            const t = String(value).toLowerCase().trim();
+            const isRegVal = t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
+            const isDefaultTax = ['thua ke', 'tang cho', 'chuyen nhuong', 'thoa thuan', 'chuyen muc dich khong xin phep'].some(keyword => removeVietnameseTones(String(value)).toLowerCase().includes(keyword));
+            if (isDefaultTax) {
+                newData.hasTax = true;
+            } else if (isRegVal) {
+                newData.hasTax = false;
+            } else {
+                newData.hasTax = false;
+            }
+        }
         if (field === 'hasTax' && !value) {
             newData.transferToDNLis = false;
         }
@@ -447,38 +528,28 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                 {/* 1. THÔNG TIN CHUNG */}
                 <div className="bg-white p-4 md:p-5 rounded-lg border border-gray-200 shadow-sm">
                     <h3 className="text-sm font-bold text-blue-800 uppercase mb-4 flex items-center gap-2 border-b pb-2"><Calendar size={16} /> Thông tin chung</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                         <div className="md:col-span-1">
                             <label className="block text-xs font-bold text-gray-700 mb-1">Mã hồ sơ <span className="text-red-500">*</span></label>
                             <input type="text" required className="w-full border border-gray-300 rounded-md px-3 py-2 bg-gray-50 font-bold text-blue-700" value={val(formData.code)} onChange={(e) => handleChange('code', e.target.value)} />
                         </div>
-                        <div className="md:col-span-3">
+                        <div className={isRegistrationRecord && !isDefaultTaxProcedure ? "md:col-span-2" : "md:col-span-3"}>
                             <label className="block text-xs font-bold text-gray-700 mb-1">Loại hồ sơ</label>
                             <select className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white" value={val(formData.recordType)} onChange={(e) => handleChange('recordType', e.target.value)}>
                                 <option value="">-- Chọn loại hồ sơ --</option>
                                 {allowedRecordTypes.map(t => <option key={t} value={t}>{t}</option>)}
                             </select>
                         </div>
-                        {isRegistrationRecord && (
-                            <div className="md:col-span-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-amber-50/50 p-3 rounded-lg border border-amber-200/60 mt-1">
-                                <label className="flex items-center gap-2.5 text-sm font-bold text-amber-900 cursor-pointer">
+                        {isRegistrationRecord && !isDefaultTaxProcedure && (
+                            <div className="md:col-span-1 flex items-center h-10 pb-0.5">
+                                <label className="flex items-center gap-2.5 text-sm font-bold text-amber-900 cursor-pointer bg-amber-50/50 hover:bg-amber-100/50 border border-amber-200/60 px-3 py-2 rounded-md w-full justify-center transition-all">
                                     <input
                                         type="checkbox"
                                         className="w-4 h-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500 cursor-pointer"
                                         checked={!!formData.hasTax}
                                         onChange={(e) => handleChange('hasTax', e.target.checked)}
                                     />
-                                    Hồ sơ có thuế (Thêm 10 ngày quy trình)
-                                </label>
-                                <label className={`flex items-center gap-2.5 text-sm font-bold cursor-pointer ${formData.hasTax ? 'text-amber-900' : 'text-slate-400 opacity-60'}`}>
-                                    <input
-                                        type="checkbox"
-                                        disabled={!formData.hasTax}
-                                        className="w-4 h-4 text-amber-600 border-amber-300 rounded focus:ring-amber-500 cursor-pointer disabled:cursor-not-allowed"
-                                        checked={!!formData.transferToDNLis}
-                                        onChange={(e) => handleChange('transferToDNLis', e.target.checked)}
-                                    />
-                                    Chuyển qua DNLis (1 ngày nếu chuyển, không chuyển 3 ngày Phiếu chuyển)
+                                    Hồ sơ có thuế
                                 </label>
                             </div>
                         )}

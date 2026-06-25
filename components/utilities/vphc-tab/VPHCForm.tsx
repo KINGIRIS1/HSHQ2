@@ -11,14 +11,41 @@ const VPHCForm: React.FC<VPHCFormProps> = ({ formData, handleChange }) => {
     
     const labelClass = "block text-[11px] font-bold text-slate-500 uppercase tracking-wide mb-1.5 ml-1";
     const inputClass = "w-full pl-9 pr-3 py-2 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all";
+    const inputClassInvalid = "w-full pl-9 pr-3 py-2 border border-red-300 bg-red-50/50 rounded-xl text-sm focus:ring-2 focus:ring-red-500/20 focus:border-red-500 outline-none transition-all";
     const iconClass = "absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none";
 
     const WARDS = [
         "xã Tân Quan",
         "thị trấn Tân Khai", 
         "xã Minh Đức",
-    "xã Tân Hưng"
+        "xã Tân Hưng"
     ];
+
+    const isValidDDMMYYYY = (val: string): boolean => {
+        if (!val || val.trim() === '') return true;
+        const cleanStr = val.trim();
+        const regex = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
+        if (!regex.test(cleanStr)) return false;
+        
+        const parts = cleanStr.split('/');
+        const d = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const y = parseInt(parts[2], 10);
+        
+        if (m < 1 || m > 12) return false;
+        if (d < 1 || d > 31) return false;
+        if (y < 1000 || y > 9999) return false;
+        
+        const daysInMonth = new Date(y, m, 0).getDate();
+        if (d > daysInMonth) return false;
+        
+        return true;
+    };
+
+    const isNgaySinhValid = isValidDDMMYYYY(formData.NGAYSINH);
+    const isNgayCapValid = isValidDDMMYYYY(formData.NGAYCAP);
+    const isNgayCapGcnValid = isValidDDMMYYYY(formData.NGAYCAPGCN);
+    const isNgayCcValid = isValidDDMMYYYY(formData.NGAYCC);
 
     return (
         <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 space-y-6 pb-20">
@@ -48,8 +75,16 @@ const VPHCForm: React.FC<VPHCFormProps> = ({ formData, handleChange }) => {
                         <label className={labelClass}>Ngày sinh</label>
                         <div className="relative">
                             <Calendar size={16} className={iconClass} />
-                            <input className={inputClass} placeholder="dd/mm/yyyy" value={formData.NGAYSINH} onChange={e => handleChange('NGAYSINH', e.target.value)} />
+                            <input 
+                                className={isNgaySinhValid ? inputClass : inputClassInvalid} 
+                                placeholder="dd/mm/yyyy" 
+                                value={formData.NGAYSINH} 
+                                onChange={e => handleChange('NGAYSINH', e.target.value)} 
+                            />
                         </div>
+                        {!isNgaySinhValid && (
+                            <p className="text-[10px] text-red-600 font-semibold mt-1">Định dạng dd/mm/yyyy không hợp lệ (Ví dụ: 25/12/1990)</p>
+                        )}
                     </div>
                     <div>
                         <label className={labelClass}>CCCD / CMND</label>
@@ -62,8 +97,16 @@ const VPHCForm: React.FC<VPHCFormProps> = ({ formData, handleChange }) => {
                         <label className={labelClass}>Ngày cấp</label>
                         <div className="relative">
                             <Calendar size={16} className={iconClass} />
-                            <input className={inputClass} placeholder="dd/mm/yyyy" value={formData.NGAYCAP} onChange={e => handleChange('NGAYCAP', e.target.value)} />
+                            <input 
+                                className={isNgayCapValid ? inputClass : inputClassInvalid} 
+                                placeholder="dd/mm/yyyy" 
+                                value={formData.NGAYCAP} 
+                                onChange={e => handleChange('NGAYCAP', e.target.value)} 
+                            />
                         </div>
+                        {!isNgayCapValid && (
+                            <p className="text-[10px] text-red-600 font-semibold mt-1">Định dạng dd/mm/yyyy không hợp lệ (Ví dụ: 25/12/1990)</p>
+                        )}
                     </div>
                     <div className="md:col-span-2">
                         <label className={labelClass}>Nơi cấp</label>
@@ -128,7 +171,15 @@ const VPHCForm: React.FC<VPHCFormProps> = ({ formData, handleChange }) => {
                             </div>
                             <div>
                                 <label className={labelClass}>Ngày cấp GCN</label>
-                                <input className={inputClass} placeholder="dd/mm/yyyy" value={formData.NGAYCAPGCN} onChange={e => handleChange('NGAYCAPGCN', e.target.value)} />
+                                <input 
+                                    className={isNgayCapGcnValid ? inputClass : inputClassInvalid} 
+                                    placeholder="dd/mm/yyyy" 
+                                    value={formData.NGAYCAPGCN} 
+                                    onChange={e => handleChange('NGAYCAPGCN', e.target.value)} 
+                                />
+                                {!isNgayCapGcnValid && (
+                                    <p className="text-[10px] text-red-600 font-semibold mt-1">Định dạng dd/mm/yyyy không hợp lệ (Ví dụ: 25/12/1990)</p>
+                                )}
                             </div>
                             <div>
                                 <label className={labelClass}>Cơ quan cấp</label>
@@ -169,7 +220,15 @@ const VPHCForm: React.FC<VPHCFormProps> = ({ formData, handleChange }) => {
                     </div>
                     <div>
                         <label className={labelClass}>Ngày công chứng</label>
-                        <input className={inputClass} placeholder="dd/mm/yyyy" value={formData.NGAYCC} onChange={e => handleChange('NGAYCC', e.target.value)} />
+                        <input 
+                            className={isNgayCcValid ? inputClass : inputClassInvalid} 
+                            placeholder="dd/mm/yyyy" 
+                            value={formData.NGAYCC} 
+                            onChange={e => handleChange('NGAYCC', e.target.value)} 
+                        />
+                        {!isNgayCcValid && (
+                            <p className="text-[10px] text-red-600 font-semibold mt-1">Định dạng dd/mm/yyyy không hợp lệ (Ví dụ: 25/12/1990)</p>
+                        )}
                     </div>
                     <div className="col-span-2">
                         <label className={labelClass}>Văn phòng công chứng</label>

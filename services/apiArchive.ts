@@ -183,14 +183,15 @@ export const saveArchiveRecord = async (record: Partial<ArchiveRecord>): Promise
         if (payload.ngay_thang === '') payload.ngay_thang = null;
 
         if (record.id) {
-            const { data, error } = await supabase.from('archive_records').update({ 
-                status: payload.status,
-                so_hieu: payload.so_hieu,
-                trich_yeu: payload.trich_yeu,
-                ngay_thang: payload.ngay_thang,
-                noi_nhan_gui: payload.noi_nhan_gui,
-                data: payload.data
-            }).eq('id', record.id).select();
+            const updatePayload: any = {};
+            if (payload.status !== undefined) updatePayload.status = payload.status;
+            if (payload.so_hieu !== undefined) updatePayload.so_hieu = payload.so_hieu;
+            if (payload.trich_yeu !== undefined) updatePayload.trich_yeu = payload.trich_yeu;
+            if (payload.ngay_thang !== undefined) updatePayload.ngay_thang = payload.ngay_thang;
+            if (payload.noi_nhan_gui !== undefined) updatePayload.noi_nhan_gui = payload.noi_nhan_gui;
+            if (payload.data !== undefined) updatePayload.data = payload.data;
+
+            const { data, error } = await supabase.from('archive_records').update(updatePayload).eq('id', record.id).select();
             
             if (error) throw error;
             return data && data.length > 0 ? (data[0] as ArchiveRecord) : null;

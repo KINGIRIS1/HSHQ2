@@ -146,6 +146,7 @@ const AppModals: React.FC<AppModalsProps> = (props) => {
                     employees={props.employees} 
                     users={props.users}
                     currentUser={props.currentUser} 
+                    holidays={props.holidays}
                     onEdit={props.canPerformAction ? (r) => { props.setEditingRecord(r); props.setIsModalOpen(true); } : undefined}
                     onDelete={props.canPerformAction ? props.confirmDelete : undefined}
                     onCreateLiquidation={props.onCreateLiquidation}
@@ -159,6 +160,7 @@ const AppModals: React.FC<AppModalsProps> = (props) => {
                     employees={props.employees} 
                     users={props.users}
                     currentUser={props.currentUser} 
+                    holidays={props.holidays}
                     onEdit={props.canPerformAction ? (r) => { props.setEditingRecord(r); props.setIsModalOpen(true); } : undefined}
                     onDelete={props.canPerformAction ? props.confirmDelete : undefined}
                     onCreateLiquidation={props.onCreateLiquidation}
@@ -190,6 +192,7 @@ const AppModals: React.FC<AppModalsProps> = (props) => {
                 selectedCount={props.selectedCount}
                 targetRecords={targetRecordsForBatch} 
                 wards={props.wards}
+                currentView={props.currentView}
             />
 
             <ExcelPreviewModal 

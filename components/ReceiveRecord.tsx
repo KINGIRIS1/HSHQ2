@@ -107,36 +107,108 @@ const ReceiveRecord: React.FC<ReceiveRecordProps> = ({ onSave, onDelete, wards, 
       return 'CT';
   };
 
-  const calculateNextCode = (wardName: string, dateStr: string, existingCodes: string[] = []) => {
+  const getRecordTabAbbreviation = (recordType: string | null | undefined): string => {
+      if (!recordType) return 'ĐĐ';
+      const t = recordType.trim().toLowerCase();
+      
+      if (recordType === 'Cung cấp tài liệu đất đai' || recordType === 'Sao lục') {
+          return 'LT';
+      }
+      if (recordType === 'Công văn') {
+          return 'CV';
+      }
+      if (['CMD', 'Tòa án', 'Thi hành án'].includes(recordType)) {
+          return 'K';
+      }
+      
+      const REG_PROCEDURES = [
+          "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
+          "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
+      ];
+      const isReg = t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
+      if (isReg) {
+          return 'ĐK';
+      }
+      
+      return 'ĐĐ';
+  };
+
+  const calculateNextCode = (wardName: string, dateStr: string, existingCodes: string[] = [], recordType?: string) => {
     if (!dateStr) return '';
 
     const d = new Date(dateStr);
-    const year = d.getFullYear().toString();
-    const yy = year.slice(-2);
-    const mm = ('0' + (d.getMonth() + 1)).slice(-2);
-    const dd = ('0' + d.getDate()).slice(-2);
-    const datePrefix = `${yy}${mm}${dd}`;
+    const yearStr = d.getFullYear().toString();
+    const yy = yearStr.slice(-2);
     
+    const deptCode = getRecordTabAbbreviation(recordType);
     let maxSeq = 0;
     
-    const checkSeq = (code: string | undefined | null) => {
+    const checkSeq = (code: string | undefined | null, rType?: string | null) => {
         if (!code) return;
-        const parts = code.split('-');
-        if (parts.length === 2 || parts.length === 3) {
-            const rDate = parts.length === 2 ? parts[0] : parts[1];
-            const rSeq = parts.length === 2 ? parts[1] : parts[2];
-            if (rDate.substring(0, 2) === yy) {
-                const seqNum = parseInt(rSeq, 10);
-                if (!isNaN(seqNum) && seqNum > maxSeq) maxSeq = seqNum;
+        
+        let rYear = '';
+        let rDept = '';
+        let rSeq = 0;
+        
+        const computedDeptOfRecord = rType ? getRecordTabAbbreviation(rType) : '';
+        
+        if (code.includes('/')) {
+            const parts = code.split('/');
+            if (parts.length === 2) {
+                const seqVal = parseInt(parts[0], 10);
+                const deptYear = parts[1].split('-');
+                if (deptYear.length === 2 && !isNaN(seqVal)) {
+                    rSeq = seqVal;
+                    rDept = deptYear[0];
+                    rYear = deptYear[1];
+                }
             }
+        } else if (code.startsWith('HS-')) {
+            const parts = code.split('-');
+            if (parts.length === 3) {
+                const yearVal = parts[1];
+                const seqVal = parseInt(parts[2], 10);
+                if (!isNaN(seqVal)) {
+                    rSeq = seqVal;
+                    rYear = yearVal;
+                    rDept = computedDeptOfRecord || 'ĐĐ';
+                }
+            }
+        } else if (code.includes('-')) {
+            const parts = code.split('-');
+            if (parts.length === 2) {
+                const left = parts[0];
+                const right = parts[1];
+                if (left.length === 6 && !isNaN(parseInt(left, 10))) {
+                    const yearPart = '20' + left.substring(0, 2);
+                    const seqVal = parseInt(right, 10);
+                    if (!isNaN(seqVal)) {
+                        rSeq = seqVal;
+                        rYear = yearPart;
+                        rDept = computedDeptOfRecord || 'ĐĐ';
+                    }
+                } else if (left === 'TĐ' || left === 'TL' || left === 'SL' || left === 'CV') {
+                    const seqVal = parseInt(right, 10);
+                    if (!isNaN(seqVal)) {
+                        rSeq = seqVal;
+                        rYear = yearStr;
+                        rDept = left === 'CV' ? 'CV' : (left === 'TL' || left === 'SL' ? 'LT' : 'ĐĐ');
+                    }
+                }
+            }
+        }
+        
+        const finalDept = rDept || computedDeptOfRecord || 'ĐĐ';
+        if (finalDept === deptCode && (rYear === yearStr || rYear === yy)) {
+            if (rSeq > maxSeq) maxSeq = rSeq;
         }
     };
 
-    combinedRecords.forEach((r: RecordFile) => checkSeq(r.code));
-    existingCodes.forEach(checkSeq);
+    combinedRecords.forEach((r: RecordFile) => checkSeq(r.code, r.recordType));
+    existingCodes.forEach(code => checkSeq(code, recordType));
 
     const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
-    return `${datePrefix}-${nextSeq}`;
+    return `${nextSeq}/${deptCode}-${yearStr}`;
   };
 
   // --- LOGIC TÍNH HẠN TRẢ (CẬP NHẬT FIX LỖI TIMEZONE VÀ NGÀY NGHỈ) ---
@@ -409,7 +481,7 @@ const ReceiveRecord: React.FC<ReceiveRecordProps> = ({ onSave, onDelete, wards, 
                 records={combinedRecords}
                 holidays={holidays}
                 calculateDeadline={calculateDeadline}
-                generateCode={calculateNextCode} 
+                generateCode={(w, d, rType) => calculateNextCode(w, d, [], rType)} 
                 onPrint={handlePreviewDocx}
                 onCancelEdit={() => setEditingRecord(null)}
                 currentUser={currentUser}
@@ -422,7 +494,7 @@ const ReceiveRecord: React.FC<ReceiveRecordProps> = ({ onSave, onDelete, wards, 
             <BulkImport 
                 onSave={handleSaveRecordWithForce}
                 calculateDeadline={calculateDeadline}
-                calculateNextCode={(w, d, exist) => calculateNextCode(w, d, exist)}
+                calculateNextCode={(w, d, exist, rType) => calculateNextCode(w, d, exist, rType)}
                 onPreview={handlePreviewDocx}
                 currentUser={currentUser}
             />

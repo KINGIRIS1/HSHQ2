@@ -9,7 +9,7 @@ import { confirmAction } from '../../utils/appHelpers';
 interface BulkImportProps {
   onSave: (record: RecordFile) => Promise<RecordFile | null>;
   calculateDeadline: (type: string, date: string) => string;
-  calculateNextCode: (ward: string, date: string, existingCodes: string[]) => string;
+  calculateNextCode: (ward: string, date: string, existingCodes: string[], recordType?: string) => string;
   onPreview: (record: Partial<RecordFile>) => void;
   currentUser?: any;
 }
@@ -21,6 +21,9 @@ interface BulkRecordItem extends Partial<RecordFile> {
 
 const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calculateNextCode, onPreview, currentUser }) => {
   const [bulkRecords, setBulkRecords] = useState<BulkRecordItem[]>([]);
+  const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [selectedSheet, setSelectedSheet] = useState<string>('');
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   const dateVal = (v: any) => { if (!v) return ''; const str = String(v); return str.includes('T') ? str.split('T')[0] : str; };
@@ -45,6 +48,26 @@ const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calc
       ];
       ws['!cols'] = wscols;
       
+      // Styling the headers in the bulk import sheet
+      const headerStyle = {
+          font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10, name: "Calibri" },
+          fill: { fgColor: { rgb: "2E7D32" } }, // Deep Forest Green for receiving
+          alignment: { horizontal: "center", vertical: "center", wrapText: true },
+          border: {
+              top: { style: "thin", color: { rgb: "CCCCCC" } },
+              bottom: { style: "medium", color: { rgb: "2E7D32" } },
+              left: { style: "thin", color: { rgb: "CCCCCC" } },
+              right: { style: "thin", color: { rgb: "CCCCCC" } }
+          }
+      };
+      
+      for (let c = 0; c < headers.length; c++) {
+          const cellRef = XLSX.utils.encode_cell({ r: 0, c });
+          if (ws[cellRef]) {
+              ws[cellRef].s = headerStyle;
+          }
+      }
+      
       XLSX.utils.book_append_sheet(wb, ws, "Mau_Nhap_Lieu");
       XLSX.writeFile(wb, "Mau_Nhap_Lieu_Ho_So.xlsx");
   };
@@ -55,46 +78,73 @@ const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calc
 
       const reader = new FileReader();
       reader.onload = (evt) => {
-          const ab = evt.target?.result;
-          const wb = XLSX.read(ab, { type: 'array' });
-          const wsname = wb.SheetNames[0];
-          const ws = wb.Sheets[wsname];
+          try {
+              const ab = evt.target?.result;
+              const wb = XLSX.read(ab, { type: 'array' });
+              setWorkbook(wb);
+              
+              const allSheets = wb.SheetNames;
+              setSheetNames(allSheets);
+              
+              let defaultSheet = allSheets[0];
+              const importableSheets = allSheets.filter(name => {
+                  const upper = name.toUpperCase();
+                  return !upper.includes('HUONG DAN') && !upper.includes('GUIDE') && !upper.includes('HƯỚNG DẪN');
+              });
+              
+              if (importableSheets.length > 0) {
+                  defaultSheet = importableSheets[0];
+              }
+              
+              setSelectedSheet(defaultSheet);
+              loadBulkSheetData(defaultSheet, wb);
+          } catch (error) {
+              console.error("Lỗi đọc Excel hàng loạt:", error);
+              alert("Lỗi khi đọc file Excel.");
+          }
+      };
+      reader.readAsArrayBuffer(file);
+  };
+
+  const loadBulkSheetData = (sheetName: string, activeWb?: XLSX.WorkBook) => {
+      const currentWb = activeWb || workbook;
+      if (!currentWb) return;
+      
+      try {
+          const ws = currentWb.Sheets[sheetName];
           const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
           
-          let headerRowIndex = 0;
+          let headerRowIndex = -1;
           for (let i = 0; i < Math.min(data.length, 20); i++) {
               const row = data[i] as any[];
-              if (row && row.some(cell => String(cell).toLowerCase().includes('chủ sử dụng') || String(cell).toLowerCase().includes('tên'))) {
+              if (row && row.some(cell => {
+                  const s = String(cell || '').toLowerCase();
+                  return s.includes('chủ sử dụng') || s.includes('tên') || s.includes('họ tên') || s.includes('customer');
+              })) {
                   headerRowIndex = i;
                   break;
               }
           }
+          
+          if (headerRowIndex === -1) {
+              headerRowIndex = 0;
+          }
 
-          const headers = (data[headerRowIndex] as string[]).map(h => String(h).toUpperCase().trim());
+          const headers = (data[headerRowIndex] as string[] || []).map(h => String(h || '').toUpperCase().trim());
           const newBulkRecords: BulkRecordItem[] = [];
 
           const typeMapping: Record<string, string> = {
-              'TL': 'Trích lục bản đồ địa chính',
-              'TRÍCH LỤC': 'Trích lục bản đồ địa chính',
-              'TĐ': 'Trích đo bản đồ địa chính',
-              'TD': 'Trích đo bản đồ địa chính',
-              'TRÍCH ĐO': 'Trích đo bản đồ địa chính',
-              'ĐĐ': 'Đo đạc',
-              'DD': 'Đo đạc',
-              'ĐO ĐẠC': 'Đo đạc',
-              'CM': 'Cắm mốc',
-              'CẮM MỐC': 'Cắm mốc',
-              'CL': 'Trích đo chỉnh lý bản đồ địa chính',
-              'CHỈNH LÝ': 'Trích đo chỉnh lý bản đồ địa chính',
-              'HIẾN ĐƯỜNG': 'Trích đo chỉnh lý bản đồ địa chính',
-              'TÁCH THỬA': 'Tách thửa',
-              'HỢP THỬA': 'Trích đo bản đồ địa chính',
-              'CẤP ĐỔI': 'Trích đo bản đồ địa chính'
+              'TL': 'Trích lục bản đồ địa chính', 'TRÍCH LỤC': 'Trích lục bản đồ địa chính',
+              'TĐ': 'Trích đo bản đồ địa chính', 'TD': 'Trích đo bản đồ địa chính', 'TRÍCH ĐO': 'Trích đo bản đồ địa chính',
+              'ĐĐ': 'Đo đạc', 'DD': 'Đo đạc', 'ĐO ĐẠC': 'Đo đạc', 'CM': 'Cắm mốc', 'CẮM MỐC': 'Cắm mốc',
+              'CL': 'Trích đo chỉnh lý bản đồ địa chính', 'CHỈNH LÝ': 'Trích đo chỉnh lý bản đồ địa chính',
+              'HIẾN ĐƯỜNG': 'Trích đo chỉnh lý bản đồ địa chính', 'TÁCH THỬA': 'Tách thửa',
+              'HỢP THỬA': 'Trích đo bản đồ địa chính', 'CẤP ĐỔI': 'Trích đo bản đồ địa chính'
           };
 
           for (let i = headerRowIndex + 1; i < data.length; i++) {
               const row = data[i] as any[];
-              if (!row || row.length === 0) continue;
+              if (!row || row.length === 0 || row.every(cell => cell === null || cell === undefined || cell === '')) continue;
 
               const getVal = (possibleHeaders: string[]) => {
                   const idx = headers.findIndex(h => possibleHeaders.some(ph => h.includes(ph)));
@@ -130,28 +180,30 @@ const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calc
               newBulkRecords.push({
                   tempId: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9),
                   isSaved: false,
-                  customerName: String(customerName),
-                  phoneNumber: String(getVal(['SĐT', 'ĐIỆN THOẠI']) || ''),
-                  ward: String(ward),
-                  landPlot: String(getVal(['THỬA']) || ''),
-                  mapSheet: String(getVal(['TỜ']) || ''),
+                  customerName: String(customerName).trim(),
+                  phoneNumber: String(getVal(['SĐT', 'ĐIỆN THOẠI']) || '').trim(),
+                  ward: String(ward).trim(),
+                  landPlot: String(getVal(['THỬA']) || '').trim(),
+                  mapSheet: String(getVal(['TỜ']) || '').trim(),
                   area: parseFloat(String(getVal(['DIỆN TÍCH']) || '0')),
-                  address: String(getVal(['ĐỊA CHỈ']) || ''),
+                  address: String(getVal(['ĐỊA CHỈ']) || '').trim(),
                   recordType: String(recordType),
                   receivedDate: receivedDate,
                   deadline: deadline,
                   status: RecordStatus.RECEIVED,
                   receivedBy: currentUser?.employeeId,
-                  content: String(getVal(['NỘI DUNG', 'GHI CHÚ']) || ''),
-                  authorizedBy: authorizedBy,
-                  authDocType: authDocType,
+                  content: String(getVal(['NỘI DUNG', 'GHI CHÚ']) || '').trim(),
+                  authorizedBy: authorizedBy.trim(),
+                  authDocType: authDocType.trim(),
                   code: ''
               });
           }
           setBulkRecords(newBulkRecords);
           if (bulkFileInputRef.current) bulkFileInputRef.current.value = '';
-      };
-      reader.readAsArrayBuffer(file);
+      } catch (err) {
+          console.error("Lỗi parse bulk sheet:", err);
+          alert("Lỗi khi tải bảng dữ liệu.");
+      }
   };
 
   const handleGenerateBulkCode = (index: number) => {
@@ -160,7 +212,7 @@ const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calc
           const record = newList[index];
           if (!record.ward) { alert("Vui lòng nhập Xã/Phường trước khi tạo mã."); return prev; }
           const existingBulkCodes = newList.map(r => r.code || '').filter(c => c !== '');
-          const newCode = calculateNextCode(record.ward, record.receivedDate || '', existingBulkCodes);
+          const newCode = calculateNextCode(record.ward, record.receivedDate || '', existingBulkCodes, record.recordType || undefined);
           newList[index] = { ...record, code: newCode };
           return newList;
       });
@@ -218,11 +270,28 @@ const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calc
                 </h3>
                 <p className="text-sm text-blue-600 mt-1">Chọn file Excel để nhập danh sách. Mã hồ sơ sẽ được để trống và tạo sau.</p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2 items-center">
+                {sheetNames.length > 1 && (
+                    <div className="flex items-center gap-1.5 bg-white border border-gray-300 rounded-lg px-2.5 py-1.5 shadow-sm text-sm">
+                        <span className="text-xs font-semibold text-gray-700">Chọn Sheet:</span>
+                        <select 
+                            value={selectedSheet}
+                            onChange={(e) => {
+                                setSelectedSheet(e.target.value);
+                                loadBulkSheetData(e.target.value);
+                            }}
+                            className="bg-gray-50 border border-gray-300 rounded px-2 py-0.5 text-xs font-semibold text-gray-800 focus:outline-none"
+                        >
+                            {sheetNames.map((name) => (
+                                <option key={name} value={name}>{name}</option>
+                            ))}
+                        </select>
+                    </div>
+                )}
                 <button onClick={handleDownloadTemplate} className="bg-white text-green-700 border border-green-300 px-4 py-2 rounded-lg font-bold text-sm hover:bg-green-100 flex items-center gap-2">
                     <Download size={16} /> Tải mẫu Excel
                 </button>
-                <button onClick={() => bulkFileInputRef.current?.click()} className="bg-white text-blue-700 border border-blue-300 px-4 py-2 rounded-lg font-bold text-sm hover:bg-blue-100 flex items-center gap-2">
+                <button onClick={() => bulkFileInputRef.current?.click()} className="bg-white text-blue-700 border border-blue-300 px-4 py-2 rounded-lg font-bold text-sm hover:bg-green-100 flex items-center gap-2">
                     <FileSpreadsheet size={16} /> Chọn File Excel
                 </button>
                 <input type="file" ref={bulkFileInputRef} className="hidden" accept=".xlsx, .xls" onChange={handleBulkImport} />
