@@ -9,6 +9,7 @@ import {
   importArchiveRecords,
 } from "../../services/apiArchive";
 import { useArchiveRealtime } from "../../hooks/useArchiveRealtime";
+import { getNextGlobalRecordCode } from "../../services/apiRecords";
 import {
   fetchEmployees,
   saveEmployeeApi,
@@ -40,6 +41,9 @@ import {
   Printer,
   History,
   CheckSquare,
+  FileText,
+  UserPlus,
+  ClipboardList,
 } from "lucide-react";
 import { confirmAction, toTitleCase, findArchiveStaffForWard } from "../../utils/appHelpers";
 import AssignModal from "../AssignModal";
@@ -53,6 +57,8 @@ import * as XLSX from "xlsx-js-style";
 interface CongVanViewProps {
   currentUser: User;
   wards?: string[];
+  currentView?: string;
+  setCurrentView?: (view: string) => void;
 }
 
 // Định nghĩa form state riêng để dễ quản lý các trường trong JSON data
@@ -86,6 +92,8 @@ interface CongVanFormData {
 const CongVanView: React.FC<CongVanViewProps> = ({
   currentUser,
   wards = ["Tân Quan", "Tân Khai", "Minh Đức", "Tân Hưng"],
+  currentView,
+  setCurrentView,
 }) => {
   const [subTab, setSubTab] = useState<
     "all" | "draft" | "assigned" | "executed" | "sign" | "signed" | "result"
@@ -98,7 +106,6 @@ const CongVanView: React.FC<CongVanViewProps> = ({
   // Filters
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [filterWard, setFilterWard] = useState("");
   const [filterEmployee, setFilterEmployee] = useState("");
 
   // Detail Modal State
@@ -151,6 +158,17 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     loadData();
     loadEmployees();
   }, []);
+
+  useEffect(() => {
+    if (!currentView) return;
+    if (currentView === "congvan_records") setSubTab("all");
+    else if (currentView === "congvan_assign_tasks") setSubTab("draft");
+    else if (currentView === "congvan_completed_list") setSubTab("executed");
+    else if (currentView === "congvan_pending_check_list") setSubTab("assigned");
+    else if (currentView === "congvan_check_list") setSubTab("sign");
+    else if (currentView === "congvan_director_completed") setSubTab("signed");
+    else if (currentView === "congvan_handover_list") setSubTab("result");
+  }, [currentView]);
 
   const loadData = async () => {
     const data = await fetchArchiveRecords("congvan");
@@ -215,9 +233,6 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     // Filter by Date
     if (fromDate) list = list.filter((r) => r.ngay_thang >= fromDate);
     if (toDate) list = list.filter((r) => r.ngay_thang <= toDate);
-
-    // Filter by Ward
-    if (filterWard) list = list.filter((r) => r.data?.xa_phuong === filterWard);
 
     // Filter by Employee
     if (filterEmployee)
@@ -293,7 +308,6 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     searchTerm,
     fromDate,
     toDate,
-    filterWard,
     filterEmployee,
     employees,
     currentUser,
@@ -303,7 +317,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
   useEffect(() => {
     setSelectedIds(new Set());
     setCurrentPage(1);
-  }, [subTab, handoverTab, searchTerm, fromDate, toDate, filterWard, filterEmployee]);
+  }, [subTab, handoverTab, searchTerm, fromDate, toDate, filterEmployee]);
 
   const handleAssign = () => {
     if (selectedIds.size === 0) return;
@@ -406,8 +420,12 @@ const CongVanView: React.FC<CongVanViewProps> = ({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.so_hieu || !formData.chu_su_dung) {
-      alert("Vui lòng nhập Số hiệu công văn và Chủ sở hữu/Nơi gửi nhận.");
+    if (!formData.so_hieu || formData.so_hieu === "Đang lấy mã tự động...") {
+      alert("Hệ thống đang khởi tạo mã hồ sơ, vui lòng đợi một lát.");
+      return;
+    }
+    if (!formData.chu_su_dung) {
+      alert("Vui lòng nhập Cơ quan phát hành/Nơi gửi nhận.");
       return;
     }
 
@@ -879,10 +897,18 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     setIsFormOpen(true);
   };
 
-  const handleAddNew = () => {
+  const handleAddNew = async () => {
     setIsFormOpen(true);
     setEditingId(null);
     resetForm();
+    setFormData((prev) => ({ ...prev, so_hieu: "Đang lấy mã tự động..." }));
+    try {
+      const code = await getNextGlobalRecordCode(new Date().toISOString());
+      setFormData((prev) => ({ ...prev, so_hieu: code }));
+    } catch (err) {
+      console.error("Lỗi tự động lấy mã hồ sơ:", err);
+      setFormData((prev) => ({ ...prev, so_hieu: "" }));
+    }
   };
 
   const formatDate = (d: string) => (d ? d.split("-").reverse().join("/") : "");
@@ -1108,51 +1134,53 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     e.target.value = "";
   };
 
+  const handleTabChange = (viewName: string, localTab: "all" | "draft" | "assigned" | "executed" | "sign" | "signed" | "result") => {
+    if (setCurrentView) {
+      setCurrentView(viewName);
+    } else {
+      setSubTab(localTab);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-white">
       {/* SUB-HEADER TABS */}
       <div className="flex border-b border-gray-200 bg-gray-50 px-4 overflow-x-auto shrink-0">
         <button
-          onClick={() => setSubTab("all")}
+          onClick={() => handleTabChange("congvan_records", "all")}
           className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${subTab === "all" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
         >
-          <LayoutGrid size={16} /> Tất cả công văn
+          <FileText size={16} /> Tất cả hồ sơ
         </button>
         <button
-          onClick={() => setSubTab("draft")}
+          onClick={() => handleTabChange("congvan_assign_tasks", "draft")}
           className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${subTab === "draft" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
         >
-          <ListChecks size={16} /> Chưa giao
+          <UserPlus size={16} /> Chưa giao
         </button>
         <button
-          onClick={() => setSubTab("assigned")}
-          className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${subTab === "assigned" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-        >
-          <Users size={16} /> Đang xử lý
-        </button>
-        <button
-          onClick={() => setSubTab("executed")}
+          onClick={() => handleTabChange("congvan_completed_list", "executed")}
           className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${subTab === "executed" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
         >
-          <CheckCircle2 size={16} /> Đã xử lý
+          <CheckSquare size={16} /> Đã thực hiện
         </button>
         <button
-          onClick={() => setSubTab("sign")}
-          className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${subTab === "sign" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+          onClick={() => handleTabChange("congvan_pending_check_list", "assigned")}
+          className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${subTab === "assigned" ? "border-orange-600 text-orange-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
         >
-          <Send size={16} /> Trình ký
+          <ClipboardList size={16} /> Kiểm tra
         </button>
         <button
-          onClick={() => setSubTab("signed")}
-          className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${subTab === "signed" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+          onClick={() => handleTabChange("congvan_check_list", "sign")}
+          className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${subTab === "sign" || subTab === "signed" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
         >
-          <PenTool size={16} /> Ký duyệt
+          <ClipboardList size={16} /> Trình ký
         </button>
         <button
-          onClick={() => setSubTab("result")}
+          onClick={() => handleTabChange("congvan_handover_list", "result")}
           className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${subTab === "result" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
         >
-          <FileCheck size={16} /> Bàn giao 1 cửa
+          <Send size={16} /> Giao 1 cửa
         </button>
       </div>
 
@@ -1223,22 +1251,6 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                 <X size={14} />
               </button>
             )}
-          </div>
-
-          <div className="flex items-center gap-2 bg-white px-2 py-1.5 rounded-md border border-gray-200 shadow-sm">
-            <MapPin size={16} className="text-gray-500" />
-            <select
-              className="text-sm outline-none bg-transparent text-gray-700 font-medium cursor-pointer border-none focus:ring-0 min-w-[120px]"
-              value={filterWard}
-              onChange={(e) => setFilterWard(e.target.value)}
-            >
-              <option value="">Tất cả Xã/Phường</option>
-              {wards.map((w) => (
-                <option key={w} value={w}>
-                  {w}
-                </option>
-              ))}
-            </select>
           </div>
 
           <div className="flex items-center gap-2 bg-white px-2 py-1.5 rounded-md border border-gray-200 shadow-sm">
@@ -1371,139 +1383,98 @@ const CongVanView: React.FC<CongVanViewProps> = ({
       <div className="flex-1 overflow-hidden p-4 flex gap-4 min-h-0 bg-gray-50">
         {/* Form panel */}
         {isFormOpen && (
-          <div className="w-80 bg-white rounded-xl shadow-lg border border-gray-200 p-4 flex flex-col shrink-0 overflow-y-auto animate-in slide-in-from-left duration-250 z-20">
-            <div className="flex justify-between items-center pb-3 border-b border-gray-100 mb-4">
-              <h3 className="font-bold text-gray-800 text-sm flex items-center gap-1.5">
-                <Plus size={16} className="text-blue-500" />
-                {editingId ? "Cập nhật Công Văn" : "Thêm mới Công Văn"}
+          <div className="w-96 bg-white rounded-xl shadow-md border border-gray-100 p-6 flex flex-col shrink-0 overflow-y-auto animate-in slide-in-from-left duration-250 z-20">
+            <div className="flex justify-between items-center pb-4 border-b border-gray-100 mb-6">
+              <h3 className="font-bold text-gray-900 text-lg">
+                {editingId ? "Cập nhật Công văn" : "Thêm mới Công văn"}
               </h3>
               <button
                 onClick={() => setIsFormOpen(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-50 transition-all"
               >
-                <X size={18} />
+                <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleSave} className="flex-1 flex flex-col gap-4 text-xs font-medium text-gray-600">
+            <form onSubmit={handleSave} className="flex-1 flex flex-col gap-5 text-xs font-medium text-gray-600">
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">
-                  Số hiệu công văn <span className="text-red-500">*</span>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  MÃ HỒ SƠ <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-bold"
+                  readOnly
+                  className="w-full border border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-4 py-3 text-sm outline-none font-bold text-blue-600 placeholder:text-gray-300 transition-all cursor-not-allowed"
                   value={formData.so_hieu}
-                  onChange={(e) =>
-                    setFormData({ ...formData, so_hieu: e.target.value })
-                  }
-                  placeholder="Nhập số công văn..."
+                  placeholder="Hệ thống tự động tạo mã..."
                 />
               </div>
 
               <div>
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">
-                  Cơ quan ban hành / Nơi gửi nhận <span className="text-red-500">*</span>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  NGÀY THÁNG <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  required
+                  className="w-full border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-4 py-3 text-sm outline-none font-medium text-gray-700 transition-all"
+                  value={formData.ngay_nhan ? formData.ngay_nhan.split("T")[0] : ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, ngay_nhan: e.target.value })
+                  }
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  SỐ CÔNG VĂN - TRÍCH YẾU <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  rows={4}
+                  required
+                  className="w-full border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-4 py-3 text-sm outline-none resize-none placeholder:text-gray-300 transition-all font-normal leading-relaxed"
+                  value={formData.noi_dung}
+                  onChange={(e) =>
+                    setFormData({ ...formData, noi_dung: e.target.value })
+                  }
+                  placeholder="Nội dung..."
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  CƠ QUAN PHÁT HÀNH <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-4 py-3 text-sm outline-none placeholder:text-gray-300 transition-all font-medium text-gray-700"
                   value={formData.chu_su_dung}
                   onChange={(e) =>
                     setFormData({ ...formData, chu_su_dung: e.target.value })
                   }
-                  placeholder="Nhập nơi gửi/nhận, chủ sở hữu..."
+                  placeholder="Đơn vị..."
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">
-                    Ngày công văn/Ngày nhận
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium"
-                    value={formData.ngay_nhan ? formData.ngay_nhan.split("T")[0] : ""}
-                    onChange={(e) =>
-                      setFormData({ ...formData, ngay_nhan: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-purple-600 uppercase mb-1 block">
-                    Hạn xử lý (Hẹn trả)
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full border border-purple-300 bg-purple-50/30 rounded-lg px-3 py-2 text-sm text-purple-700 font-bold outline-none font-medium"
-                    value={formData.hen_tra}
-                    onChange={(e) =>
-                      setFormData({ ...formData, hen_tra: e.target.value })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="p-3 bg-blue-50/50 rounded-lg border border-blue-100 flex flex-col gap-3">
-                <span className="font-bold text-[10px] text-blue-700 uppercase tracking-wider">Thông tin địa bàn (Nếu có)</span>
-                <div>
-                  <label className="text-[10px] font-bold text-gray-500 uppercase mb-1 block">
-                    Xã / Phường liên quan
-                  </label>
-                  <select
-                    className="w-full border border-gray-300 bg-white rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-medium cursor-pointer"
-                    value={formData.xa_phuong}
-                    onChange={(e) =>
-                      setFormData({ ...formData, xa_phuong: e.target.value })
-                    }
-                  >
-                    {wards.map((w) => (
-                      <option key={w} value={w}>
-                        {w}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-500 uppercase mb-0.5 block">
-                      Tờ bản đồ (Nếu có)
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full border border-gray-300 bg-white rounded-lg px-3 py-1.5 text-xs outline-none font-mono"
-                      value={formData.to_ban_do}
-                      onChange={(e) =>
-                        setFormData({ ...formData, to_ban_do: e.target.value })
-                      }
-                      placeholder="Số tờ..."
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold text-gray-500 uppercase mb-0.5 block">
-                      Thửa đất (Nếu có)
-                    </label>
-                    <input
-                      type="text"
-                      className="w-full border border-gray-300 bg-white rounded-lg px-3 py-1.5 text-xs outline-none font-mono"
-                      value={formData.thua_dat}
-                      onChange={(e) =>
-                        setFormData({ ...formData, thua_dat: e.target.value })
-                      }
-                      placeholder="Số thửa..."
-                    />
-                  </div>
-                </div>
+              <div>
+                <label className="text-[11px] font-bold text-purple-600 uppercase tracking-wider mb-2 block">
+                  Hạn xử lý (Hẹn trả)
+                </label>
+                <input
+                  type="date"
+                  className="w-full border border-purple-200 bg-purple-50/20 rounded-lg px-4 py-3 text-sm text-purple-700 font-bold outline-none font-medium transition-all"
+                  value={formData.hen_tra}
+                  onChange={(e) =>
+                    setFormData({ ...formData, hen_tra: e.target.value })
+                  }
+                />
               </div>
 
               {/* Nếu đang sửa trạng thái completed thì lấy thêm thông tin bàn giao */}
               {formData.status === "completed" && (
-                <div className="p-3 bg-green-50/50 rounded-lg border border-green-100 flex flex-col gap-3">
+                <div className="p-4 bg-green-50/30 rounded-xl border border-green-100 flex flex-col gap-4">
                   <span className="font-bold text-[10px] text-green-700 uppercase tracking-wider">Thông tin bàn giao 1 cửa</span>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
@@ -1512,7 +1483,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                       </label>
                       <input
                         type="date"
-                        className="w-full border border-green-300 bg-white rounded-lg px-3 py-2 text-sm outline-none"
+                        className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm outline-none"
                         value={formData.ngay_hoan_thanh || ""}
                         onChange={(e) =>
                           setFormData({
@@ -1528,7 +1499,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                       </label>
                       <input
                         type="text"
-                        className="w-full border border-green-300 bg-white rounded-lg px-3 py-2 text-sm outline-none"
+                        className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm outline-none"
                         value={formData.danh_sach || ""}
                         onChange={(e) =>
                           setFormData({
@@ -1547,7 +1518,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                       </label>
                       <input
                         type="text"
-                        className="w-full border border-green-300 bg-white rounded-lg px-3 py-2 text-sm outline-none font-mono"
+                        className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm outline-none font-mono"
                         value={formData.receipt_number || ""}
                         onChange={(e) =>
                           setFormData({
@@ -1563,7 +1534,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                         Thu tiền
                       </label>
                       <select
-                        className="w-full border border-green-300 bg-white rounded-lg px-3 py-2 text-sm outline-none"
+                        className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm outline-none"
                         value={formData.payment_status || "Chưa thu"}
                         onChange={(e) =>
                           setFormData({
@@ -1585,7 +1556,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                     </label>
                     <input
                       type="date"
-                      className="w-full border border-green-300 bg-white rounded-lg px-3 py-2 text-sm outline-none"
+                      className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm outline-none"
                       value={formData.result_returned_date || ""}
                       onChange={(e) =>
                         setFormData({
@@ -1598,32 +1569,17 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                 </div>
               )}
 
-              <div>
-                <label className="text-xs font-bold text-gray-500 uppercase mb-1 block">
-                  Trích yếu nội dung công văn
-                </label>
-                <textarea
-                  rows={4}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none animate-none"
-                  value={formData.noi_dung}
-                  onChange={(e) =>
-                    setFormData({ ...formData, noi_dung: e.target.value })
-                  }
-                  placeholder="Nhập nội dung công văn..."
-                />
-              </div>
-
-              <div className="pt-2 flex gap-2 justify-end border-t border-gray-100">
+              <div className="pt-4 flex gap-4 justify-end border-t border-gray-100">
                 <button
                   type="button"
                   onClick={() => setIsFormOpen(false)}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm font-medium"
+                  className="px-5 py-2.5 text-gray-500 hover:text-gray-700 text-sm font-semibold transition-all"
                 >
                   Hủy
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-blue-600 text-white rounded-lg font-bold text-sm hover:bg-blue-700 flex items-center gap-1 shadow-sm"
+                  className="px-5 py-2.5 bg-[#e25813] text-white rounded-lg font-semibold text-sm hover:bg-[#c8460b] flex items-center gap-2 shadow-sm transition-all"
                 >
                   <Save size={16} /> Lưu
                 </button>
@@ -1649,20 +1605,14 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                     />
                   </th>
                   <th className="p-3 w-10 text-center">#</th>
-                  <th className="p-3 w-32 text-center whitespace-nowrap">Số hiệu CV</th>
+                  <th className="p-3 w-32 text-center whitespace-nowrap">Mã hồ sơ</th>
                   <th className="p-3 w-48 text-center whitespace-nowrap">Cơ quan ban hành / Nơi nhận</th>
-                  <th className="p-3 w-32 text-center whitespace-nowrap">Xã/Phường</th>
-                  <th className="p-3 w-20 text-center whitespace-nowrap">Tờ / Thửa</th>
                   <th className="p-3 w-24 text-center whitespace-nowrap">Ngày công văn</th>
                   {subTab === "all" && (
                     <th className="p-3 w-32 text-center whitespace-nowrap">Trạng thái</th>
                   )}
                   {subTab === "result" && (
-                    <>
-                      <th className="p-3 w-36 text-center text-blue-800 bg-blue-50/50 whitespace-nowrap">Biên Lai/Hóa Đơn</th>
-                      <th className="p-3 w-32 text-center text-emerald-850 bg-emerald-50/30 whitespace-nowrap">Số tiền thực tế</th>
-                      <th className="p-3 w-40 text-center text-green-800 bg-green-50/30 whitespace-nowrap">Trạng thái</th>
-                    </>
+                    <th className="p-3 w-40 text-center text-green-800 bg-green-50/30 whitespace-nowrap">Trạng thái</th>
                   )}
                   {subTab !== "draft" && (
                     <th className="p-3 w-48 text-center whitespace-nowrap">Người xử lý</th>
@@ -1706,17 +1656,6 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                         {toTitleCase(r.noi_nhan_gui)}
                       </td>
                       <td className="p-3 text-gray-600">
-                        <div>{r.data?.xa_phuong || "---"}</div>
-                        {r.data?.is_non_geographic && r.data?.handover_ward && (
-                          <div className="text-[10px] text-purple-700 font-bold bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 mt-1 inline-block whitespace-nowrap">
-                            Giao phi địa giới: {r.data.handover_ward}
-                          </div>
-                        )}
-                      </td>
-                      <td className="p-3 text-center font-mono text-xs">
-                        {r.data?.to_ban_do && r.data?.thua_dat ? `${r.data.to_ban_do} / ${r.data.thua_dat}` : "---"}
-                      </td>
-                      <td className="p-3 text-gray-600">
                         {formatDate(r.ngay_thang)}
                       </td>
                       {subTab === "all" && (
@@ -1729,53 +1668,30 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                         </td>
                       )}
                       {subTab === "result" && (
-                        <>
-                          <td className="p-3 text-center font-medium">
-                            {r.data?.receipt_number ? (
-                              <div className="flex flex-col items-center gap-1">
-                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${r.data?.receipt_type === "invoice" ? "bg-blue-50 text-blue-700 border border-blue-200" : "bg-emerald-50 text-emerald-705 border border-emerald-200"}`}>
-                                  {r.data?.receipt_type === "invoice" ? "Hóa Đơn" : "Biên Lai"}
-                                </span>
-                                <span className="font-mono text-xs font-bold text-gray-700">{r.data.receipt_number}</span>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 italic text-xs">---</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-center font-mono text-xs font-bold">
-                            {r.data?.payment_amount != null ? (
-                              <span className="text-emerald-700">
-                                {Number(r.data.payment_amount).toLocaleString("vi-VN")} đ
+                        <td className="p-3 text-center">
+                          <div className="flex flex-col items-center gap-1.5 animate-none">
+                            {r.status === "signed" ? (
+                              <span className="px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-bold border border-amber-200 flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
+                                Chờ giao 1 cửa
+                              </span>
+                            ) : r.data?.result_returned_date || r.data?.payment_status === "Đã thu" ? (
+                              <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold border border-emerald-200 flex items-center gap-1">
+                                ● Đã trả kết quả CV
                               </span>
                             ) : (
-                              <span className="text-gray-400 italic">---</span>
+                              <span className="px-2.5 py-1 bg-green-50 text-green-700 rounded-full text-xs font-bold border border-green-200 flex items-center gap-1">
+                                ● Đã bàn giao
+                              </span>
                             )}
-                          </td>
-                          <td className="p-3 text-center">
-                            <div className="flex flex-col items-center gap-1.5 animate-none">
-                              {r.status === "signed" ? (
-                                <span className="px-2.5 py-1 bg-amber-50 text-amber-700 rounded-full text-xs font-bold border border-amber-200 flex items-center gap-1">
-                                  <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
-                                  Chờ giao 1 cửa
-                                </span>
-                              ) : r.data?.result_returned_date || r.data?.payment_status === "Đã thu" ? (
-                                <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold border border-emerald-200 flex items-center gap-1">
-                                  ● Đã trả kết quả CV
-                                </span>
-                              ) : (
-                                <span className="px-2.5 py-1 bg-green-50 text-green-700 rounded-full text-xs font-bold border border-green-200 flex items-center gap-1">
-                                  ● Đã bàn giao
-                                </span>
-                              )}
-                              
-                              {r.data?.is_non_geographic && r.data?.handover_ward && (
-                                <div className="flex items-center gap-1 px-1.5 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-bold rounded border border-purple-200">
-                                  📍 Phi địa giới: {r.data.handover_ward}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        </>
+                            
+                            {r.data?.is_non_geographic && r.data?.handover_ward && (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-bold rounded border border-purple-200">
+                                📍 Phi địa giới: {r.data.handover_ward}
+                              </div>
+                            )}
+                          </div>
+                        </td>
                       )}
                       {subTab !== "draft" && (
                         <td className="p-3 text-indigo-600 font-medium">

@@ -7,7 +7,8 @@ import MainLayout from './components/layout/MainLayout';
 import AppRoutes from './components/AppRoutes';
 import AppModals from './components/AppModals';
 
-import { DEFAULT_VISIBLE_COLUMNS, confirmAction, fillTimelineDatesForReturn } from './utils/appHelpers';
+import { DEFAULT_VISIBLE_COLUMNS, confirmAction, fillTimelineDatesForReturn, removeVietnameseTones } from './utils/appHelpers';
+import { getEmployeeTeam } from './components/AssignModal';
 import { exportReportToExcel, exportReturnedListToExcel } from './utils/excelExport';
 import { generateReport } from './services/geminiService';
 import { syncTemplatesFromCloud } from './services/docxService'; 
@@ -184,11 +185,9 @@ function App() {
 
   const records = useMemo(() => {
       let filtered = rawRecords;
-      if (currentUser?.role === UserRole.ONEDOOR) {
-          const emp = employees.find(e => e.id === currentUser.employeeId);
-          const managedWards = emp?.managedWards || [];
-          filtered = rawRecords.filter(r => r.ward && managedWards.includes(r.ward));
-      } else if (currentUser?.role === UserRole.TEAM_LEADER && currentUser.employeeId) {
+      // Một cửa (ONEDOOR) có thể tiếp nhận tất cả hồ sơ không giới hạn thuộc bất cứ địa bàn nào,
+      // nên không lọc theo managedWards nữa.
+      if (currentUser?.role === UserRole.TEAM_LEADER && currentUser.employeeId) {
           const empId = currentUser.employeeId;
           filtered = rawRecords.filter(r => {
               // Unassigned is visible so they can assign it
@@ -370,7 +369,7 @@ function App() {
       const nowStr = new Date().toISOString();
       const updatedIds = assignTargetRecords.map(r => r.id);
       
-      const updates = {
+      const updates: any = {
           assignedTo: employeeId,
           status: RecordStatus.IN_PROGRESS,
           assignedDate: nowStr,
@@ -387,6 +386,94 @@ function App() {
       setIsAssignModalOpen(false); 
       setSelectedRecordIds(new Set()); 
       setToast({ type: 'success', message: `Đã giao việc và chuyển sang Đang thực hiện cho ${assignTargetRecords.length} hồ sơ thành công!` });
+  };
+
+  const handleBatchAutoAssign = async (selectedIds: Set<string>, currentViewStr: string) => {
+      const targets = records.filter(r => selectedIds.has(r.id));
+      if (targets.length === 0) return;
+      
+      const getTargetTeamForView = (view: string): string => {
+         const v = view.toLowerCase();
+         if (v.includes('registration')) return 'Tổ Cấp giấy';
+         if (v.includes('archive')) return 'Tổ Lưu trữ';
+         if (v.includes('congvan')) return 'Tổ Lưu trữ';
+         if (v.includes('other')) return 'Tổ Hành chính';
+         return 'Tổ Đo đạc';
+      };
+      
+      const targetTeamName = getTargetTeamForView(currentViewStr);
+      const teamEmployees = employees.filter(emp => getEmployeeTeam(emp) === targetTeamName);
+      
+      const nowStr = new Date().toISOString();
+      const updatedRecords: RecordFile[] = [];
+      const assignedCount: { [empName: string]: number } = {};
+      let autoAssignedCount = 0;
+      let skippedCount = 0;
+      
+      for (const r of targets) {
+          const rWard = r.ward ? removeVietnameseTones(r.ward).toLowerCase().trim() : '';
+          let matchedEmp: Employee | undefined = undefined;
+          
+          if (rWard) {
+              matchedEmp = teamEmployees.find(emp => 
+                  emp.managedWards && emp.managedWards.some(w => 
+                      removeVietnameseTones(w).toLowerCase().trim() === rWard
+                  )
+              );
+              if (!matchedEmp) {
+                  matchedEmp = employees.find(emp => 
+                      emp.managedWards && emp.managedWards.some(w => 
+                          removeVietnameseTones(w).toLowerCase().trim() === rWard
+                      )
+                  );
+              }
+          }
+          
+          if (matchedEmp) {
+              const updates: any = {
+                  assignedTo: matchedEmp.id,
+                  status: RecordStatus.IN_PROGRESS,
+                  assignedDate: nowStr,
+                  submissionDate: null,
+                  approvalDate: null,
+                  completedDate: null,
+                  resultReturnedDate: null,
+                  exportBatch: null,
+                  exportDate: null
+              };
+              
+              updatedRecords.push({ ...r, ...updates });
+              assignedCount[matchedEmp.name] = (assignedCount[matchedEmp.name] || 0) + 1;
+              autoAssignedCount++;
+          } else {
+              skippedCount++;
+          }
+      }
+      
+      if (autoAssignedCount === 0) {
+          await confirmAction("Không tìm thấy cán bộ phụ trách phù hợp với địa bàn của các hồ sơ đã chọn. Vui lòng kiểm tra lại cấu hình địa bàn của nhân viên.", "Thông báo");
+          return;
+      }
+      
+      const confirmMsg = `Hệ thống đã tìm thấy cán bộ phụ trách phù hợp cho ${autoAssignedCount}/${targets.length} hồ sơ:\n` +
+          Object.entries(assignedCount).map(([name, count]) => `- ${name}: ${count} hồ sơ`).join('\n') +
+          (skippedCount > 0 ? `\n- Không tìm thấy người phụ trách cho ${skippedCount} hồ sơ (sẽ giữ nguyên chưa giao).` : '') +
+          `\n\nBạn có chắc chắn muốn thực hiện giao đồng loạt không?`;
+          
+      if (await confirmAction(confirmMsg, "Xác nhận Giao đồng loạt")) {
+          setRecords(prev => prev.map(r => {
+              const updated = updatedRecords.find(ur => ur.id === r.id);
+              return updated ? updated : r;
+          }));
+          
+          await Promise.all(updatedRecords.map(r => updateRecordApi(r)));
+          setSelectedRecordIds(new Set());
+          setToast({ 
+              type: 'success', 
+              message: `Đã giao đồng loạt ${autoAssignedCount} hồ sơ thành công!` + 
+                  (skippedCount > 0 ? ` (Bỏ qua ${skippedCount} hồ sơ không tìm thấy người phụ trách)` : '')
+          });
+      }
   };
 
   const getUpdatesForStatusChange = (newStatus: RecordStatus, customDateStr?: string) => {
@@ -521,7 +608,16 @@ function App() {
       const nowStr = new Date().toISOString();
       let updates: any = { [field]: value };
       
-      if (field === 'status') {
+      if (field === 'assignedTo') {
+          updates.assignedDate = nowStr;
+          updates.status = RecordStatus.ASSIGNED;
+          updates.submissionDate = null;
+          updates.approvalDate = null;
+          updates.completedDate = null;
+          updates.resultReturnedDate = null;
+          updates.exportBatch = null;
+          updates.exportDate = null;
+      } else if (field === 'status') {
           updates = getUpdatesForStatusChange(value as RecordStatus);
           
           if (value === RecordStatus.REJECTED || value === RecordStatus.WITHDRAWN) {
@@ -545,7 +641,7 @@ function App() {
       } catch (e) { 
           console.error("Quick update failed", e); 
       }
-  }, [records]);
+  }, [records, employees]);
 
   const handleOpenReturnModal = useCallback((record: RecordFile) => {
       setReturnRecord(record);
@@ -1155,6 +1251,7 @@ function App() {
             handleConfirmSignBatch={handleConfirmSignBatch}
             setAssignTargetRecords={setAssignTargetRecords}
             setIsAssignModalOpen={setIsAssignModalOpen}
+            handleBatchAutoAssign={handleBatchAutoAssign}
             setSubmitTargetRecords={setSubmitTargetRecords}
             setIsSubmitModalOpen={setIsSubmitModalOpen}
             setIsSubmitCheckModalOpen={setIsSubmitCheckModalOpen}

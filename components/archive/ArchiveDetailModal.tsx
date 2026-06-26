@@ -16,6 +16,8 @@ import {
   Printer,
   StickyNote,
   Info,
+  Receipt,
+  DollarSign,
 } from "lucide-react";
 import { STATUS_LABELS, STATUS_COLORS } from "../../constants";
 import { RecordStatus } from "../../types";
@@ -228,11 +230,11 @@ const ArchiveDetailModal: React.FC<ArchiveDetailModalProps> = ({
           </table>
 
           <div class="title">PHIẾU THEO DÕI TIẾN TRÌNH HỒ SƠ</div>
-          <div class="subtitle">Số hiệu: ${record.so_hieu} | Loại: ${typeLabel}</div>
+          <div class="subtitle">Mã hồ sơ: ${record.so_hieu} | Loại: ${typeLabel}</div>
 
           <div class="section-title">Thông tin chung</div>
           <div class="info-box">
-            <p><b>Số hiệu hồ sơ:</b> <span style="font-weight: bold; color: #1d4ed8;">${record.so_hieu}</span></p>
+            <p><b>Mã hồ sơ:</b> <span style="font-weight: bold; color: #1d4ed8;">${record.so_hieu}</span></p>
             <p><b>Nơi nhận / Gửi:</b> ${record.noi_nhan_gui || "Chủ sử dụng"}</p>
             <p><b>Ngày ghi nhận hồ sơ:</b> ${formatDate(record.ngay_thang)}</p>
             <p><b>Hạn trả dự kiến:</b> ${formatDate(record.data?.hen_tra || record.ngay_thang)}</p>
@@ -409,7 +411,7 @@ const ArchiveDetailModal: React.FC<ArchiveDetailModalProps> = ({
               </div>
             </div>
 
-            {/* COLUMN 2: CHI TIẾT */}
+            {/* COLUMN 2: CHI TIẾT & TÀI CHÍNH */}
             <div className="space-y-6">
               {/* NỘI DUNG */}
               <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm h-full flex flex-col">
@@ -419,6 +421,37 @@ const ArchiveDetailModal: React.FC<ArchiveDetailModalProps> = ({
 
                 <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 text-gray-800 text-sm font-medium mb-6 min-h-[80px]">
                   {record.trich_yeu || "Không có nội dung chi tiết."}
+                </div>
+
+                <div className="border-t border-gray-100 pt-4 grid grid-cols-2 gap-4">
+                  <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-center gap-3">
+                    <div className="bg-blue-200 p-1.5 rounded text-blue-700">
+                      <Receipt size={16} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-blue-500 uppercase font-bold block">
+                        Số biên lai / Hóa đơn
+                      </label>
+                      <p className="text-sm font-bold text-blue-800">
+                        {record.data?.receipt_number || "---"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="bg-green-50 p-3 rounded-lg border border-green-100 flex items-center gap-3">
+                    <div className="bg-green-200 p-1.5 rounded text-green-700">
+                      <DollarSign size={16} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-green-500 uppercase font-bold block">
+                        Số tiền
+                      </label>
+                      <p className="text-sm font-bold text-green-800">
+                        {record.data?.payment_amount != null
+                          ? Number(record.data.payment_amount).toLocaleString("vi-VN") + " đ"
+                          : "---"}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

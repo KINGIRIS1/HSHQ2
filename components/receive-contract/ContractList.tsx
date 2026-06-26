@@ -32,12 +32,8 @@ const ContractList: React.FC<ContractListProps> = ({ onEdit, onDelete, onPrint, 
   const filtered = useMemo(() => {
       let list = contracts;
       
-      // Lọc theo quyền ONEDOOR
-      if (currentUser?.role === UserRole.ONEDOOR) {
-          const emp = employees?.find(e => e.id === currentUser.employeeId);
-          const managedWards = emp?.managedWards || [];
-          list = list.filter(c => c.ward && managedWards.includes(c.ward));
-      }
+      // Một cửa (ONEDOOR) có thể tiếp nhận tất cả hồ sơ không giới hạn thuộc bất cứ địa bàn nào,
+      // nên không lọc theo managedWards nữa.
 
       // Nếu ở chế độ danh sách thanh lý, có thể lọc những HĐ đã thanh lý nếu muốn
       // Nhưng thường user muốn xem hết. Ở đây ta lọc cơ bản.

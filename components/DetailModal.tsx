@@ -783,21 +783,6 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                     </button>
                 )}
 
-                {currentUser && (
-                    <button 
-                        onClick={handleToggleDefect}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 border rounded text-xs font-bold transition-all shadow-sm ${
-                            record.hasDefect 
-                            ? 'bg-amber-100 border-amber-300 text-amber-800 hover:bg-amber-200 animate-pulse' 
-                            : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
-                        }`}
-                        title={record.hasDefect ? "Hủy đánh dấu sai sót" : "Đánh dấu hồ sơ có sai sót cần trả"}
-                    >
-                        <AlertTriangle size={15} />
-                        {record.hasDefect ? 'Hủy Trả (Sửa)' : 'Trả hồ sơ (Sai sót)'}
-                    </button>
-                )}
-                
                 {canPerformAction && onEdit && (
                     <button onClick={() => { onClose(); onEdit(record); }} className="p-2 text-gray-400 hover:text-blue-600 transition-colors">
                         <Pencil size={20} />
@@ -932,7 +917,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                             </div>
                             {record.customerAddress && (
                                 <div>
-                                    <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Địa chỉ chủ sử dụng</label>
+                                    <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Địa chỉ thường trú</label>
                                     <p className="text-sm font-bold text-gray-800">{record.customerAddress}</p>
                                 </div>
                             )}
@@ -1315,7 +1300,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
         {systemReceiptData && (
             <SystemReceiptTemplate 
                 data={systemReceiptData} 
-                receivingWard={employees.find(e => e.id === currentUser?.employeeId)?.managedWards?.[0] || 'Tân Khai'}
+                receivingWard={systemReceiptData.ward || employees.find(e => e.id === currentUser?.employeeId)?.managedWards?.[0] || 'Tân Khai'}
                 onClose={() => setSystemReceiptData(null)} 
             />
         )}

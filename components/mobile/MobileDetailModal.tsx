@@ -474,17 +474,6 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
           </div>
         </div>
         <div className="flex items-center gap-1">
-          {currentUser && (
-            <button 
-              onClick={handleToggleDefect}
-              className={`p-2 transition-all ${
-                record.hasDefect ? 'text-amber-500 animate-pulse' : 'text-red-500 hover:text-red-600'
-              }`}
-              title={record.hasDefect ? "Hủy đánh dấu sai sót" : "Đánh dấu hồ sơ có sai sót cần trả"}
-            >
-              <AlertTriangle size={20} />
-            </button>
-          )}
           {canPerformAction && onEdit && (
             <button onClick={() => { onClose(); onEdit(record); }} className="p-2 text-slate-400 active:text-blue-600">
               <Pencil size={20} />
@@ -929,7 +918,7 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
       {systemReceiptData && (
         <SystemReceiptTemplate 
             data={systemReceiptData} 
-            receivingWard={employees.find(e => e.id === currentUser?.employeeId)?.managedWards?.[0] || 'Tân Khai'}
+            receivingWard={systemReceiptData.ward || employees.find(e => e.id === currentUser?.employeeId)?.managedWards?.[0] || 'Tân Khai'}
             onClose={() => setSystemReceiptData(null)} 
         />
       )}

@@ -27,6 +27,7 @@ import WorkScheduleView from "./WorkScheduleView";
 import SystemView from "./SystemView";
 import BarcodeGeneratorView from "./BarcodeGeneratorView";
 import VaoSoView from "./archive/VaoSoView";
+import CongVanView from "./archive/CongVanView";
 
 // Icons
 import {
@@ -49,6 +50,7 @@ import {
   CheckCircle,
   FileSignature,
   UserPlus,
+  Sparkles,
   FileOutput,
   CheckSquare,
   Square,
@@ -177,6 +179,7 @@ interface AppRoutesProps {
   handleConfirmSignBatch: () => void;
   setAssignTargetRecords: (r: RecordFile[]) => void;
   setIsAssignModalOpen: (b: boolean) => void;
+  handleBatchAutoAssign: (selectedIds: Set<string>, currentView: string) => Promise<void>;
   setSubmitTargetRecords: (r: RecordFile[]) => void;
   setIsSubmitModalOpen: (b: boolean) => void;
   setIsSubmitCheckModalOpen: (b: boolean) => void; // MỚI: Trình kiểm tra
@@ -420,7 +423,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
       let allowedTabName = '';
       if (teamName === 'Tổ Đo đạc') allowedTabName = 'Hồ sơ đo đạc';
       if (teamName === 'Tổ Cấp giấy') allowedTabName = 'Hồ sơ cấp giấy';
-      if (teamName === 'Tổ Lưu trữ') allowedTabName = 'Hồ sơ lưu trữ';
+      if (teamName === 'Tổ Lưu trữ') allowedTabName = 'Hồ sơ lưu trữ & Công văn';
 
       return (
         <div className="flex flex-col items-center justify-center p-12 bg-white rounded-xl shadow-sm border border-gray-100 flex-1 h-full text-center">
@@ -669,71 +672,47 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
         {/* SUB-HEADER TABS FOR CONG VAN RECORDS (Công văn) */}
         {isCongVanView && (
           <div className="flex border-b border-gray-200 bg-gray-50 px-4 overflow-x-auto">
-            {!isDirector && (
-              <>
-                <button
-                  onClick={() => props.setCurrentView("congvan_records")}
-                  className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_records" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-                >
-                  <FileText size={16} /> Tất cả hồ sơ
-                </button>
+            <button
+              onClick={() => props.setCurrentView("congvan_records")}
+              className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_records" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            >
+              <FileText size={16} /> Tất cả hồ sơ
+            </button>
 
-                {(isAdmin ||
-                  isSubadmin ||
-                  currentUser.role === UserRole.TEAM_LEADER) && (
-                  <button
-                    onClick={() => props.setCurrentView("congvan_assign_tasks")}
-                    className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_assign_tasks" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-                  >
-                    <UserPlusIcon size={16} /> Chưa giao
-                  </button>
-                )}
+            <button
+              onClick={() => props.setCurrentView("congvan_assign_tasks")}
+              className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_assign_tasks" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            >
+              <UserPlusIcon size={16} /> Chưa giao
+            </button>
 
-                <button
-                  onClick={() => props.setCurrentView("congvan_completed_list")}
-                  className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_completed_list" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-                >
-                  <CheckSquare size={16} /> Đã thực hiện
-                </button>
+            <button
+              onClick={() => props.setCurrentView("congvan_completed_list")}
+              className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_completed_list" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            >
+              <CheckSquare size={16} /> Đã thực hiện
+            </button>
 
-                <button
-                  onClick={() => props.setCurrentView("congvan_pending_check_list")}
-                  className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_pending_check_list" ? "border-orange-600 text-orange-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-                >
-                  <ClipboardList size={16} /> Kiểm tra
-                </button>
-              </>
-            )}
+            <button
+              onClick={() => props.setCurrentView("congvan_pending_check_list")}
+              className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_pending_check_list" ? "border-orange-600 text-orange-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            >
+              <ClipboardList size={16} /> Kiểm tra
+            </button>
 
-            {(isAdmin || isSubadmin || isDirector) && (
-              <button
-                onClick={() => props.setCurrentView("congvan_check_list")}
-                className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              >
-                <ClipboardList size={16} /> {isDirector ? "Chờ ký" : "Trình ký"}
-              </button>
-            )}
+            <button
+              onClick={() => props.setCurrentView("congvan_check_list")}
+              className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_check_list" || currentView === "congvan_director_completed" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            >
+              <ClipboardList size={16} /> Trình ký
+            </button>
 
-            {isDirector && (
-              <button
-                onClick={() => props.setCurrentView("congvan_director_completed")}
-                className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_director_completed" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-              >
-                <CheckSquare size={16} /> Hoàn thành
-              </button>
-            )}
-
-            {!isDirector &&
-              (isAdmin ||
-                isSubadmin ||
-                currentUser.role === UserRole.ONEDOOR) && (
-                <button
-                  onClick={() => props.setCurrentView("congvan_handover_list")}
-                  className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-                >
-                  <Send size={16} /> Giao 1 cửa
-                </button>
-              )}
+            <button
+              onClick={() => props.setCurrentView("congvan_handover_list")}
+              className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            >
+              <Send size={16} /> Giao 1 cửa
+            </button>
           </div>
         )}
 
@@ -1266,6 +1245,15 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                     <UserPlus size={18} /> Giao Nhân Viên (
                     {props.selectedRecordIds.size})
                   </button>
+                  <button
+                    onClick={() => {
+                      props.handleBatchAutoAssign(props.selectedRecordIds, currentView);
+                    }}
+                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-bold shadow-md transition-all hover:scale-105"
+                    title="Tự động phân công cán bộ phụ trách theo địa bàn xã được phân công"
+                  >
+                    <Sparkles size={18} /> Giao đồng loạt ({props.selectedRecordIds.size})
+                  </button>
                 </>
               )}
             {((!isHandoverAny) ||
@@ -1392,6 +1380,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                     onQuickUpdate={props.handleQuickUpdate}
                     onReturnResult={props.handleOpenReturnModal}
                     onMapCorrection={props.handleMapCorrectionRequest}
+                    isArchiveView={isArchiveView}
                   />
                 ))
               ) : (
@@ -1525,6 +1514,22 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
           records={records}
           recordToLiquidate={props.recordToLiquidate}
           onClearRecordToLiquidate={() => props.setRecordToLiquidate(null)}
+        />
+      );
+
+    case "congvan_records":
+    case "congvan_assign_tasks":
+    case "congvan_completed_list":
+    case "congvan_pending_check_list":
+    case "congvan_check_list":
+    case "congvan_handover_list":
+    case "congvan_director_completed":
+      return (
+        <CongVanView
+          currentUser={currentUser}
+          wards={wards}
+          currentView={currentView}
+          setCurrentView={props.setCurrentView}
         />
       );
 

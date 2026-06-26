@@ -115,22 +115,19 @@ export const getShortCode = (ward: string) => {
     return 'CT';
 };
 
-export const getNextGlobalRecordCode = async (dateStr: string): Promise<string> => {
-    if (!isConfigured) {
-        const d = new Date(dateStr);
-        const yy = d.getFullYear().toString().slice(-2);
-        const mm = ('0' + (d.getMonth() + 1)).slice(-2);
-        const dd = ('0' + d.getDate()).slice(-2);
-        return `${yy}${mm}${dd}-${Math.floor(Math.random() * 1000).toString().padStart(4, '0')}`;
-    }
-
+export const getNextGlobalRecordCode = async (dateStr: string, wardName?: string): Promise<string> => {
     const d = new Date(dateStr);
-    const year = d.getFullYear().toString();
-    const yy = year.slice(-2);
+    const yy = d.getFullYear().toString().slice(-2);
     const mm = ('0' + (d.getMonth() + 1)).slice(-2);
     const dd = ('0' + d.getDate()).slice(-2);
     const datePrefix = `${yy}${mm}${dd}`;
-    
+    const prefix = datePrefix;
+
+    if (!isConfigured) {
+        return `${prefix}-${Math.floor(Math.random() * 1000).toString().padStart(4, '0')}`;
+    }
+
+    const year = d.getFullYear().toString();
     const key = `record_counter_${year}`;
     let nextSeq = 1;
     let success = false;
@@ -180,17 +177,16 @@ export const getNextGlobalRecordCode = async (dateStr: string): Promise<string> 
     }
 
     const seqStr = nextSeq.toString().padStart(4, '0');
-    return `${datePrefix}-${seqStr}`;
+    return `${prefix}-${seqStr}`;
 };
 
 export const createRecordApi = async (record: RecordFile): Promise<RecordFile | null> => {
     if (!isConfigured) return record;
     try {
         let finalCode = record.code;
-        const isGeneratedFormat = finalCode && (/^[A-ZĐ]{2,3}-\d{6}-\d{3,4}$/.test(finalCode) || /^\d{6}-\d{3,4}$/.test(finalCode));
         
-        if (!finalCode || finalCode.includes('?') || isGeneratedFormat) {
-            finalCode = await getNextGlobalRecordCode(record.receivedDate || new Date().toISOString());
+        if (!finalCode || finalCode.includes('?') || finalCode.trim() === '') {
+            finalCode = await getNextGlobalRecordCode(record.receivedDate || new Date().toISOString(), record.ward || undefined);
         }
         
         const recordToSave = { ...record, code: finalCode };
@@ -268,8 +264,8 @@ export const createRecordsBatchApi = async (records: RecordFile[], onProgress?: 
             
             // Chỉ tạo mới code tự động nếu như mã bị thiếu hoặc có chứa dấu '?' (mã nháp)
             // KHÔNG GHI ĐÈ các mã có định dạng chuẩn (isGeneratedFormat) vì đây là data từ Excel đưa vào
-            if (!finalCode || finalCode.includes('?')) {
-                finalCode = await getNextGlobalRecordCode(r.receivedDate || new Date().toISOString());
+            if (!finalCode || finalCode.includes('?') || finalCode.trim() === '') {
+                finalCode = await getNextGlobalRecordCode(r.receivedDate || new Date().toISOString(), r.ward || undefined);
             }
             
             const recordPayload = { ...r, code: finalCode };

@@ -587,7 +587,6 @@ const DailyList: React.FC<DailyListProps> = ({
                             <th className="p-4 w-[115px]">Trạng Thái</th> 
                             <th className="p-4 w-[180px]">Chủ Sử Dụng</th> 
                             <th className="p-4 w-[150px]">Xã / Phường (Đất)</th> 
-                            <th className="p-4 w-[160px]">Địa chỉ chi tiết</th> 
                             <th className="p-4 w-[60px] text-center">Tờ</th>
                             <th className="p-4 w-[60px] text-center">Thửa</th>
                             <th className="p-4 w-[120px]">Loại Hồ Sơ</th> 
@@ -625,9 +624,6 @@ const DailyList: React.FC<DailyListProps> = ({
                                     <td className="p-4 text-gray-700 truncate align-middle" title={getNormalizedWard(r.ward)}>
                                         {getNormalizedWard(r.ward)}
                                     </td>
-                                    <td className="p-4 text-gray-500 truncate align-middle" title={r.address || ''}>
-                                        {r.address || '-'}
-                                    </td> 
                                     <td className="p-4 text-center font-semibold text-gray-800 align-middle">{r.mapSheet || '-'}</td>
                                     <td className="p-4 text-center font-semibold text-gray-800 align-middle">{r.landPlot || '-'}</td>
                                     <td className="p-4 text-gray-700 truncate align-middle" title={r.recordType || ''}>
@@ -661,7 +657,7 @@ const DailyList: React.FC<DailyListProps> = ({
                             ))
                         ) : ( 
                             <tr>
-                                <td colSpan={13} className="p-12 text-center text-gray-400 italic"> 
+                                <td colSpan={12} className="p-12 text-center text-gray-400 italic"> 
                                     Không có hồ sơ nào trong ngày này phù hợp với bộ lọc. 
                                 </td>
                             </tr> 

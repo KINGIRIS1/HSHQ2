@@ -60,6 +60,55 @@ const TEAMS_PERM_LIST = [
   }
 ];
 
+const TEAM_ALLOWED_PERMISSIONS: Record<string, string[]> = {
+  'Tổ Cấp giấy': [
+    'VIEW_RECORDS', 'ADD_RECORDS', 'EDIT_RECORDS', 'DELETE_RECORDS', 'RESTORE_RECORDS', 
+    'ASSIGN_RECORDS', 'WITHDRAW_RECORDS', 'IMPORT_RECORDS', 'EXPORT_RECORDS',
+    'CHECK_RECORDS', 'SIGN_RECORDS', 'UPDATE_WARD_MANAGEMENT',
+    'HANDOVER_RECORDS', 'RETURN_RECORDS', 'PRINT_HANDOVER_REPORTS',
+    'VIEW_EXCERPTS', 'MANAGE_EXCERPTS', 'APPROVE_EXCERPTS', 
+    'VIEW_ARCHIVE', 
+    'VIEW_REPORTS', 'TRACK_KPI', 'EXPORT_REPORTS',
+    'VIEW_CHAT', 'MANAGE_CHAT', 'VIEW_SCHEDULE', 'MANAGE_SCHEDULE', 'VIEW_PERSONAL_PROFILE'
+  ],
+  'Tổ Đo đạc': [
+    'VIEW_RECORDS', 'ADD_RECORDS', 'EDIT_RECORDS', 'DELETE_RECORDS', 'RESTORE_RECORDS', 
+    'ASSIGN_RECORDS', 'WITHDRAW_RECORDS', 'IMPORT_RECORDS', 'EXPORT_RECORDS',
+    'SURVEY_RECORDS', 'DRAW_RECORDS', 'CHECK_RECORDS', 'SIGN_RECORDS', 'UPDATE_WARD_MANAGEMENT',
+    'VIEW_CONTRACTS', 'ADD_CONTRACTS', 'EDIT_CONTRACTS', 'SIGN_CONTRACTS', 'DELETE_CONTRACTS', 'EXPORT_CONTRACTS',
+    'VIEW_EXCERPTS', 'MANAGE_EXCERPTS', 'APPROVE_EXCERPTS',
+    'VIEW_ARCHIVE',
+    'VIEW_REPORTS', 'TRACK_KPI', 'EXPORT_REPORTS',
+    'VIEW_CHAT', 'MANAGE_CHAT', 'VIEW_SCHEDULE', 'MANAGE_SCHEDULE', 'VIEW_PERSONAL_PROFILE'
+  ],
+  'Tổ Lưu trữ': [
+    'VIEW_RECORDS', 'ADD_RECORDS', 'EDIT_RECORDS', 'DELETE_RECORDS', 'RESTORE_RECORDS', 
+    'ASSIGN_RECORDS', 'WITHDRAW_RECORDS', 'IMPORT_RECORDS', 'EXPORT_RECORDS',
+    'VIEW_ARCHIVE', 'MANAGE_ARCHIVE',
+    'VIEW_REPORTS',
+    'VIEW_CHAT', 'MANAGE_CHAT', 'VIEW_SCHEDULE', 'VIEW_PERSONAL_PROFILE'
+  ],
+  'Tổ Hành chính': [
+    'VIEW_RECORDS', 'ADD_RECORDS', 'EDIT_RECORDS', 'EXPORT_RECORDS',
+    'HANDOVER_RECORDS', 'RETURN_RECORDS', 'PRINT_HANDOVER_REPORTS',
+    'VIEW_CONTRACTS', 'ADD_CONTRACTS', 'EDIT_CONTRACTS', 'EXPORT_CONTRACTS',
+    'VIEW_EXCERPTS', 'MANAGE_EXCERPTS',
+    'VIEW_ARCHIVE',
+    'VIEW_REPORTS', 'TRACK_KPI',
+    'VIEW_CHAT', 'MANAGE_CHAT', 'VIEW_SCHEDULE', 'MANAGE_SCHEDULE', 'VIEW_PERSONAL_PROFILE'
+  ],
+  'Ban Giám đốc': [
+    'VIEW_RECORDS', 'ASSIGN_RECORDS', 'WITHDRAW_RECORDS', 'EXPORT_RECORDS',
+    'CHECK_RECORDS', 'SIGN_RECORDS',
+    'VIEW_CONTRACTS', 'SIGN_CONTRACTS', 'EXPORT_CONTRACTS',
+    'VIEW_EXCERPTS', 'APPROVE_EXCERPTS',
+    'VIEW_ARCHIVE',
+    'VIEW_REPORTS', 'TRACK_KPI', 'EXPORT_REPORTS',
+    'VIEW_CHAT', 'MANAGE_CHAT', 'VIEW_SCHEDULE', 'MANAGE_SCHEDULE', 'VIEW_PERSONAL_PROFILE',
+    'MANAGE_EMPLOYEES', 'SYSTEM_SETTINGS', 'EDIT_SYSTEM_HOLIDAYS', 'VIEW_AUDIT_LOGS'
+  ]
+};
+
 const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({ 
   onDeleteAllData,
   onHolidaysChanged,
@@ -120,10 +169,25 @@ const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
 
   const handleSavePermissions = async () => {
       setIsSavingPermissions(true);
+      
+      // Sanitize department permissions to strictly follow TEAM_ALLOWED_PERMISSIONS
+      const sanitizedDeptPerms: DepartmentPermissions = {};
+      Object.keys(departmentPermissions).forEach(deptKey => {
+          const teamName = Object.keys(TEAM_ALLOWED_PERMISSIONS).find(team => deptKey.startsWith(team));
+          if (teamName) {
+              const allowedList = TEAM_ALLOWED_PERMISSIONS[teamName];
+              const currentList = departmentPermissions[deptKey] || [];
+              sanitizedDeptPerms[deptKey] = currentList.filter(permId => allowedList.includes(permId));
+          } else {
+              sanitizedDeptPerms[deptKey] = departmentPermissions[deptKey] || [];
+          }
+      });
+
       const successRole = await saveSystemSetting('role_permissions', JSON.stringify(rolePermissions));
-      const successDept = await saveSystemSetting('department_permissions', JSON.stringify(departmentPermissions));
+      const successDept = await saveSystemSetting('department_permissions', JSON.stringify(sanitizedDeptPerms));
       setIsSavingPermissions(false);
       if (successRole && successDept) {
+          setDepartmentPermissions(sanitizedDeptPerms);
           alert('Đã lưu cấu hình phân quyền thành công! Cần tải lại trang để áp dụng.');
       } else {
           alert('Lỗi khi lưu cấu hình phân quyền.');
@@ -142,6 +206,11 @@ const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               return { ...prev, [roleOrDept]: newPerms };
           });
       } else {
+          const teamName = Object.keys(TEAM_ALLOWED_PERMISSIONS).find(team => roleOrDept.startsWith(team));
+          if (teamName && !TEAM_ALLOWED_PERMISSIONS[teamName].includes(permissionId)) {
+              return; // Strict prevention: cannot assign other teams' permissions
+          }
+
           setDepartmentPermissions(prev => {
               const currentPerms = prev[roleOrDept] || [];
               const newPerms = currentPerms.includes(permissionId)
@@ -575,9 +644,11 @@ const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                                                         <div className="space-y-1 pl-1">
                                                             {team.roles.map(r => {
                                                                 const isSelected = selectedRole === r.id;
+                                                                const teamName = Object.keys(TEAM_ALLOWED_PERMISSIONS).find(t => r.id.startsWith(t));
+                                                                const totalCount = teamName ? TEAM_ALLOWED_PERMISSIONS[teamName].length : AVAILABLE_PERMISSIONS.length;
                                                                 const activeCount = departmentPermissions[r.id]?.includes('*') 
-                                                                    ? AVAILABLE_PERMISSIONS.length 
-                                                                    : (departmentPermissions[r.id] || []).length;
+                                                                    ? totalCount 
+                                                                    : (departmentPermissions[r.id] || []).filter(id => teamName ? TEAM_ALLOWED_PERMISSIONS[teamName].includes(id) : true).length;
                                                                 
                                                                 return (
                                                                     <button
@@ -598,7 +669,7 @@ const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                                                                         <span className={`text-[9px] px-1.5 py-0.2 rounded-full shrink-0 ${
                                                                             isSelected ? 'bg-purple-500 text-white' : 'bg-slate-100 text-slate-600 font-bold'
                                                                         }`}>
-                                                                            {activeCount}/{AVAILABLE_PERMISSIONS.length}
+                                                                            {activeCount}/{totalCount}
                                                                         </span>
                                                                     </button>
                                                                 );
@@ -631,6 +702,12 @@ const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                                             <p className="text-xs text-gray-500 font-medium mt-1">
                                                 Đánh dấu các hoạt động bên dưới để cấu hình chi tiết cho {selectedRole}.
                                             </p>
+                                            {permissionTab === 'department' && (
+                                                <p className="text-[11px] text-indigo-700 font-bold mt-1.5 flex items-center gap-1 bg-indigo-50 border border-indigo-150 px-2.5 py-1 rounded-lg">
+                                                    <span>💡</span>
+                                                    Hệ thống tự động lọc danh sách hoạt động chuyên môn phù hợp riêng cho nhóm tổ này để tối giản giao diện, tránh gán nhầm sang vai trò của tổ khác.
+                                                </p>
+                                            )}
                                         </div>
 
                                         {/* Quick Actions */}
@@ -645,9 +722,11 @@ const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                                                             [selectedRole]: AVAILABLE_PERMISSIONS.map(p => p.id)
                                                         }));
                                                     } else {
+                                                        const teamName = Object.keys(TEAM_ALLOWED_PERMISSIONS).find(team => selectedRole.startsWith(team));
+                                                        const allowedIds = teamName ? TEAM_ALLOWED_PERMISSIONS[teamName] : AVAILABLE_PERMISSIONS.map(p => p.id);
                                                         setDepartmentPermissions(prev => ({
                                                             ...prev,
-                                                            [selectedRole]: AVAILABLE_PERMISSIONS.map(p => p.id)
+                                                            [selectedRole]: allowedIds
                                                         }));
                                                     }
                                                 }}
@@ -726,7 +805,18 @@ const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
                                                     'VIEW_PERSONAL_PROFILE', 'MANAGE_USERS', 'MANAGE_EMPLOYEES', 'SYSTEM_SETTINGS', 'EDIT_SYSTEM_HOLIDAYS', 'VIEW_AUDIT_LOGS', 'DELETE_SYSTEM_DATA'
                                                 ].includes(p.id)) 
                                             }
-                                        ].map((group, groupIdx) => (
+                                        ].map(group => {
+                                            const teamName = permissionTab === 'department' 
+                                                ? Object.keys(TEAM_ALLOWED_PERMISSIONS).find(team => selectedRole.startsWith(team)) 
+                                                : undefined;
+                                            const allowedIds = teamName ? TEAM_ALLOWED_PERMISSIONS[teamName] : undefined;
+                                            const filteredPerms = allowedIds 
+                                                ? group.permissions.filter(p => allowedIds.includes(p.id))
+                                                : group.permissions;
+                                            return { ...group, permissions: filteredPerms };
+                                        })
+                                        .filter(group => group.permissions.length > 0)
+                                        .map((group, groupIdx) => (
                                             <div key={groupIdx} className="space-y-3 bg-slate-50/50 p-4 rounded-2xl border border-gray-150">
                                                 <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest flex items-center gap-1.5">
                                                     <span className="w-1 px-1 bg-purple-600 rounded-sm"></span>

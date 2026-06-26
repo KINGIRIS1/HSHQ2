@@ -444,6 +444,163 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
                   record.assignedDate = processDateCell(assignedDateRaw, "Ngày giao việc");
               }
 
+              // --- CÁC TRƯỜNG BỔ SUNG ĐẦY ĐỦ CHO TIẾP NHẬN HÀNG LOẠT ---
+              // 1. Địa chỉ thửa đất
+              const addressCell = getVal(['ĐỊA CHỈ THỬA ĐẤT', 'DIA CHI THUA DAT', 'address']);
+              if (addressCell !== undefined) record.address = String(addressCell).trim();
+
+              // 2. Tổ/Nhóm
+              const groupCell = getVal(['TỔ', 'NHÓM', 'GROUP', 'group']);
+              if (groupCell !== undefined) record.group = String(groupCell).trim();
+
+              // 3. Người tiếp nhận
+              const receivedByCell = getVal(['NGƯỜI TIẾP NHẬN', 'NGUOI TIEP NHAN', 'receivedby', 'receivedBy']);
+              if (receivedByCell !== undefined) record.receivedBy = String(receivedByCell).trim();
+
+              // 4. Người ký duyệt
+              const submittedToCell = getVal(['NGƯỜI KÝ DUYỆT', 'NGUOI KY DUYET', 'submittedto', 'submittedTo']);
+              if (submittedToCell !== undefined) record.submittedTo = String(submittedToCell).trim();
+
+              // 5. Người kiểm tra
+              const checkedByCell = getVal(['NGƯỜI KIỂM TRA', 'NGUOI KIEM TRA', 'checkedby', 'checkedBy']);
+              if (checkedByCell !== undefined) record.checkedBy = String(checkedByCell).trim();
+
+              // 6. Đất CLN
+              const clnAreaCell = getVal(['ĐẤT CLN', 'DIỆN TÍCH CLN', 'clnarea', 'clnArea']);
+              if (clnAreaCell !== undefined && clnAreaCell !== null && clnAreaCell !== '') {
+                  const val = parseFloat(String(clnAreaCell));
+                  record.clnArea = isNaN(val) ? 0 : val;
+              }
+
+              // 7. Đất BHK
+              const bhkAreaCell = getVal(['ĐẤT BHK', 'DIỆN TÍCH BHK', 'bhkarea', 'bhkArea']);
+              if (bhkAreaCell !== undefined && bhkAreaCell !== null && bhkAreaCell !== '') {
+                  const val = parseFloat(String(bhkAreaCell));
+                  record.bhkArea = isNaN(val) ? 0 : val;
+              }
+
+              // 8. Đất LUC
+              const lucAreaCell = getVal(['ĐẤT LUC', 'DIỆN TÍCH LUC', 'lucarea', 'lucArea']);
+              if (lucAreaCell !== undefined && lucAreaCell !== null && lucAreaCell !== '') {
+                  const val = parseFloat(String(lucAreaCell));
+                  record.lucArea = isNaN(val) ? 0 : val;
+              }
+
+              // 9. Đất khác
+              const otherLandAreaCell = getVal(['ĐẤT KHÁC', 'DIỆN TÍCH ĐẤT KHÁC', 'otherlandarea', 'otherLandArea']);
+              if (otherLandAreaCell !== undefined && otherLandAreaCell !== null && otherLandAreaCell !== '') {
+                  const val = parseFloat(String(otherLandAreaCell));
+                  record.otherLandArea = isNaN(val) ? 0 : val;
+              }
+
+              // 10. Nơi giao trả kết quả
+              const handoverWardCell = getVal(['NƠI GIAO TRẢ KẾT QUẢ', 'NOI GIAO TRA KET QUA', 'ĐỊA BÀN GIAO TRẢ', 'handoverward', 'handoverWard']);
+              if (handoverWardCell !== undefined) record.handoverWard = String(handoverWardCell).trim();
+
+              // 11. Số đo đạc
+              const measurementNumberCell = getVal(['SỐ ĐO ĐẠC', 'SO DO DAC', 'measurementnumber', 'measurementNumber']);
+              if (measurementNumberCell !== undefined) record.measurementNumber = String(measurementNumberCell).trim();
+
+              // 12. Số trích lục
+              const excerptNumberCell = getVal(['SỐ TRÍCH LỤC', 'SO TRICH LUC', 'excerptnumber', 'excerptNumber']);
+              if (excerptNumberCell !== undefined) record.excerptNumber = String(excerptNumberCell).trim();
+
+              // 13. Hẹn nhắc nhở
+              const reminderDateCell = getVal(['HẸN NHẮC NHỞ', 'NGÀY NHẮC NHỞ', 'reminderdate', 'reminderDate']);
+              if (reminderDateCell !== undefined) record.reminderDate = processDateCell(reminderDateCell, "Hẹn nhắc nhở");
+
+              // 14. Số biên lai
+              const receiptNumberCell = getVal(['SỐ BIÊN LAI', 'SO BIEN LAI', 'receiptnumber', 'receiptNumber']);
+              if (receiptNumberCell !== undefined) record.receiptNumber = String(receiptNumberCell).trim();
+
+              // 15. Loại biên lai
+              const receiptTypeCell = getVal(['LOẠI BIÊN LAI', 'LOAI BIEN LAI', 'receipttype', 'receiptType']);
+              if (receiptTypeCell !== undefined) {
+                  const str = String(receiptTypeCell).trim().toLowerCase();
+                  record.receiptType = (str.includes('hóa đơn') || str.includes('invoice')) ? 'invoice' : 'receipt';
+              }
+
+              // 16. Số tiền thu
+              const paymentAmountCell = getVal(['SỐ TIỀN THU', 'THỰC THU', 'paymentamount', 'paymentAmount']);
+              if (paymentAmountCell !== undefined && paymentAmountCell !== null && paymentAmountCell !== '') {
+                  const val = parseFloat(String(paymentAmountCell).replace(/[^0-9.-]/g, ''));
+                  record.paymentAmount = isNaN(val) ? 0 : val;
+              }
+
+              // 17. Người nhận kết quả
+              const receiverNameCell = getVal(['NGƯỜI NHẬN KẾT QUẢ', 'NGUOI NHAN KET QUA', 'receivername', 'receiverName']);
+              if (receiverNameCell !== undefined) record.receiverName = String(receiverNameCell).trim();
+
+              // 18. Đơn giá
+              const priceCell = getVal(['ĐƠN GIÁ', 'GIÁ DỊCH VỤ', 'price']);
+              if (priceCell !== undefined && priceCell !== null && priceCell !== '') {
+                  const val = parseFloat(String(priceCell).replace(/[^0-9.-]/g, ''));
+                  record.price = isNaN(val) ? 0 : val;
+              }
+
+              // 19. Tạm ứng
+              const advancePaymentCell = getVal(['TẠM ỨNG', 'advancepayment', 'advancePayment']);
+              if (advancePaymentCell !== undefined && advancePaymentCell !== null && advancePaymentCell !== '') {
+                  const val = parseFloat(String(advancePaymentCell).replace(/[^0-9.-]/g, ''));
+                  record.advancePayment = isNaN(val) ? 0 : val;
+              }
+
+              // 20. Có sai sót
+              const hasDefectCell = getVal(['CÓ SAI SÓT', 'SAI SÓT', 'hasdefect', 'hasDefect']);
+              if (hasDefectCell !== undefined) {
+                  const str = String(hasDefectCell).trim().toLowerCase();
+                  record.hasDefect = (str === 'có' || str === 'yes' || str === 'true' || str === '1');
+              }
+
+              // 21. Lý do sai sót
+              const defectReasonCell = getVal(['LÝ DO SAI SÓT', 'defectreason', 'defectReason']);
+              if (defectReasonCell !== undefined) record.defectReason = String(defectReasonCell).trim();
+
+              // 22. Ngày báo sai sót
+              const defectDateCell = getVal(['NGÀY BÁO SAI SÓT', 'defectdate', 'defectDate']);
+              if (defectDateCell !== undefined) record.defectDate = processDateCell(defectDateCell, "Ngày báo sai sót");
+
+              // 23. Lý do trả hồ sơ
+              const rejectReasonCell = getVal(['LÝ DO TRẢ HỒ SƠ', 'rejectreason', 'rejectReason']);
+              if (rejectReasonCell !== undefined) record.rejectReason = String(rejectReasonCell).trim();
+
+              // 24. Ngày trả hồ sơ
+              const rejectDateCell = getVal(['NGÀY TRẢ HỒ SƠ', 'rejectdate', 'rejectDate']);
+              if (rejectDateCell !== undefined) record.rejectDate = processDateCell(rejectDateCell, "Ngày trả hồ sơ");
+
+              // 25. Ghi chú chung
+              const notesCell = getVal(['GHI CHÚ CHUNG', 'notes', 'notes_general']);
+              if (notesCell !== undefined) record.notes = String(notesCell).trim();
+
+              // 26. Ghi chú nội bộ
+              const privateNotesCell = getVal(['GHI CHÚ NỘI BỘ', 'privatenotes', 'privateNotes']);
+              if (privateNotesCell !== undefined) record.privateNotes = String(privateNotesCell).trim();
+
+              // 27. Ghi chú cá nhân
+              const personalNotesCell = getVal(['GHI CHÚ CÁ NHÂN', 'personalnotes', 'personalNotes']);
+              if (personalNotesCell !== undefined) record.personalNotes = String(personalNotesCell).trim();
+
+              // 28. Cần chỉnh lý bản đồ
+              const needsMapCorrectionCell = getVal(['CẦN CHỈNH LÝ BẢN ĐỒ', 'LẬP DANH SÁCH CHỈNH LÝ', 'needsmapcorrection', 'needsMapCorrection']);
+              if (needsMapCorrectionCell !== undefined) {
+                  const str = String(needsMapCorrectionCell).trim().toLowerCase();
+                  record.needsMapCorrection = (str === 'có' || str === 'yes' || str === 'true' || str === '1');
+              }
+
+              // 29. Hồ sơ có thuế
+              const hasTaxCell = getVal(['CÓ THUẾ', 'HỒ SƠ CÓ THUẾ', 'hastax', 'hasTax']);
+              if (hasTaxCell !== undefined) {
+                  const str = String(hasTaxCell).trim().toLowerCase();
+                  record.hasTax = (str === 'có' || str === 'yes' || str === 'true' || str === '1');
+              }
+
+              // 30. Chuyển DNLIS
+              const transferToDNLisCell = getVal(['CHUYỂN DNLIS', 'transfertodnlis', 'transferToDNLis']);
+              if (transferToDNLisCell !== undefined) {
+                  const str = String(transferToDNLisCell).trim().toLowerCase();
+                  record.transferToDNLis = (str === 'có' || str === 'yes' || str === 'true' || str === '1');
+              }
+
               record.id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
               
               if (mode === 'create') {
@@ -488,11 +645,12 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
           ["MẪU NHẬP LIỆU HỒ SƠ ĐA PHÂN HỆ QUA EXCEL", "", "", ""],
           ["Hệ thống quản lý thông minh hồ sơ đất đai và đăng ký biến động", "", "", ""],
           [],
-          ["[PHẦN 1] CÁC TAB BẢN MẪU HỒ SƠ CHUYÊN BIỆT:"],
-          ["- Tab '2. HO SO DAT DAI':", "Dành cho hồ sơ đo đạc, trích lục, trích đo, cấp số thửa, cung cấp dữ liệu..."],
-          ["- Tab '3. DANG KY BIEN DONG':", "Dành cho hồ sơ chuyển nhượng, tặng cho, thừa kế, thỏa thuận (quy trình 3.*)..."],
-          ["- Tab '4. SAO LUC & CONG VAN':", "Dành cho hồ sơ sao lục lưu trữ và công văn hành chính đến/đi..."],
-          ["- Tab '5. HO SO KHAC':", "Dành cho hồ sơ chuyển mục đích sử dụng (CMD), thi hành án, tòa án trưng cầu..."],
+          ["[PHẦN 1] CÁC TAB BẢN MẪU HỒ SƠ CHI TIẾT:"],
+          ["- Tab '2. MAU DAY DU CAC TRUONG':", "Bản mẫu chứa đầy đủ 61 trường thông tin (tất cả các trường của hệ thống) để nhập liệu tối đa."],
+          ["- Tab '3. HO SO DAT DAI':", "Dành cho hồ sơ đo đạc, trích lục, trích đo, cấp số thửa, cung cấp dữ liệu..."],
+          ["- Tab '4. DANG KY BIEN DONG':", "Dành cho hồ sơ chuyển nhượng, tặng cho, thừa kế, thỏa thuận (quy trình 3.*)..."],
+          ["- Tab '5. SAO LUC & CONG VAN':", "Dành cho hồ sơ sao lục lưu trữ và công văn hành chính đến/đi..."],
+          ["- Tab '6. HO SO KHAC':", "Dành cho hồ sơ chuyển mục đích sử dụng (CMD), thi hành án, tòa án trưng cầu..."],
           [],
           ["[PHẦN 2] QUY CHUẨN ĐỊNH DẠNG HỆ THỐNG ĐỌC:"],
           ["CHỦ SỬ DỤNG", "Họ và tên người nộp / Chủ đất. Ví dụ: Nguyễn Văn A", "Văn bản tự do", "BẮT BUỘC KHI THÊM MỚI"],
@@ -509,7 +667,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
       
       const wsInstr = XLSX.utils.aoa_to_sheet([]);
       XLSX.utils.sheet_add_aoa(wsInstr, instrRows, { origin: "A1" });
-      XLSX.utils.sheet_add_aoa(wsInstr, [instrHeaders], { origin: "A11" });
+      XLSX.utils.sheet_add_aoa(wsInstr, [instrHeaders], { origin: "A12" });
       
       wsInstr['!cols'] = [{ wch: 25 }, { wch: 45 }, { wch: 40 }, { wch: 25 }];
       
@@ -531,7 +689,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
       };
       
       for (let c = 0; c < 4; c++) {
-          const cellRef = XLSX.utils.encode_cell({ r: 10, c });
+          const cellRef = XLSX.utils.encode_cell({ r: 11, c });
           if (wsInstr[cellRef]) {
               wsInstr[cellRef].s = tableHeaderStyle;
           }
@@ -565,7 +723,18 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
           XLSX.utils.book_append_sheet(wb, ws, sheetName);
       };
 
-      // 2. HO SO DAT DAI
+      // 2. MAU TIEP NHAN DAY DU (61 TRUONG)
+      const masterHeaders = [
+          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ THƯỜNG TRÚ', 'XÃ', 'THỬA ĐẤT SỐ', 'TỜ BẢN ĐỒ SỐ', 'DIỆN TÍCH', 'ĐẤT Ở', 'ĐẤT CLN', 'ĐẤT BHK', 'ĐẤT LUC', 'ĐẤT KHÁC', 'ĐỊA CHỈ THỬA ĐẤT', 'NƠI GIAO TRẢ KẾT QUẢ', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGƯỜI ỦY QUYỀN', 'LOẠI ỦY QUYỀN', 'NGÀY NHẬN', 'NGƯỜI TIẾP NHẬN', 'HẸN TRẢ', 'NGƯỜI XỬ LÝ', 'NGÀY GIAO', 'NGÀY ĐÃ THỰC HIỆN', 'NGÀY TRÌNH KIỂM TRA', 'NGƯỜI KIỂM TRA', 'NGÀY ĐÃ KIỂM TRA', 'NGÀY TRÌNH KÝ', 'NGƯỜI KÝ DUYỆT', 'NGÀY KÝ DUYỆT', 'NGÀY GIAO 1 CỬA', 'TRẠNG THÁI', 'ĐỢT BAN GIAO', 'NGÀY XUẤT', 'SỐ ĐO ĐẠC', 'SỐ TRÍCH LỤC', 'SỐ PHÁT HÀNH', 'SỐ VÀO SỔ', 'NGÀY CẤP SỔ', 'CÓ SAI SÓT', 'LÝ DO SAI SÓT', 'NGÀY BÁO SAI SÓT', 'LÝ DO TRẢ HỒ SƠ', 'NGÀY TRẢ HỒ SƠ', 'GHI CHÚ CHUNG', 'GHI CHÚ NỘI BỘ', 'GHI CHÚ CÁ NHÂN', 'HẸN NHẮC NHỞ', 'SỐ BIÊN LAI', 'LOẠI BIÊN LAI', 'SỐ TIỀN THU', 'NGƯỜI NHẬN KẾT QUẢ', 'NGÀY TRẢ DÂN', 'CẦN CHỈNH LÝ BẢN ĐỒ', 'HỒ SƠ CÓ THUẾ', 'CHUYỂN DNLIS', 'ĐƠN GIÁ', 'TẠM ỨNG'
+      ];
+      const masterRows = [
+          [
+              'HS-MASTER-001', 'Nguyễn Chí Thanh', '070012345678', '0912345678', 'Tổ 1, Tân Khai, Hớn Quản', 'Tân Khai', '125', '15', '350.5', '100.0', '150.0', '100.5', '0.0', '0.0', 'Ấp 2, xã Tân Khai', 'Tân Khai', '2.1 Trích lục', 'Trích lục bản đồ phục vụ sang nhượng', 'Đơn xin trích lục|Sổ hồng photo', 'Nguyễn Văn B', 'Giấy ủy quyền công chứng', '2026-06-25', 'Trần Thị Hoa', '2026-06-27', 'Lê Văn Nam', '2026-06-25', '2026-06-26', '2026-06-26', 'Nguyễn Thị Hồng', '2026-06-26', '2026-06-26', 'Vũ Hoàng Quân', '2026-06-27', '2026-06-27', 'Tiếp nhận', '1', '2026-06-27', 'DD-2026-102', 'TL-2026-95', 'CC 123456', 'CH 789', '2026-06-27', 'Không', '', '', '', '', 'Khách hẹn lấy chiều', 'Cần đối chiếu thêm sổ cũ', 'Đã đo đạc kỹ', '2026-06-28', 'BL-00456', 'Biên lai', '310000', 'Nguyễn Chí Thanh', '2026-06-27', 'Không', 'Có', 'Có', '310000', '150000'
+          ]
+      ];
+      addStyledSheet('2. MAU DAY DU CAC TRUONG', masterHeaders, masterRows, masterHeaders.map(() => 18));
+
+      // 3. HO SO DAT DAI
       const landHeaders = [
           'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ', 'XÃ', 'THỬA', 'TỜ', 'DIỆN TÍCH', 'ĐẤT Ở', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI'
       ];
@@ -574,9 +743,9 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
           ['HS-DAT-002', 'Lê Thị Thu', '070012345679', '0988877665', 'Ấp 3, Tân Hưng', 'Tân Hưng', '88', '5', '450.0', '100', '2.3 Trích đo', 'Trích đo bản đồ phục vụ tách thửa', 'Đơn đề nghị|Sổ hồng photo', '2026-06-22', '2026-07-06', 'Đang xử lý'],
           ['HS-DAT-003', 'Nguyễn Minh Tiến', '070012345680', '0912345678', 'Ấp 1, Tân Quan', 'Tân Quan', '215', '20', '310.2', '', '1. Cung cấp dữ liệu đất đai', 'Xin cung cấp thông tin quy hoạch sử dụng đất', 'CCCD photo', '2026-06-23', '2026-07-05', 'Tiếp nhận']
       ];
-      addStyledSheet('2. HO SO DAT DAI', landHeaders, landRows, [14, 20, 15, 14, 22, 12, 10, 10, 12, 10, 24, 30, 25, 12, 12, 12]);
+      addStyledSheet('3. HO SO DAT DAI', landHeaders, landRows, [14, 20, 15, 14, 22, 12, 10, 10, 12, 10, 24, 30, 25, 12, 12, 12]);
 
-      // 3. DANG KY BIEN DONG
+      // 4. DANG KY BIEN DONG
       const regHeaders = [
           'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ', 'NGƯỜI ỦY QUYỀN', 'LOẠI ỦY QUYỀN', 'XÃ', 'THỬA', 'TỜ', 'DIỆN TÍCH', 'ĐẤT Ở', 'SỐ PHÁT HÀNH', 'SỐ VÀO SỔ', 'NGÀY CẤP', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI'
       ];
@@ -584,9 +753,9 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
           ['HS-BD-001', 'Phạm Minh Đức', '070012345111', '0966554433', 'Tổ 5, Minh Đức', '', '', 'Minh Đức', '12', '34', '150.0', '100', 'CC 998811', 'CH 1122', '2026-06-10', '3.3 Chuyển Nhượng', 'Chuyển nhượng quyền sử dụng đất cho Nguyễn Văn Hải', 'Hợp đồng chuyển nhượng|Sổ đỏ gốc', '2026-06-20', '2026-07-20', 'Tiếp nhận'],
           ['HS-BD-002', 'Vũ Hoàng Quân', '070012345222', '0944332211', 'Khu phố 2, Tân Khai', 'Vũ Văn Bằng', 'Giấy ủy quyền', 'Tân Khai', '45', '16', '200.0', '200', 'DD 223344', 'CH 3344', '2026-06-12', '3.2 Tặng Cho', 'Tặng cho quyền sử dụng đất gia đình cho con trai', 'Hợp đồng tặng cho|Giấy khai sinh', '2026-06-22', '2026-07-22', 'Đang xử lý']
       ];
-      addStyledSheet('3. DANG KY BIEN DONG', regHeaders, regRows, [14, 20, 15, 14, 22, 18, 18, 12, 10, 10, 12, 10, 15, 12, 12, 22, 30, 25, 12, 12, 12]);
+      addStyledSheet('4. DANG KY BIEN DONG', regHeaders, regRows, [14, 20, 15, 14, 22, 18, 18, 12, 10, 10, 12, 10, 15, 12, 12, 22, 30, 25, 12, 12, 12]);
 
-      // 4. SAO LUC & CONG VAN
+      // 5. SAO LUC & CONG VAN
       const arcHeaders = [
           'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'SĐT', 'ĐỊA CHỈ', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI', 'NGƯỜI XỬ LÝ', 'NGÀY GIAO'
       ];
@@ -594,9 +763,9 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
           ['HS-SL-001', 'Văn phòng Đăng ký Đất đai', '02713888999', 'Số 12 Trần Hưng Đạo', 'Sao lục', 'Yêu cầu sao lục hồ sơ địa chính thửa 45 tờ 16 xã Tân Khai', 'Phiếu yêu cầu', '2026-06-23', '2026-06-25', 'Chờ kiểm tra', 'Nguyễn Thị Hoa', '2026-06-23'],
           ['HS-CV-001', 'UBND huyện Hớn Quản', '02713777888', 'Khu hành chính huyện', 'Công văn', 'Công văn số 456/UBND về việc phối hợp đo đạc phục vụ giải phóng mặt bằng', 'Công văn đính kèm', '2026-06-24', '2026-06-26', 'Tiếp nhận', 'Trần Văn Nam', '2026-06-24']
       ];
-      addStyledSheet('4. SAO LUC & CONG VAN', arcHeaders, arcRows, [14, 25, 14, 25, 15, 35, 20, 12, 12, 12, 18, 12]);
+      addStyledSheet('5. SAO LUC & CONG VAN', arcHeaders, arcRows, [14, 25, 14, 25, 15, 35, 20, 12, 12, 12, 18, 12]);
 
-      // 5. HO SO KHAC
+      // 6. HO SO KHAC
       const otherHeaders = [
           'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ', 'XÃ', 'THỬA', 'TỜ', 'DIỆN TÍCH', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI'
       ];
@@ -604,7 +773,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
           ['HS-KHAC-001', 'Nguyễn Văn Đạt', '070012345999', '0903999888', 'Ấp 2, Tân Quan', 'Tân Quan', '72', '8', '500.0', 'CMD', 'Chuyển mục đích sử dụng đất sang đất ở', 'Đơn xin chuyển mục đích', '2026-06-24', '2026-07-24', 'Tiếp nhận'],
           ['HS-KHAC-002', 'Tòa án Nhân dân Hớn Quản', '', '02713555444', 'Thị trấn Tân Khai', 'Tân Khai', '11', '2', '350.2', 'Tòa án', 'Trưng cầu đo đạc giải quyết tranh chấp đất đai', 'Quyết định trưng cầu', '2026-06-24', '2026-07-24', 'Tiếp nhận']
       ];
-      addStyledSheet('5. HO SO KHAC', otherHeaders, otherRows, [14, 25, 15, 14, 25, 12, 10, 10, 12, 15, 35, 20, 12, 12, 12]);
+      addStyledSheet('6. HO SO KHAC', otherHeaders, otherRows, [14, 25, 15, 14, 25, 12, 10, 10, 12, 15, 35, 20, 12, 12, 12]);
 
       XLSX.writeFile(wb, 'Mau_Nhap_Lieu_Da_Phan_He.xlsx');
   };

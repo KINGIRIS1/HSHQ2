@@ -6,8 +6,8 @@ import { fetchRecords, fetchEmployees, fetchUsers, fetchUpdateInfo, fetchHoliday
     saveEmployeeApi, deleteEmployeeApi, saveUserApi, deleteUserApi, deleteAllDataApi, getSystemSetting
 } from '../services/api';
 import { supabase } from '../services/supabaseClient';
-import { mapRecordFromDb, saveToCache, CACHE_KEYS } from '../services/apiCore';
-import { DEFAULT_WARDS as STATIC_WARDS, APP_VERSION } from '../constants';
+import { mapRecordFromDb, saveToCache, getFromCache, CACHE_KEYS } from '../services/apiCore';
+import { DEFAULT_WARDS as STATIC_WARDS, APP_VERSION, MOCK_EMPLOYEES, MOCK_USERS } from '../constants';
 import { addToOfflineQueue } from '../utils/offlineSync';
 
 // --- HELPERS FOR AUTO-TRANSITION TO TBT ---
@@ -75,10 +75,18 @@ const getWorkingDaysCount = (startDateStr: string, endDate: Date, listHolidays: 
 };
 
 export const useAppData = (currentUser: User | null) => {
-    const [records, setRecords] = useState<RecordFile[]>([]);
-    const [employees, setEmployees] = useState<Employee[]>([]);
-    const [users, setUsers] = useState<User[]>([]);
-    const [holidays, setHolidays] = useState<Holiday[]>([]); // State mới cho ngày nghỉ
+    const [records, setRecords] = useState<RecordFile[]>(() => {
+        return getFromCache(CACHE_KEYS.RECORDS, []);
+    });
+    const [employees, setEmployees] = useState<Employee[]>(() => {
+        return getFromCache(CACHE_KEYS.EMPLOYEES, MOCK_EMPLOYEES);
+    });
+    const [users, setUsers] = useState<User[]>(() => {
+        return getFromCache(CACHE_KEYS.USERS, MOCK_USERS);
+    });
+    const [holidays, setHolidays] = useState<Holiday[]>(() => {
+        return getFromCache(CACHE_KEYS.HOLIDAYS, []);
+    });
     const [rolePermissions, setRolePermissions] = useState<RolePermissions>(DEFAULT_ROLE_PERMISSIONS);
     const [departmentPermissions, setDepartmentPermissions] = useState<DepartmentPermissions>({});
     const [connectionStatus, setConnectionStatus] = useState<'connected' | 'offline'>('connected');
@@ -97,9 +105,9 @@ export const useAppData = (currentUser: User | null) => {
     const loadData = useCallback(async () => {
         try {
             // Tạo timeout promise để tránh việc fetch bị treo mãi mãi
-            // Tăng timeout lên 30s để xử lý trường hợp mạng chậm hoặc DB bị sleep
+            // Đặt timeout ngắn (4s) để tải trang nhanh nhất có thể nếu DB chậm hoặc bị treo
             const timeoutPromise = new Promise((_, reject) => 
-                setTimeout(() => reject(new Error("Timeout")), 30000)
+                setTimeout(() => reject(new Error("Timeout")), 4000)
             );
 
             const dataPromise = Promise.all([
@@ -141,7 +149,7 @@ export const useAppData = (currentUser: User | null) => {
                 setUpdateUrl(updateInfo.url);
             }
         } catch (error) {
-            console.error("Lỗi tải dữ liệu hoặc Timeout:", error);
+            console.warn("Thông báo kết nối (Dữ liệu đang được đồng bộ hoặc tải offline):", error);
             // Quan trọng: Khi lỗi, chuyển sang OFFLINE nhưng vẫn cho phép App hoạt động
             setConnectionStatus('offline');
             

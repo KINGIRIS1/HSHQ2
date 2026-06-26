@@ -53,7 +53,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
   const [formData, setFormData] = useState<Partial<RecordFile>>(() => {
     return {
       code: '', customerName: '', phoneNumber: '', cccd: '', customerAddress: '', authorizedBy: '', authDocType: '', otherDocs: '', content: '',
-      receivedDate: todayStr, deadline: '', ward: processingWard, landPlot: '', mapSheet: '', area: 0,
+      receivedDate: todayStr, deadline: '', ward: processingWard, group: processingWard, landPlot: '', mapSheet: '', area: 0,
       address: '', recordType: '', status: RecordStatus.RECEIVED,
       issueNumber: '', entryNumber: '', issueDate: '', residentialArea: 0,
       clnArea: 0, bhkArea: 0, lucArea: 0, otherLandArea: 0, receiptNumber: '', notes: '',
@@ -399,17 +399,18 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
 
   useEffect(() => {
     if (!(initialData && initialData.id)) {
+        const activeWard = formData.ward || processingWard;
         if (formData.recordType) {
-            const newCode = generateCode(processingWard, formData.receivedDate || '', formData.recordType);
+            const newCode = generateCode(activeWard, formData.receivedDate || '', formData.recordType);
             setFormData(prev => ({ ...prev, code: newCode }));
         } else {
             // Default generate code with empty type or fallback
-            const newCode = generateCode(processingWard, formData.receivedDate || '', '');
+            const newCode = generateCode(activeWard, formData.receivedDate || '', '');
             setFormData(prev => ({ ...prev, code: newCode }));
         }
     }
     prevRecordTypeRef.current = formData.recordType || '';
-  }, [processingWard, formData.receivedDate, formData.recordType, records, initialData, generateCode]);
+  }, [formData.ward, processingWard, formData.receivedDate, formData.recordType, records, initialData, generateCode]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -706,7 +707,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
           code: '', customerName: '', phoneNumber: '', cccd: '', customerAddress: '', 
           authorizedBy: '', authDocType: '', otherDocs: '', content: '', 
           receivedDate: todayStrLocal, deadline: '', 
-          ward: processingWard, landPlot: '', mapSheet: '', area: 0, address: '', 
+          ward: processingWard, group: processingWard, landPlot: '', mapSheet: '', area: 0, address: '', 
           recordType: '', status: RecordStatus.RECEIVED,
           issueNumber: '', entryNumber: '', issueDate: '', residentialArea: 0,
           clnArea: 0, bhkArea: 0, lucArea: 0, otherLandArea: 0, receiptNumber: '',

@@ -86,7 +86,7 @@ const SimpleRecordForm: React.FC<SimpleRecordFormProps> = ({
             />
           </div>
           <div className="md:col-span-2">
-            <label className={labelClass}>Địa chỉ chủ sử dụng</label>
+            <label className={labelClass}>Địa chỉ thường trú</label>
             <input 
               type="text" 
               className={plainInputClass} 
@@ -112,12 +112,15 @@ const SimpleRecordForm: React.FC<SimpleRecordFormProps> = ({
           <MapPin size={16} /> Vị trí & Thửa đất
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
+          <div className="md:col-span-2">
             <label className={labelClass}>Xã / Phường</label>
             <select 
               className={selectClass} 
               value={formData.ward || ''} 
-              onChange={(e) => handleChange('ward', e.target.value)}
+              onChange={(e) => {
+                const w = e.target.value;
+                handleChange('ward', w);
+              }}
             >
               <option value="">-- Chọn Xã/Phường --</option>
               {wards.map(w => <option key={w} value={w}>{w}</option>)}
@@ -132,18 +135,6 @@ const SimpleRecordForm: React.FC<SimpleRecordFormProps> = ({
               onChange={(e) => handleChange('address', e.target.value)} 
               placeholder="Số nhà, đường, ấp..." 
             />
-          </div>
-          <div>
-            <label className={labelClass}>Khu vực (Nhóm)</label>
-            <select 
-              className={selectClass} 
-              value={formData.group || 'Nhóm 1'} 
-              onChange={(e) => handleChange('group', e.target.value)}
-            >
-              <option value="Nhóm 1">Nhóm 1</option>
-              <option value="Nhóm 2">Nhóm 2</option>
-              <option value="Nhóm 3">Nhóm 3</option>
-            </select>
           </div>
           <div className="grid grid-cols-3 gap-4 md:col-span-4">
             <div>

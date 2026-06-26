@@ -2,9 +2,9 @@
 import React from 'react';
 import { RecordFile, RecordStatus, Employee } from '../types';
 import { getNormalizedWard, getShortRecordType } from '../constants';
-import { isRecordOverdue, isRecordApproaching, toTitleCase } from '../utils/appHelpers';
+import { isRecordOverdue, isRecordApproaching, toTitleCase, findArchiveStaffForWard } from '../utils/appHelpers';
 import StatusBadge from './StatusBadge';
-import { CheckSquare, Square, AlertCircle, Clock, Eye, ArrowRight, Pencil, Trash2, Bell, FileCheck, Phone, Map } from 'lucide-react';
+import { CheckSquare, Square, AlertCircle, Clock, Eye, ArrowRight, Pencil, Trash2, Bell, FileCheck, Phone, Map, UserPlus } from 'lucide-react';
 
 interface RecordRowProps {
   record: RecordFile;
@@ -21,6 +21,7 @@ interface RecordRowProps {
   onQuickUpdate: (id: string, field: keyof RecordFile, value: string) => void;
   onReturnResult?: (record: RecordFile) => void;
   onMapCorrection?: (record: RecordFile) => void; // New Handler
+  isArchiveView?: boolean;
 }
 
 const formatDate = (dateStr?: string | null) => {
@@ -43,7 +44,8 @@ const RecordRow: React.FC<RecordRowProps> = ({
   onAdvanceStatus,
   onQuickUpdate,
   onReturnResult,
-  onMapCorrection
+  onMapCorrection,
+  isArchiveView
 }) => {
   const [localMsr, setLocalMsr] = React.useState(record.measurementNumber || "");
   const [localExc, setLocalExc] = React.useState(record.excerptNumber || "");
@@ -170,8 +172,54 @@ const RecordRow: React.FC<RecordRowProps> = ({
                   <div className="flex flex-col items-center gap-1">
                       <span className="text-sm text-gray-600">{formatDate(record.assignedDate)}</span>
                       {employee && <span className="text-xs text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded break-words max-w-full leading-tight" title={employee.name}>{employee.name}</span>}
+                      {isArchiveView && canPerformAction && (() => {
+                          const matched = findArchiveStaffForWard(record.ward, employees);
+                          if (matched && record.assignedTo !== matched.id) {
+                              return (
+                                  <button
+                                      onClick={(e) => {
+                                          e.stopPropagation();
+                                          onQuickUpdate(record.id, 'assignedTo', matched.id);
+                                      }}
+                                      className="mt-1 flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold text-orange-700 bg-orange-50 border border-orange-200 rounded hover:bg-orange-100 transition-colors"
+                                      title={`Địa bàn này phụ trách bởi: ${matched.name}. Click để chuyển nhanh.`}
+                                  >
+                                      <UserPlus size={11} /> Giao lại: {matched.name}
+                                  </button>
+                              );
+                          } else if (matched && record.assignedTo === matched.id) {
+                              return (
+                                  <span className="text-[10px] text-emerald-600 font-semibold mt-0.5 flex items-center gap-0.5" title="Đã giao đúng nhân viên phụ trách xã này">
+                                      ✓ Đúng địa bàn
+                                  </span>
+                              );
+                          }
+                          return null;
+                      })()}
                   </div>
-              ) : '--'}
+              ) : (
+                  <div className="flex flex-col items-center gap-1.5">
+                      <span className="text-gray-400">--</span>
+                      {isArchiveView && canPerformAction && (() => {
+                          const matched = findArchiveStaffForWard(record.ward, employees);
+                          if (matched) {
+                              return (
+                                  <button
+                                      onClick={(e) => {
+                                          e.stopPropagation();
+                                          onQuickUpdate(record.id, 'assignedTo', matched.id);
+                                      }}
+                                      className="flex items-center gap-1 px-2 py-1 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors shadow-sm"
+                                      title={`Giao nhanh cho nhân viên phụ trách ${record.ward || 'xã này'}: ${matched.name}`}
+                                  >
+                                      <UserPlus size={12} /> Giao nhanh: {matched.name}
+                                  </button>
+                              );
+                          }
+                          return null;
+                      })()}
+                  </div>
+              )}
           </td>
       )}
       
@@ -310,6 +358,7 @@ export default React.memo(RecordRow, (prevProps, nextProps) => {
     prevProps.record === nextProps.record &&
     prevProps.isSelected === nextProps.isSelected &&
     prevProps.visibleColumns === nextProps.visibleColumns &&
+    prevProps.isArchiveView === nextProps.isArchiveView &&
     prevProps.employees.length === nextProps.employees.length
   );
 });

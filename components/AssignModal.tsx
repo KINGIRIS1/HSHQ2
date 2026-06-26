@@ -224,7 +224,7 @@ export const isViewAllowedForUser = (currentUser: User | null, viewId: string, e
       const restrictedViews = [...measurementViews, ...archiveViews, ...congvanViews, ...otherViews];
       if (restrictedViews.includes(viewId)) return false;
     } else if (teamName === 'Tổ Lưu trữ') {
-      const restrictedViews = [...measurementViews, ...registrationViews, ...congvanViews, ...otherViews];
+      const restrictedViews = [...measurementViews, ...registrationViews, ...otherViews];
       if (restrictedViews.includes(viewId)) return false;
     }
   }

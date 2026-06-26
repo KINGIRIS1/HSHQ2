@@ -133,82 +133,53 @@ const ReceiveRecord: React.FC<ReceiveRecordProps> = ({ onSave, onDelete, wards, 
       return 'ĐĐ';
   };
 
+  const getWardAbbreviationLocal = (ward: string): string => {
+    if (!ward) return 'CT';
+    const clean = ward.trim().toLowerCase();
+    if (clean.includes('tân khai') || clean.includes('tankhai')) return 'TK';
+    if (clean.includes('tân hưng') || clean.includes('tanhung')) return 'TH';
+    if (clean.includes('minh đức') || clean.includes('minhduc')) return 'MĐ';
+    if (clean.includes('tân quan') || clean.includes('tanquan')) return 'TQ';
+    if (clean.includes('minh hưng') || clean.includes('minhhung')) return 'MH';
+    if (clean.includes('chơn thành') || clean.includes('chonthanh') || clean.includes('hưng long')) return 'CT';
+    if (clean.includes('nha bích') || clean.includes('nhabich')) return 'NB';
+    if (clean.includes('minh lập') || clean.includes('minhlap')) return 'ML';
+    if (clean.includes('minh thắng') || clean.includes('minhthang')) return 'MT';
+    if (clean.includes('quang minh') || clean.includes('quangminh')) return 'QM';
+    if (clean.includes('thành tâm') || clean.includes('thanhtam')) return 'TT';
+    if (clean.includes('minh long') || clean.includes('minhlong')) return 'MLO';
+    return 'CT';
+  };
+
   const calculateNextCode = (wardName: string, dateStr: string, existingCodes: string[] = [], recordType?: string) => {
     if (!dateStr) return '';
 
     const d = new Date(dateStr);
-    const yearStr = d.getFullYear().toString();
-    const yy = yearStr.slice(-2);
-    
-    const deptCode = getRecordTabAbbreviation(recordType);
+    const yy = d.getFullYear().toString().slice(-2);
+    const mm = ('0' + (d.getMonth() + 1)).slice(-2);
+    const dd = ('0' + d.getDate()).slice(-2);
+    const datePrefix = `${yy}${mm}${dd}`;
+    const prefix = `${datePrefix}-`;
+
     let maxSeq = 0;
-    
-    const checkSeq = (code: string | undefined | null, rType?: string | null) => {
+    const checkSeq = (code: string | undefined | null) => {
         if (!code) return;
-        
-        let rYear = '';
-        let rDept = '';
-        let rSeq = 0;
-        
-        const computedDeptOfRecord = rType ? getRecordTabAbbreviation(rType) : '';
-        
-        if (code.includes('/')) {
-            const parts = code.split('/');
-            if (parts.length === 2) {
-                const seqVal = parseInt(parts[0], 10);
-                const deptYear = parts[1].split('-');
-                if (deptYear.length === 2 && !isNaN(seqVal)) {
-                    rSeq = seqVal;
-                    rDept = deptYear[0];
-                    rYear = deptYear[1];
-                }
-            }
-        } else if (code.startsWith('HS-')) {
+        if (code.startsWith(prefix)) {
             const parts = code.split('-');
-            if (parts.length === 3) {
-                const yearVal = parts[1];
-                const seqVal = parseInt(parts[2], 10);
-                if (!isNaN(seqVal)) {
-                    rSeq = seqVal;
-                    rYear = yearVal;
-                    rDept = computedDeptOfRecord || 'ĐĐ';
+            if (parts.length >= 2) {
+                const seqVal = parseInt(parts[parts.length - 1], 10);
+                if (!isNaN(seqVal) && seqVal > maxSeq) {
+                    maxSeq = seqVal;
                 }
             }
-        } else if (code.includes('-')) {
-            const parts = code.split('-');
-            if (parts.length === 2) {
-                const left = parts[0];
-                const right = parts[1];
-                if (left.length === 6 && !isNaN(parseInt(left, 10))) {
-                    const yearPart = '20' + left.substring(0, 2);
-                    const seqVal = parseInt(right, 10);
-                    if (!isNaN(seqVal)) {
-                        rSeq = seqVal;
-                        rYear = yearPart;
-                        rDept = computedDeptOfRecord || 'ĐĐ';
-                    }
-                } else if (left === 'TĐ' || left === 'TL' || left === 'SL' || left === 'CV') {
-                    const seqVal = parseInt(right, 10);
-                    if (!isNaN(seqVal)) {
-                        rSeq = seqVal;
-                        rYear = yearStr;
-                        rDept = left === 'CV' ? 'CV' : (left === 'TL' || left === 'SL' ? 'LT' : 'ĐĐ');
-                    }
-                }
-            }
-        }
-        
-        const finalDept = rDept || computedDeptOfRecord || 'ĐĐ';
-        if (finalDept === deptCode && (rYear === yearStr || rYear === yy)) {
-            if (rSeq > maxSeq) maxSeq = rSeq;
         }
     };
 
-    combinedRecords.forEach((r: RecordFile) => checkSeq(r.code, r.recordType));
-    existingCodes.forEach(code => checkSeq(code, recordType));
+    combinedRecords.forEach((r: RecordFile) => checkSeq(r.code));
+    existingCodes.forEach(code => checkSeq(code));
 
     const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
-    return `${nextSeq}/${deptCode}-${yearStr}`;
+    return `${prefix}${nextSeq}`;
   };
 
   // --- LOGIC TÍNH HẠN TRẢ (CẬP NHẬT FIX LỖI TIMEZONE VÀ NGÀY NGHỈ) ---
@@ -523,7 +494,7 @@ const ReceiveRecord: React.FC<ReceiveRecordProps> = ({ onSave, onDelete, wards, 
       {systemReceiptData && (
           <SystemReceiptTemplate 
               data={systemReceiptData} 
-              receivingWard={employees.find(e => e.id === currentUser.employeeId)?.managedWards?.[0] || 'Tân Khai'}
+              receivingWard={systemReceiptData.ward || employees.find(e => e.id === currentUser.employeeId)?.managedWards?.[0] || 'Tân Khai'}
               onClose={() => setSystemReceiptData(null)} 
           />
       )}

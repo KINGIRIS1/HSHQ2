@@ -82,7 +82,7 @@ export const useReminderSystem = (records: RecordFile[], onUpdateRecord: (r: Rec
                             `Nhắc nhở hồ sơ: ${r.code}`,
                             `Đã đến hạn xử lý cho khách hàng: ${r.customerName}. Vui lòng kiểm tra!`
                         );
-                    } else if (Notification.permission === 'granted') {
+                    } else if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
                         new Notification(`Nhắc nhở hồ sơ: ${r.code}`, {
                             body: `Đã đến hạn xử lý cho khách hàng: ${r.customerName}.`
                         });

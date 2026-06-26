@@ -27,14 +27,16 @@ if (typeof window !== 'undefined') {
       // Các API an toàn để dùng trên trình duyệt
       openExternal: async (url: string) => { window.open(url, '_blank'); },
       showNotification: async (title: string, body: string) => {
-        if (Notification.permission === 'granted') {
-          new Notification(title, { body });
-          return true;
-        } else if (Notification.permission !== 'denied') {
-          const permission = await Notification.requestPermission();
-          if (permission === 'granted') {
+        if (typeof Notification !== 'undefined') {
+          if (Notification.permission === 'granted') {
             new Notification(title, { body });
             return true;
+          } else if (Notification.permission !== 'denied') {
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+              new Notification(title, { body });
+              return true;
+            }
           }
         }
         return false;

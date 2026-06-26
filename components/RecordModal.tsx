@@ -178,94 +178,32 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
   const generateCode = React.useCallback((wardName: string, dateStr: string, recordType?: string) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
-    const yearStr = d.getFullYear().toString();
-    const yy = yearStr.slice(-2);
+    const yy = d.getFullYear().toString().slice(-2);
+    const mm = ('0' + (d.getMonth() + 1)).slice(-2);
+    const dd = ('0' + d.getDate()).slice(-2);
+    const datePrefix = `${yy}${mm}${dd}`;
     
-    const getRecordTabAbbreviation = (rType: string | null | undefined): string => {
-        if (!rType) return 'ĐĐ';
-        const t = rType.trim().toLowerCase();
-        if (rType === 'Cung cấp tài liệu đất đai' || rType === 'Sao lục') return 'LT';
-        if (rType === 'Công văn') return 'CV';
-        if (['CMD', 'Tòa án', 'Thi hành án'].includes(rType)) return 'K';
-        
-        const REG_PROCEDURES = [
-            "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
-            "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
-        ];
-        const isReg = t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
-        if (isReg) return 'ĐK';
-        return 'ĐĐ';
-    };
-
-    const deptCode = getRecordTabAbbreviation(recordType);
+    const prefix = `${datePrefix}-`;
     let maxSeq = 0;
     
-    const checkSeq = (code: string | undefined | null, rType?: string | null) => {
+    const checkSeq = (code: string | undefined | null) => {
         if (!code) return;
-        
-        let rYear = '';
-        let rDept = '';
-        let rSeq = 0;
-        
-        const computedDeptOfRecord = rType ? getRecordTabAbbreviation(rType) : '';
-        
-        if (code.includes('/')) {
-            const parts = code.split('/');
-            if (parts.length === 2) {
-                const seqVal = parseInt(parts[0], 10);
-                const deptYear = parts[1].split('-');
-                if (deptYear.length === 2 && !isNaN(seqVal)) {
-                    rSeq = seqVal;
-                    rDept = deptYear[0];
-                    rYear = deptYear[1];
-                }
-            }
-        } else if (code.startsWith('HS-')) {
+        if (code.startsWith(prefix)) {
             const parts = code.split('-');
-            if (parts.length === 3) {
-                const yearVal = parts[1];
-                const seqVal = parseInt(parts[2], 10);
-                if (!isNaN(seqVal)) {
-                    rSeq = seqVal;
-                    rYear = yearVal;
-                    rDept = computedDeptOfRecord || 'ĐĐ';
+            if (parts.length >= 2) {
+                const seqVal = parseInt(parts[parts.length - 1], 10);
+                if (!isNaN(seqVal) && seqVal > maxSeq) {
+                    maxSeq = seqVal;
                 }
             }
-        } else if (code.includes('-')) {
-            const parts = code.split('-');
-            if (parts.length === 2) {
-                const left = parts[0];
-                const right = parts[1];
-                if (left.length === 6 && !isNaN(parseInt(left, 10))) {
-                    const yearPart = '20' + left.substring(0, 2);
-                    const seqVal = parseInt(right, 10);
-                    if (!isNaN(seqVal)) {
-                        rSeq = seqVal;
-                        rYear = yearPart;
-                        rDept = computedDeptOfRecord || 'ĐĐ';
-                    }
-                } else if (left === 'TĐ' || left === 'TL' || left === 'SL' || left === 'CV') {
-                    const seqVal = parseInt(right, 10);
-                    if (!isNaN(seqVal)) {
-                        rSeq = seqVal;
-                        rYear = yearStr;
-                        rDept = left === 'CV' ? 'CV' : (left === 'TL' || left === 'SL' ? 'LT' : 'ĐĐ');
-                    }
-                }
-            }
-        }
-        
-        const finalDept = rDept || computedDeptOfRecord || 'ĐĐ';
-        if (finalDept === deptCode && (rYear === yearStr || rYear === yy)) {
-            if (rSeq > maxSeq) maxSeq = rSeq;
         }
     };
 
     const targetRecords = records || [];
-    targetRecords.forEach((r: RecordFile) => checkSeq(r.code, r.recordType));
+    targetRecords.forEach((r: RecordFile) => checkSeq(r.code));
 
     const nextSeq = (maxSeq + 1).toString().padStart(4, '0');
-    return `${nextSeq}/${deptCode}-${yearStr}`;
+    return `${prefix}${nextSeq}`;
   }, [records]);
 
   const isMeasurement = React.useMemo(() => {
@@ -589,7 +527,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="md:col-span-2"><label className="block text-xs font-bold text-gray-700 mb-1">Tên chủ sử dụng <span className="text-red-500">*</span></label><input type="text" required className="w-full border border-gray-300 rounded-md px-3 py-2 font-medium" value={val(formData.customerName)} onChange={(e) => handleChange('customerName', e.target.value)} /></div>
                         <div><label className="block text-xs font-bold text-gray-700 mb-1">Số điện thoại</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.phoneNumber)} onChange={(e) => handleChange('phoneNumber', e.target.value)} /></div>
-                        <div className="md:col-span-2"><label className="block text-xs font-bold text-gray-700 mb-1">Địa chỉ chủ sử dụng</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.customerAddress)} onChange={(e) => handleChange('customerAddress', e.target.value)} /></div>
+                        <div className="md:col-span-2"><label className="block text-xs font-bold text-gray-700 mb-1">Địa chỉ thường trú</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.customerAddress)} onChange={(e) => handleChange('customerAddress', e.target.value)} /></div>
                         <div><label className="block text-xs font-bold text-gray-700 mb-1">CCCD</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.cccd)} onChange={(e) => handleChange('cccd', e.target.value)} /></div>
                         <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-50 p-2 rounded border border-gray-200">
                             <div><label className="block text-[10px] font-bold text-gray-500 uppercase">Người được ủy quyền</label><input type="text" className="w-full border border-gray-300 rounded px-2 py-1 text-sm" value={val(formData.authorizedBy)} onChange={(e) => handleChange('authorizedBy', e.target.value)} placeholder="Họ tên..." /></div>
@@ -602,9 +540,21 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                 <div className="bg-white p-4 md:p-5 rounded-lg border border-gray-200 shadow-sm">
                     <h3 className="text-sm font-bold text-blue-800 uppercase mb-4 flex items-center gap-2 border-b pb-2"><MapPin size={16} /> Vị trí & Thửa đất</h3>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <div><label className="block text-xs font-bold text-gray-700 mb-1">Xã / Phường</label><select className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white" value={val(formData.ward)} onChange={(e) => handleChange('ward', e.target.value)}><option value="">-- Chọn Xã/Phường --</option>{wards.map(w => <option key={w} value={w}>{w}</option>)}</select></div>
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Xã / Phường</label>
+                            <select 
+                                className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white" 
+                                value={val(formData.ward)} 
+                                onChange={(e) => {
+                                    const w = e.target.value;
+                                    handleChange('ward', w);
+                                }}
+                            >
+                                <option value="">-- Chọn Xã/Phường --</option>
+                                {wards.map(w => <option key={w} value={w}>{w}</option>)}
+                            </select>
+                        </div>
                         <div className="md:col-span-2"><label className="block text-xs font-bold text-gray-700 mb-1">Địa chỉ chi tiết</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.address)} onChange={(e) => handleChange('address', e.target.value)} placeholder="Số nhà, đường, ấp..." /></div>
-                        <div><label className="block text-xs font-bold text-gray-700 mb-1">Khu vực (Nhóm)</label><select className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.group)} onChange={(e) => handleChange('group', e.target.value)}>{GROUPS.map(g => <option key={g} value={g}>{g}</option>)}</select></div>
                         <div className="grid grid-cols-3 gap-2 md:col-span-4">
                             <div><label className="block text-xs font-bold text-gray-700 mb-1">Tờ bản đồ</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2 text-center font-mono" value={val(formData.mapSheet)} onChange={(e) => handleChange('mapSheet', e.target.value)} /></div>
                             <div><label className="block text-xs font-bold text-gray-700 mb-1">Thửa đất</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2 text-center font-mono" value={val(formData.landPlot)} onChange={(e) => handleChange('landPlot', e.target.value)} /></div>
