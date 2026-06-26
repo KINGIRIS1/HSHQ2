@@ -57,7 +57,7 @@ const DailyList: React.FC<DailyListProps> = ({
 }) => {
   const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterDept, setFilterDept] = useState<string>('all'); // State "Bộ phận"
+  const [selectedDepts, setSelectedDepts] = useState<string[]>([]); // State "Bộ phận"
   
   // Row selection states
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -79,77 +79,77 @@ const DailyList: React.FC<DailyListProps> = ({
           if (recordDate !== filterDate) return false;
           
           // 2. Lọc theo Bộ phận (gồm: Đo đạc, Lưu trữ, Đăng ký)
-          if (filterDept !== 'all') {
-              const getRecordDepartment = (rec: RecordFile): string => {
-                  if (rec.assignedTo) {
-                      const emp = employees.find(e => e.id === rec.assignedTo);
-                      if (emp && emp.department) {
-                          const deptLower = emp.department.toLowerCase();
-                          if (
-                              deptLower.includes('đo đạc') || deptLower.includes('do dac') || 
-                              deptLower.includes('kỹ thuật') || deptLower.includes('ky thuat') || 
-                              deptLower.includes('tổ đo') || deptLower.includes('dia chinh') ||
-                              deptLower.includes('bản đồ') || deptLower.includes('ban do')
-                          ) {
-                              return 'Đo đạc';
-                          }
-                          if (
-                              deptLower.includes('lưu trữ') || deptLower.includes('luu tru') || 
-                              deptLower.includes('sao lục') || deptLower.includes('sao luc') ||
-                              deptLower.includes('văn thư') || deptLower.includes('van thu')
-                          ) {
-                              return 'Lưu trữ';
-                          }
-                          if (
-                              deptLower.includes('đăng ký') || deptLower.includes('dang ky') || 
-                              deptLower.includes('cấp giấy') || deptLower.includes('cap giay') || 
-                              deptLower.includes('biến động') || deptLower.includes('bien dong') ||
-                              deptLower.includes('một cửa') || deptLower.includes('mot cua')
-                          ) {
-                              return 'Cấp giấy';
-                          }
-                      }
-                  }
-
-                  if (rec.recordType) {
-                      const typeLower = rec.recordType.toLowerCase();
+          const getRecordDepartment = (rec: RecordFile): string => {
+              if (rec.assignedTo) {
+                  const emp = employees.find(e => e.id === rec.assignedTo);
+                  if (emp && emp.department) {
+                      const deptLower = emp.department.toLowerCase();
                       if (
-                          typeLower.includes('trích đo') || typeLower.includes('trich do') || 
-                          typeLower.includes('cắm mốc') || typeLower.includes('cam moc') || 
-                          typeLower.includes('tách thửa') || typeLower.includes('tach thua') ||
-                          typeLower.includes('đo đạc') || typeLower.includes('do dac')
+                          deptLower.includes('đo đạc') || deptLower.includes('do dac') || 
+                          deptLower.includes('kỹ thuật') || deptLower.includes('ky thuat') || 
+                          deptLower.includes('tổ đo') || deptLower.includes('dia chinh') ||
+                          deptLower.includes('bản đồ') || deptLower.includes('ban do')
                       ) {
                           return 'Đo đạc';
                       }
-                      
                       if (
-                          typeLower.includes('cung cấp') || typeLower.includes('cung cap') || 
-                          typeLower.includes('trích lục') || typeLower.includes('trich luc') || 
-                          typeLower.includes('lưu trữ') || typeLower.includes('luu tru') || 
-                          typeLower.includes('sao lục') || typeLower.includes('sao luc')
+                          deptLower.includes('lưu trữ') || deptLower.includes('luu tru') || 
+                          deptLower.includes('sao lục') || deptLower.includes('sao luc') ||
+                          deptLower.includes('văn thư') || deptLower.includes('van thu')
                       ) {
                           return 'Lưu trữ';
                       }
-                      
                       if (
-                          typeLower.includes('đăng ký') || typeLower.includes('dang ky') ||
-                          typeLower.includes('cấp giấy') || typeLower.includes('cap giay') ||
-                          typeLower.includes('cấp đổi') || typeLower.includes('cap doi') ||
-                          typeLower.includes('biến động') || typeLower.includes('bien dong') ||
-                          typeLower.includes('chuyển nhượng') || typeLower.includes('chuyen nhuong') ||
-                          typeLower.includes('thế chấp') || typeLower.includes('the chap') ||
-                          typeLower.includes('xóa thế chấp') || typeLower.includes('xoa the chap') ||
-                          typeLower.includes('tặng cho') || typeLower.includes('tang cho') ||
-                          typeLower.includes('thừa kế') || typeLower.includes('thua ke') ||
-                          typeLower.includes('thỏa thuận') || typeLower.includes('thoa thuan')
+                          deptLower.includes('đăng ký') || deptLower.includes('dang ky') || 
+                          deptLower.includes('cấp giấy') || deptLower.includes('cap giay') || 
+                          deptLower.includes('biến động') || deptLower.includes('bien dong') ||
+                          deptLower.includes('một cửa') || deptLower.includes('mot cua')
                       ) {
                           return 'Cấp giấy';
                       }
                   }
+              }
 
-                  return 'Cấp giấy';
-              };
-              if (getRecordDepartment(r) !== filterDept) return false;
+              if (rec.recordType) {
+                  const typeLower = rec.recordType.toLowerCase();
+                  if (
+                      typeLower.includes('trích đo') || typeLower.includes('trich do') || 
+                      typeLower.includes('cắm mốc') || typeLower.includes('cam moc') || 
+                      typeLower.includes('tách thửa') || typeLower.includes('tach thua') ||
+                      typeLower.includes('đo đạc') || typeLower.includes('do dac')
+                  ) {
+                      return 'Đo đạc';
+                  }
+                  
+                  if (
+                      typeLower.includes('cung cấp') || typeLower.includes('cung cap') || 
+                      typeLower.includes('trích lục') || typeLower.includes('trich luc') || 
+                      typeLower.includes('lưu trữ') || typeLower.includes('luu tru') || 
+                      typeLower.includes('sao lục') || typeLower.includes('sao luc')
+                  ) {
+                      return 'Lưu trữ';
+                  }
+                  
+                  if (
+                      typeLower.includes('đăng ký') || typeLower.includes('dang ky') ||
+                      typeLower.includes('cấp giấy') || typeLower.includes('cap giay') ||
+                      typeLower.includes('cấp đổi') || typeLower.includes('cap doi') ||
+                      typeLower.includes('biến động') || typeLower.includes('bien dong') ||
+                      typeLower.includes('chuyển nhượng') || typeLower.includes('chuyen nhuong') ||
+                      typeLower.includes('thế chấp') || typeLower.includes('the chap') ||
+                      typeLower.includes('xóa thế chấp') || typeLower.includes('xoa the chap') ||
+                      typeLower.includes('tặng cho') || typeLower.includes('tang cho') ||
+                      typeLower.includes('thừa kế') || typeLower.includes('thua ke') ||
+                      typeLower.includes('thỏa thuận') || typeLower.includes('thoa thuan')
+                  ) {
+                      return 'Cấp giấy';
+                  }
+              }
+
+              return 'Cấp giấy';
+          };
+          if (selectedDepts.length > 0) {
+              if (!selectedDepts.includes(getRecordDepartment(r))) return false;
           }
 
           // 3. Tìm kiếm từ khóa
@@ -171,12 +171,12 @@ const DailyList: React.FC<DailyListProps> = ({
           const codeB = (b.code || '').toUpperCase();
           return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
       });
-  }, [records, filterDate, searchTerm, filterDept, currentUser]);
+  }, [records, filterDate, searchTerm, selectedDepts, currentUser]);
 
   // Luôn bỏ tích chọn khi thay đổi ngày, bộ phận lọc để tránh nhầm lẫn (bỏ records ra để tránh xóa khi đồng bộ)
   React.useEffect(() => {
       setSelectedIds(new Set());
-  }, [filterDate, filterDept]);
+  }, [filterDate, selectedDepts]);
 
   // --- COMPUTE SELECTED RECORDS FOR ASSIGN ---
   const selectedRecordsForAssign = useMemo(() => {
@@ -486,6 +486,8 @@ const DailyList: React.FC<DailyListProps> = ({
       }
   };
 
+  const DEPARTMENTS = ['Đo đạc', 'Lưu trữ', 'Cấp giấy'];
+
   return (
     <div className="flex flex-col h-full space-y-4 animate-fade-in">
         {/* Filter bar - matches visual layout in screenshot */}
@@ -511,19 +513,43 @@ const DailyList: React.FC<DailyListProps> = ({
                 /> 
             </div>
 
-            {/* Bộ phận Select Filter */}
-            <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-gray-600 whitespace-nowrap">Bộ phận:</label>
-                <select 
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500 bg-white shadow-sm font-semibold" 
-                    value={filterDept} 
-                    onChange={(e) => setFilterDept(e.target.value)}
-                >
-                    <option value="all">Tất cả bộ phận</option>
-                    <option value="Đo đạc">Đo đạc</option>
-                    <option value="Lưu trữ">Lưu trữ</option>
-                    <option value="Cấp giấy">Cấp giấy</option>
-                </select>
+            {/* Bộ phận Checkboxes Filter */}
+            <div className="flex items-center gap-3 bg-gray-50 px-3 py-1.5 border border-gray-200 rounded-lg">
+                <span className="text-sm font-semibold text-gray-700">Bộ phận:</span>
+                
+                <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold text-gray-700">
+                    <input 
+                        type="checkbox"
+                        checked={selectedDepts.length === DEPARTMENTS.length}
+                        onChange={(e) => {
+                            if (e.target.checked) {
+                                setSelectedDepts([...DEPARTMENTS]);
+                            } else {
+                                setSelectedDepts([]);
+                            }
+                        }}
+                        className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                    />
+                    <span>Toàn bộ</span>
+                </label>
+
+                {DEPARTMENTS.map(dept => (
+                    <label key={dept} className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold text-gray-700">
+                        <input 
+                            type="checkbox"
+                            checked={selectedDepts.includes(dept)}
+                            onChange={(e) => {
+                                if (e.target.checked) {
+                                    setSelectedDepts(prev => [...prev, dept]);
+                                } else {
+                                    setSelectedDepts(prev => prev.filter(d => d !== dept));
+                                }
+                            }}
+                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                        />
+                        <span>{dept}</span>
+                    </label>
+                ))}
             </div>
 
             {/* Bulk actions matching layout */}

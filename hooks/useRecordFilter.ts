@@ -37,6 +37,20 @@ export const useRecordFilter = (
     const [filterStatus, setFilterStatus] = useState('all');
     const [filterEmployee, setFilterEmployee] = useState('all');
     const [warningFilter, setWarningFilter] = useState<'none' | 'overdue' | 'approaching'>('none');
+
+    // Tự động xóa dữ liệu tìm kiếm và các bộ lọc khi chuyển view/tab (theo yêu cầu)
+    useEffect(() => {
+        setSearchStates({});
+        setFilterWard('all');
+        setFilterStatus('all');
+        setFilterEmployee('all');
+        setFilterDate('');
+        setFilterSpecificDate('');
+        setFilterAssignedDate('');
+        setFilterFromDate('');
+        setFilterToDate('');
+        setWarningFilter('none');
+    }, [currentView]);
     
     // Cập nhật type cho handoverTab để hỗ trợ 'returned'
     const [handoverTab, setHandoverTab] = useState<'today' | 'history' | 'returned'>('today');

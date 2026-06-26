@@ -495,7 +495,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector) && (
+            {(isAdmin || isSubadmin || isDirector || currentUser.role === UserRole.ONEDOOR) && (
               <button
                 onClick={() => props.setCurrentView("check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -566,7 +566,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector) && (
+            {(isAdmin || isSubadmin || isDirector || currentUser.role === UserRole.ONEDOOR) && (
               <button
                 onClick={() => props.setCurrentView("registration_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -637,7 +637,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector) && (
+            {(isAdmin || isSubadmin || isDirector || currentUser.role === UserRole.ONEDOOR) && (
               <button
                 onClick={() => props.setCurrentView("archive_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "archive_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -741,7 +741,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector) && (
+            {(isAdmin || isSubadmin || isDirector || currentUser.role === UserRole.ONEDOOR) && (
               <button
                 onClick={() => props.setCurrentView("other_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "other_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
