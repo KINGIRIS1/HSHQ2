@@ -8,6 +8,7 @@ import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../services/do
 import DocxPreviewModal from './DocxPreviewModal';
 import { updateRecordApi, fetchContracts } from '../services/api';
 import { calculateDeadline } from '../utils/appHelpers';
+import { getEmployeeTeam } from './AssignModal';
 import SystemReceiptTemplate from './receive-record/SystemReceiptTemplate';
 import SystemAnnexTemplate from './receive-record/SystemAnnexTemplate';
 
@@ -40,6 +41,13 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
   const [isDefectDialogOpen, setIsDefectDialogOpen] = useState(false);
   const [defectReasonInput, setDefectReasonInput] = useState('');
   const [isSavingDefect, setIsSavingDefect] = useState(false);
+  
+  // States for citizen supplement (Chờ bổ sung - Người dân)
+  const [isSupplementDialogOpen, setIsSupplementDialogOpen] = useState(false);
+  const [supplementReasonInput, setSupplementReasonInput] = useState('');
+  const [supplementLegalBasisInput, setSupplementLegalBasisInput] = useState('');
+  const [isSavingSupplement, setIsSavingSupplement] = useState(false);
+
   const [isResumeDialogOpen, setIsResumeDialogOpen] = useState(false);
   const [resumeMode, setResumeMode] = useState<'supplement' | 'simple'>('supplement');
   const [isSavingResume, setIsSavingResume] = useState(false);
@@ -325,11 +333,20 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       }
   }, [record]);
 
+  const isOneDoor = React.useMemo(() => {
+    if (!currentUser) return false;
+    if (currentUser.role === UserRole.ONEDOOR) return true;
+    if (!currentUser.employeeId || !employees) return false;
+    const emp = employees.find(e => e.id === currentUser.employeeId);
+    if (!emp) return false;
+    const teamName = getEmployeeTeam(emp);
+    return teamName === "Tổ Hành chính";
+  }, [currentUser, employees]);
+
   if (!isOpen || !record) return null;
 
   const isAdmin = currentUser?.role === UserRole.ADMIN;
   const isSubadmin = currentUser?.role === UserRole.SUBADMIN;
-  const isOneDoor = currentUser?.role === UserRole.ONEDOOR;
 
   const canPerformAction = isAdmin || isSubadmin || isOneDoor; // Điều kiện để Sửa, Xóa
   
@@ -1049,7 +1066,9 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-center gap-3">
                                 <div className="bg-blue-200 p-1.5 rounded text-blue-700"><Receipt size={16}/></div>
                                 <div>
-                                    <label className="text-[10px] text-blue-500 uppercase font-bold block">Số biên lai</label>
+                                    <label className="text-[10px] text-blue-500 uppercase font-bold block">
+                                        {record.receiptType === 'invoice' ? 'Số Hóa Đơn' : 'Số Biên Lai'}
+                                    </label>
                                     <p className="text-sm font-bold text-blue-800">{record.receiptNumber || '---'}</p>
                                 </div>
                             </div>
@@ -1066,6 +1085,15 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                                     </p>
                                 </div>
                             </div>
+                            {record.paymentAmount !== null && record.paymentAmount !== undefined && (
+                                <div className="bg-emerald-50 p-3 rounded-lg border border-emerald-100 flex items-center gap-3 col-span-2">
+                                    <div className="bg-emerald-200 p-1.5 rounded text-emerald-700"><DollarSign size={16}/></div>
+                                    <div>
+                                        <label className="text-[10px] text-emerald-600 uppercase font-bold block">Số tiền thực thu</label>
+                                        <p className="text-sm font-bold text-emerald-800">{record.paymentAmount.toLocaleString('vi-VN')} đ</p>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                         
                         {/* GIÁ TRỊ THANH LÝ */}

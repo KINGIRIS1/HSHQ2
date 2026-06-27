@@ -148,9 +148,9 @@ const DailyList: React.FC<DailyListProps> = ({
 
               return 'Cấp giấy';
           };
-          if (selectedDepts.length > 0) {
-              if (!selectedDepts.includes(getRecordDepartment(r))) return false;
-          }
+          // Bỏ chức năng chọn toàn bộ mặc định. Tích bộ nào hiển thị bộ đó, không tích bộ nào thì không hiển thị.
+          const rDept = getRecordDepartment(r);
+          if (!selectedDepts.includes(rDept)) return false;
 
           // 3. Tìm kiếm từ khóa
           if (searchTerm) {

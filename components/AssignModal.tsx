@@ -193,13 +193,10 @@ export const isViewAllowedForUser = (currentUser: User | null, viewId: string, e
 
   // Lấy thông tin nhân viên tương ứng
   const emp = employees?.find(e => e.id === currentUser.employeeId);
-  if (!emp) return true;
+  const teamName = emp ? getEmployeeTeam(emp) : '';
+  const cat = emp ? getRoleCategory(emp.position) : { key: 'staff' };
 
-  const teamName = getEmployeeTeam(emp);
-  const cat = getRoleCategory(emp.position);
-
-  // Ngoại lệ: "trừ tổ hành chính, ban giám Đốc và nhân viên một cửa"
-  // Tổ Hành chính bao gồm bộ phận một cửa, hành chính, văn thư,... họ được phép theo dõi toàn bộ tiến độ giải quyết hồ sơ
+  // Ngoại lệ: "đối với tổ hành chính, ban giám đốc và nhân viên một cửa được quyền coi hết"
   if (
     teamName === 'Tổ Hành chính' || 
     teamName === 'Ban Giám đốc' || 
@@ -209,23 +206,59 @@ export const isViewAllowedForUser = (currentUser: User | null, viewId: string, e
   }
 
   const isLeaderOrVice = cat.key === 'leader' || cat.key === 'vice_leader' || currentUser.role === UserRole.TEAM_LEADER;
+  const isStaff = !isLeaderOrVice;
 
+  const congvanViews = ['congvan_records', 'congvan_assign_tasks', 'congvan_completed_list', 'congvan_pending_check_list', 'congvan_check_list', 'congvan_handover_list', 'congvan_director_completed'];
+
+  // 1. "đối với nhân viên chỉ xem được cá nhân, tiện ích và lịch công tác của tổ mình"
+  if (isStaff) {
+    const allowedStaffViews = [
+      'personal_profile',
+      'utilities',
+      'work_schedule',
+      'dashboard',
+      'internal_chat',
+      'account_settings'
+    ];
+    if (teamName === 'Tổ Lưu trữ' && congvanViews.includes(viewId)) {
+      return true;
+    }
+    return allowedStaffViews.includes(viewId);
+  }
+
+  // 2. "tổ trưởng/tổ phó sẽ xem được: báo cáo, tất cả của cá nhân và tab hồ sơ của tổ mình không xem qua tổ khác được"
   if (isLeaderOrVice) {
+    const allowedGeneralLeaderViews = [
+      'reports',
+      'personal_profile',
+      'dashboard',
+      'internal_chat',
+      'work_schedule',
+      'utilities',
+      'account_settings'
+    ];
+
+    if (allowedGeneralLeaderViews.includes(viewId)) {
+      return true;
+    }
+
     const measurementViews = ['all_records', 'assign_tasks', 'completed_list', 'pending_check_list', 'check_list', 'handover_list', 'director_completed'];
     const registrationViews = ['registration_records', 'registration_assign_tasks', 'registration_completed_list', 'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 'registration_director_completed'];
     const archiveViews = ['archive_records', 'archive_assign_tasks', 'archive_completed_list', 'archive_pending_check_list', 'archive_check_list', 'archive_handover_list', 'archive_director_completed'];
-    const congvanViews = ['congvan_records', 'congvan_assign_tasks', 'congvan_completed_list', 'congvan_pending_check_list', 'congvan_check_list', 'congvan_handover_list', 'congvan_director_completed'];
-    const otherViews = ['other_records', 'other_assign_tasks', 'other_check_list', 'other_handover_list', 'other_director_completed'];
+    const otherViews = ['other_records', 'other_assign_tasks', 'other_completed_list', 'other_pending_check_list', 'other_check_list', 'other_handover_list', 'other_director_completed'];
 
     if (teamName === 'Tổ Đo đạc') {
-      const restrictedViews = [...registrationViews, ...archiveViews, ...congvanViews, ...otherViews];
-      if (restrictedViews.includes(viewId)) return false;
+      return measurementViews.includes(viewId);
     } else if (teamName === 'Tổ Cấp giấy') {
-      const restrictedViews = [...measurementViews, ...archiveViews, ...congvanViews, ...otherViews];
-      if (restrictedViews.includes(viewId)) return false;
+      return registrationViews.includes(viewId);
     } else if (teamName === 'Tổ Lưu trữ') {
-      const restrictedViews = [...measurementViews, ...registrationViews, ...otherViews];
-      if (restrictedViews.includes(viewId)) return false;
+      return archiveViews.includes(viewId) || viewId === 'excerpt_management' || congvanViews.includes(viewId);
+    }
+
+    // Mặc định chặn các tab hồ sơ khác của tổ khác
+    const allRecordTabs = [...measurementViews, ...registrationViews, ...archiveViews, ...congvanViews, ...otherViews, 'excerpt_management'];
+    if (allRecordTabs.includes(viewId)) {
+      return false;
     }
   }
 

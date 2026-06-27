@@ -13,7 +13,8 @@ export enum RecordStatus {
   RETURNED = 'RETURNED',         // Đã trả kết quả (Hoàn thành trả dân)
   WITHDRAWN = 'WITHDRAWN',       // CSD rút hồ sơ (Kết thúc)
   REJECTED = 'REJECTED',          // Hồ sơ trả (Trả về OneDoor)
-  TBT = 'TBT'                    // Đã có thuế (Thông báo thuế)
+  TBT = 'TBT',                    // Đã có thuế (Thông báo thuế)
+  PENDING_SUPPLEMENT = 'PENDING_SUPPLEMENT' // Chờ bổ sung (Người dân)
 }
 
 export enum UserRole {
@@ -156,6 +157,9 @@ export interface RecordFile {
   defectDate?: string | null;      // Ngày đánh dấu sai sót / trả hồ sơ
   rejectDate?: string | null;      // Ngày giờ trả hồ sơ (REJECTED)
   rejectReason?: string | null;    // Lý do trả hồ sơ (REJECTED)
+  supplementReason?: string | null; // Lý do yêu cầu bổ sung
+  supplementLegalBasis?: string | null; // Căn cứ pháp lý yêu cầu bổ sung
+  supplementDate?: string | null;   // Ngày yêu cầu bổ sung
   isDeptSynced?: boolean; // Đồng bộ chuyển về phòng chuyên môn
   assignedTo?: string | null;    
   notes?: string | null;         

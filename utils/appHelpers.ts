@@ -194,7 +194,8 @@ export const isRecordOverdue = (record: RecordFile): boolean => {
       RecordStatus.RETURNED,
       RecordStatus.WITHDRAWN,
       RecordStatus.REJECTED,
-      RecordStatus.SIGNED
+      RecordStatus.SIGNED,
+      RecordStatus.PENDING_SUPPLEMENT
   ];
 
   if (completedStatuses.includes(record.status)) return false;
@@ -219,7 +220,8 @@ export const isRecordApproaching = (record: RecordFile): boolean => {
       RecordStatus.RETURNED,
       RecordStatus.WITHDRAWN,
       RecordStatus.REJECTED,
-      RecordStatus.SIGNED
+      RecordStatus.SIGNED,
+      RecordStatus.PENDING_SUPPLEMENT
   ];
 
   if (completedStatuses.includes(record.status)) return false;

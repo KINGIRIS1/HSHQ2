@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { FolderCog, ExternalLink, Loader2, Download, CheckCircle, AlertCircle, X, Calculator, FileText, Gavel, Info, Table2, Grid, FileSpreadsheet, Layers } from 'lucide-react';
-import { User as UserType, RecordFile, NotifyFunction, NotifyType } from '../types';
+import { User as UserType, RecordFile, NotifyFunction, NotifyType, Employee, UserRole } from '../types';
+import { getEmployeeTeam } from './AssignModal';
 import SoanBienBanTab from './utilities/SoanBienBanTab';
 import CungCapThongTinTab from './utilities/CungCapThongTinTab';
 import VPHCTab from './utilities/VPHCTab';
@@ -13,14 +14,38 @@ import DongBoThuTucTab from './utilities/DongBoThuTucTab';
 
 interface UtilitiesViewProps {
     currentUser: UserType;
+    employees?: Employee[];
     initialRecordForCorrection?: RecordFile | null; // New prop for auto-navigation
     records?: RecordFile[];
     onUpdateRecord?: (r: RecordFile) => Promise<any>;
     onRefreshData?: () => void;
 }
 
-const UtilitiesView: React.FC<UtilitiesViewProps> = ({ currentUser, initialRecordForCorrection, records, onUpdateRecord, onRefreshData }) => {
-  const [activeTab, setActiveTab] = useState<'bienban' | 'thongtin' | 'vphc' | 'saiso' | 'chinhly' | 'tachthua' | 'chuyendoi' | 'dongbothutuc'>('bienban');
+const UtilitiesView: React.FC<UtilitiesViewProps> = ({ currentUser, employees = [], initialRecordForCorrection, records, onUpdateRecord, onRefreshData }) => {
+  const userEmp = employees.find(e => e.id === currentUser.employeeId);
+  const teamName = userEmp ? getEmployeeTeam(userEmp) : '';
+  const isAdmin = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.SUBADMIN;
+  const isOneDoor = currentUser.role === UserRole.ONEDOOR || teamName === 'Tổ Hành chính';
+  const isDirector = teamName === 'Ban Giám đốc';
+  const isSpecialTeam = isAdmin || isOneDoor || isDirector;
+
+  const allowedTabs = React.useMemo(() => {
+    if (isSpecialTeam || !teamName) {
+      return ['bienban', 'vphc', 'thongtin', 'chinhly', 'tachthua', 'saiso', 'chuyendoi', 'dongbothutuc'];
+    }
+    if (teamName === 'Tổ Đo đạc') {
+      return ['saiso', 'chuyendoi', 'bienban', 'vphc'];
+    }
+    if (teamName === 'Tổ Cấp giấy') {
+      return ['chinhly', 'tachthua', 'dongbothutuc', 'thongtin'];
+    }
+    if (teamName === 'Tổ Lưu trữ') {
+      return ['thongtin'];
+    }
+    return ['bienban', 'vphc', 'thongtin', 'chinhly', 'tachthua', 'saiso', 'chuyendoi', 'dongbothutuc'];
+  }, [isSpecialTeam, teamName]);
+
+  const [activeTab, setActiveTab] = useState<string>('bienban');
   const [defaultExportPath, setDefaultExportPath] = useState('');
   
   // State cho thông báo Custom (Toast)
@@ -28,10 +53,17 @@ const UtilitiesView: React.FC<UtilitiesViewProps> = ({ currentUser, initialRecor
 
   // Auto-switch to correction tab if initial record is provided
   useEffect(() => {
-      if (initialRecordForCorrection) {
+      if (initialRecordForCorrection && allowedTabs.includes('chinhly')) {
           setActiveTab('chinhly');
       }
-  }, [initialRecordForCorrection]);
+  }, [initialRecordForCorrection, allowedTabs]);
+
+  // Ensure active tab is within allowed tabs on load or change
+  useEffect(() => {
+      if (allowedTabs.length && !allowedTabs.includes(activeTab)) {
+          setActiveTab(allowedTabs[0]);
+      }
+  }, [allowedTabs]);
 
   // Load default path on mount and tab change
   useEffect(() => {
@@ -95,54 +127,70 @@ const UtilitiesView: React.FC<UtilitiesViewProps> = ({ currentUser, initialRecor
       {/* Header Tabs */}
       <div className="bg-white border-b border-slate-300 p-2 flex items-center gap-4 shrink-0 shadow-sm z-20">
           <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto">
-              <button 
-                  onClick={() => setActiveTab('bienban')}
-                  className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'bienban' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                  <FileText size={16} /> Soạn Biên Bản
-              </button>
-              <button 
-                  onClick={() => setActiveTab('vphc')}
-                  className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'vphc' ? 'bg-white text-red-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                  <Gavel size={16} /> Biên bản VPHC
-              </button>
-              <button 
-                  onClick={() => setActiveTab('thongtin')}
-                  className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'thongtin' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                  <Info size={16} /> Cung Cấp Thông Tin
-              </button>
-              <button 
-                  onClick={() => setActiveTab('chinhly')}
-                  className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'chinhly' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                  <Table2 size={16} /> Hồ sơ Chỉnh lý
-              </button>
-              <button 
-                  onClick={() => setActiveTab('tachthua')}
-                  className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'tachthua' ? 'bg-white text-orange-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                  <Grid size={16} /> Hồ sơ Tách thửa
-              </button>
-              <button 
-                  onClick={() => setActiveTab('saiso')}
-                  className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'saiso' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                  <Calculator size={16} /> Tính sai số
-              </button>
-              <button 
-                  onClick={() => setActiveTab('chuyendoi')}
-                  className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'chuyendoi' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                  <FileSpreadsheet size={16} /> Chuyển đổi tờ bản đồ
-              </button>
-              <button 
-                  onClick={() => setActiveTab('dongbothutuc')}
-                  className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'dongbothutuc' ? 'bg-white text-rose-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                  <Layers size={16} /> Đồng bộ thủ tục
-              </button>
+              {allowedTabs.includes('bienban') && (
+                  <button 
+                      onClick={() => setActiveTab('bienban')}
+                      className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'bienban' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                      <FileText size={16} /> Soạn Biên Bản
+                  </button>
+              )}
+              {allowedTabs.includes('vphc') && (
+                  <button 
+                      onClick={() => setActiveTab('vphc')}
+                      className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'vphc' ? 'bg-white text-red-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                      <Gavel size={16} /> Biên bản VPHC
+                  </button>
+              )}
+              {allowedTabs.includes('thongtin') && (
+                  <button 
+                      onClick={() => setActiveTab('thongtin')}
+                      className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'thongtin' ? 'bg-white text-purple-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                      <Info size={16} /> Cung Cấp Thông Tin
+                  </button>
+              )}
+              {allowedTabs.includes('chinhly') && (
+                  <button 
+                      onClick={() => setActiveTab('chinhly')}
+                      className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'chinhly' ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                      <Table2 size={16} /> Hồ sơ Chỉnh lý
+                  </button>
+              )}
+              {allowedTabs.includes('tachthua') && (
+                  <button 
+                      onClick={() => setActiveTab('tachthua')}
+                      className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'tachthua' ? 'bg-white text-orange-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                      <Grid size={16} /> Hồ sơ Tách thửa
+                  </button>
+              )}
+              {allowedTabs.includes('saiso') && (
+                  <button 
+                      onClick={() => setActiveTab('saiso')}
+                      className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'saiso' ? 'bg-white text-slate-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                      <Calculator size={16} /> Tính sai số
+                  </button>
+              )}
+              {allowedTabs.includes('chuyendoi') && (
+                  <button 
+                      onClick={() => setActiveTab('chuyendoi')}
+                      className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'chuyendoi' ? 'bg-white text-teal-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                      <FileSpreadsheet size={16} /> Chuyển đổi tờ bản đồ
+                  </button>
+              )}
+              {allowedTabs.includes('dongbothutuc') && (
+                  <button 
+                      onClick={() => setActiveTab('dongbothutuc')}
+                      className={`px-4 py-2 text-sm font-bold rounded-md transition-all whitespace-nowrap flex items-center gap-2 ${activeTab === 'dongbothutuc' ? 'bg-white text-rose-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                  >
+                      <Layers size={16} /> Đồng bộ thủ tục
+                  </button>
+              )}
           </div>
           
           {activeTab !== 'saiso' && activeTab !== 'chinhly' && activeTab !== 'tachthua' && activeTab !== 'chuyendoi' && activeTab !== 'dongbothutuc' && (

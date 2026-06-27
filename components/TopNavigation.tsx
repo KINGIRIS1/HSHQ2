@@ -40,7 +40,14 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
   const isAdmin = currentUser.role === UserRole.ADMIN;
   const isSubadmin = currentUser.role === UserRole.SUBADMIN;
   const isTeamLeader = currentUser.role === UserRole.TEAM_LEADER;
-  const isOneDoor = currentUser.role === UserRole.ONEDOOR;
+  const isOneDoor = React.useMemo(() => {
+    if (currentUser.role === UserRole.ONEDOOR) return true;
+    if (!currentUser.employeeId || !employees) return false;
+    const emp = employees.find(e => e.id === currentUser.employeeId);
+    if (!emp) return false;
+    const teamName = getEmployeeTeam(emp);
+    return teamName === "Tổ Hành chính";
+  }, [currentUser, employees]);
   const isEmployee = currentUser.role === UserRole.EMPLOYEE;
 
   const hasPermission = (permissionId: string) => {
@@ -176,9 +183,8 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
         {/* NAVIGATION */}
         <nav className="flex-1 overflow-y-auto py-2 px-1 space-y-1 custom-scrollbar">
           {menuItems.map((item) => {
-            // Check visibility
-            if (isOneDoor && !oneDoorAllowedViews.includes(item.id) && !item.isDropdown && !(item as any).isTabGroup) return null;
-            if (isTeamLeader && !teamLeaderAllowedViews.includes(item.id) && !item.isDropdown && !(item as any).isTabGroup) return null;
+            // Check visibility using central team-based check
+            if (!isViewAllowedForUser(currentUser, item.id, employees) && !item.isDropdown && !(item as any).isTabGroup) return null;
             if (!item.visible) return null;
 
             // Check if any sub-item is active
@@ -189,8 +195,6 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
             if ((item as any).isTabGroup) {
               // Check if group has visible items for current user
               const hasVisibleItems = item.subItems?.some(sub => {
-                 if (isOneDoor && !oneDoorAllowedViews.includes(sub.id)) return false;
-                 if (isTeamLeader && !teamLeaderAllowedViews.includes(sub.id)) return false;
                  if (!isViewAllowedForUser(currentUser, sub.id, employees)) return false;
                  return sub.visible;
               });
@@ -204,11 +208,9 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
                   </div>
                   <div className="space-y-2">
                     {item.subItems?.map(sub => {
-                       if (isOneDoor && !oneDoorAllowedViews.includes(sub.id)) return null;
-                       if (isTeamLeader && !teamLeaderAllowedViews.includes(sub.id)) return null;
                        if (!isViewAllowedForUser(currentUser, sub.id, employees)) return null;
                        if (!sub.visible) return null;
-    
+     
                        const isSubActive = currentView === sub.id;
                        return (
                         <button

@@ -690,8 +690,8 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
     setLoading(false);
     if (savedRecord) {
         setNotification({ type: 'success', message: (initialData && initialData.id) ? `Cập nhật thành công: ${savedRecord.code}` : `Đã tiếp nhận mới: ${savedRecord.code}` });
-        // Auto-print upon successful receipt of a new record file
-        if (!(initialData && initialData.id) && onPrint) {
+        // Auto-print upon successful receipt of a new record file (only in receive_record tab)
+        if (!(initialData && initialData.id) && onPrint && currentView === 'receive_record') {
             onPrint(savedRecord);
         }
         if (onCancelEdit) onCancelEdit(); else handleReset(true);
@@ -1624,7 +1624,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                             </>
                         ) : (
                             <>
-                                <Save size={16} /> {initialData && initialData.id ? 'Cập nhật' : 'Lưu & In hồ sơ'}
+                                <Save size={16} /> {initialData && initialData.id ? 'Cập nhật' : (currentView === 'receive_record' ? 'Lưu & In hồ sơ' : 'Lưu')}
                             </>
                         )}
                     </button>

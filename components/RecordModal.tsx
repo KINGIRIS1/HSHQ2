@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { RecordFile, RecordStatus, Employee, User, UserRole, Holiday } from '../types';
 import { GROUPS, EXTENDED_RECORD_TYPES, STATUS_LABELS, REGISTRATION_PROCEDURES } from '../constants';
 import { isArchiveType, groupEmployeesByDepartment, removeVietnameseTones } from '../utils/appHelpers';
+import { getEmployeeTeam } from './AssignModal';
 import { X, Save, Lock, User as UserIcon, MapPin, FileText, Calendar, FileCheck } from 'lucide-react';
 import RecordForm from './receive-record/RecordForm';
 
@@ -25,7 +26,8 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
     receivedDate: new Date().toISOString(), deadline: '', assignedTo: '',
     group: GROUPS[0], ward: '', landPlot: '', mapSheet: '', area: 0, address: '',
     recordType: '', measurementNumber: '', excerptNumber: '',
-    privateNotes: '', authorizedBy: '', authDocType: '', receiptNumber: '', resultReturnedDate: ''
+    privateNotes: '', authorizedBy: '', authDocType: '', receiptNumber: '', resultReturnedDate: '',
+    receiptType: 'receipt', paymentAmount: null, receiverName: ''
   };
 
   // --- LOCAL HẠN TRẢ CALCULATION IN RECORDMODAL ---
@@ -172,7 +174,14 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
 
   const [formData, setFormData] = useState<Partial<RecordFile>>(defaultState);
   const hasAdminRights = currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.SUBADMIN;
-  const isOneDoor = currentUser.role === UserRole.ONEDOOR;
+  const isOneDoor = React.useMemo(() => {
+    if (currentUser.role === UserRole.ONEDOOR) return true;
+    if (!currentUser.employeeId || !employees) return false;
+    const emp = employees.find(e => e.id === currentUser.employeeId);
+    if (!emp) return false;
+    const teamName = getEmployeeTeam(emp);
+    return teamName === "Tổ Hành chính";
+  }, [currentUser, employees]);
   const canEditResult = hasAdminRights || isOneDoor;
 
   const generateCode = React.useCallback((wardName: string, dateStr: string, recordType?: string) => {
@@ -607,11 +616,47 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                         )}
                         
                         {canEditResult && (
-                            <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200">
-                                <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2 mb-3"><FileCheck size={16} /> TRẢ KẾT QUẢ CHO DÂN</h4>
+                            <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200 space-y-4">
+                                <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2 mb-1"><FileCheck size={16} /> TRẢ KẾT QUẢ CHO DÂN</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div><label className="block text-xs font-bold text-emerald-700 mb-1">Ngày trả kết quả</label><input type="date" className="w-full border border-emerald-300 rounded-md px-3 py-2 bg-white font-bold text-emerald-800" value={dateVal(formData.resultReturnedDate)} onChange={(e) => handleChange('resultReturnedDate', e.target.value)} /></div>
-                                    <div><label className="block text-xs font-bold text-emerald-700 mb-1">Số Biên Lai</label><input type="text" className="w-full border border-emerald-300 rounded-md px-3 py-2 font-mono bg-white" value={val(formData.receiptNumber)} onChange={(e) => handleChange('receiptNumber', e.target.value)} placeholder="Nhập số biên lai..." /></div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-emerald-700 mb-1">Ngày trả kết quả</label>
+                                        <input type="date" className="w-full border border-emerald-300 rounded-md px-3 py-2 bg-white font-bold text-emerald-800 text-sm" value={dateVal(formData.resultReturnedDate)} onChange={(e) => handleChange('resultReturnedDate', e.target.value)} />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-emerald-700 mb-1">Người nhận kết quả</label>
+                                        <input type="text" className="w-full border border-emerald-300 rounded-md px-3 py-2 bg-white text-sm" value={val(formData.receiverName)} onChange={(e) => handleChange('receiverName', e.target.value)} placeholder="Họ tên người nhận..." />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-emerald-700 mb-1">Loại giấy tờ thu</label>
+                                        <select 
+                                            className="w-full border border-emerald-300 rounded-md px-3 py-2 bg-white text-sm font-semibold"
+                                            value={formData.receiptType || 'receipt'}
+                                            onChange={(e) => handleChange('receiptType', e.target.value as 'receipt' | 'invoice')}
+                                        >
+                                            <option value="receipt">Biên lai</option>
+                                            <option value="invoice">Hóa đơn</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-emerald-700 mb-1">
+                                            Số {formData.receiptType === 'invoice' ? 'Hóa Đơn' : 'Biên Lai'}
+                                        </label>
+                                        <input type="text" className="w-full border border-emerald-300 rounded-md px-3 py-2 font-mono bg-white text-sm" value={val(formData.receiptNumber)} onChange={(e) => handleChange('receiptNumber', e.target.value)} placeholder={formData.receiptType === 'invoice' ? "Nhập số hóa đơn..." : "Nhập số biên lai..."} />
+                                    </div>
+                                    <div className="md:col-span-2">
+                                        <label className="block text-xs font-bold text-emerald-700 mb-1">Số tiền thực tế thu được (VNĐ)</label>
+                                        <input 
+                                            type="text" 
+                                            className="w-full border border-emerald-300 rounded-md px-3 py-2 font-mono bg-white text-sm font-bold" 
+                                            value={formData.paymentAmount !== null && formData.paymentAmount !== undefined ? formData.paymentAmount : ''} 
+                                            onChange={(e) => {
+                                                const val = e.target.value.replace(/[^0-9]/g, '');
+                                                handleChange('paymentAmount', val ? parseInt(val, 10) : null);
+                                            }} 
+                                            placeholder="Nhập số tiền thu được..." 
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -631,7 +676,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
         <div className="p-4 md:p-5 border-t bg-gray-50 flex justify-end gap-3 shrink-0 rounded-b-none md:rounded-b-xl sticky bottom-0 z-10">
             <button type="button" onClick={onClose} className="px-5 py-2.5 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-200 font-medium transition-colors text-sm">Hủy bỏ</button>
             <button type="submit" form="record-form" className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-md font-bold transition-transform active:scale-95 text-sm select-none">
-                <Save size={18} /> {isRegistrationRecord && !initialData ? 'LƯU & IN BIÊN NHẬN' : (initialData ? 'CẬP NHẬT' : 'LƯU & IN HỒ SƠ')}
+                <Save size={18} /> {initialData ? 'CẬP NHẬT' : (currentView === 'receive_record' ? (isRegistrationRecord ? 'LƯU & IN BIÊN NHẬN' : 'LƯU & IN HỒ SƠ') : 'LƯU')}
             </button>
         </div>
       </div>

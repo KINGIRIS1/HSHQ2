@@ -842,13 +842,21 @@ function App() {
 
   const handleConfirmSignBatch = async () => {
       if (!canPerformAction) return;
-      const pendingSign = recordFilterProps.filteredRecords.filter(r => r.status === RecordStatus.PENDING_SIGN);
-      if (pendingSign.length === 0) { alert("Không có hồ sơ nào đang chờ ký."); return; }
-      if(await confirmAction(`Xác nhận chuyển ${pendingSign.length} hồ sơ sang "Đã ký"?`)) {
+      if (selectedRecordIds.size === 0) {
+          alert("Vui lòng tích chọn những hồ sơ cần ký duyệt.");
+          return;
+      }
+      const pendingSign = recordFilterProps.filteredRecords.filter(r => r.status === RecordStatus.PENDING_SIGN && selectedRecordIds.has(r.id));
+      if (pendingSign.length === 0) {
+          alert("Không có hồ sơ nào hợp lệ đang chờ ký duyệt được chọn.");
+          return;
+      }
+      if(await confirmAction(`Xác nhận chuyển ${pendingSign.length} hồ sơ đã chọn sang "Đã ký"?`)) {
           const nowStr = new Date().toISOString();
           const updates = { status: RecordStatus.SIGNED, approvalDate: nowStr, completedDate: null };
           setRecords(prev => prev.map(r => pendingSign.find(p => p.id === r.id) ? { ...r, ...updates } : r));
           await Promise.all(pendingSign.map(r => updateRecordApi({ ...r, ...updates })));
+          setSelectedRecordIds(new Set());
           setToast({ type: 'success', message: `Đã chuyển ${pendingSign.length} hồ sơ sang "Đã ký".` });
       }
   };

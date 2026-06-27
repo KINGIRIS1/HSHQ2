@@ -3,6 +3,7 @@ import React from 'react';
 import { RecordFile, RecordStatus, Employee } from '../types';
 import { getNormalizedWard, getShortRecordType } from '../constants';
 import { isRecordOverdue, isRecordApproaching, toTitleCase, findArchiveStaffForWard } from '../utils/appHelpers';
+import { getEmployeeTeam } from './AssignModal';
 import StatusBadge from './StatusBadge';
 import { CheckSquare, Square, AlertCircle, Clock, Eye, ArrowRight, Pencil, Trash2, Bell, FileCheck, Phone, Map, UserPlus } from 'lucide-react';
 
@@ -76,6 +77,16 @@ const RecordRow: React.FC<RecordRowProps> = ({
   };
   
   const displayStatus = getDisplayStatus(record);
+
+  const isOneDoor = React.useMemo(() => {
+    if (!currentUser) return false;
+    if (currentUser.role === 'ONEDOOR') return true;
+    if (!currentUser.employeeId) return false;
+    const emp = employees.find(e => e.id === currentUser.employeeId);
+    if (!emp) return false;
+    const teamName = getEmployeeTeam(emp);
+    return teamName === "Tổ Hành chính";
+  }, [currentUser, employees]);
 
   // Class chung cho các ô: Căn trên (align-top)
   const cellClass = "p-3 align-top";
@@ -339,7 +350,7 @@ const RecordRow: React.FC<RecordRowProps> = ({
                 </button>
             )}
 
-            {record.status !== RecordStatus.HANDOVER && record.status !== RecordStatus.WITHDRAWN && record.status !== RecordStatus.RETURNED && !record.resultReturnedDate && currentUser?.role !== 'ONEDOOR' && (
+            {record.status !== RecordStatus.HANDOVER && record.status !== RecordStatus.WITHDRAWN && record.status !== RecordStatus.RETURNED && !record.resultReturnedDate && !isOneDoor && (
               <button onClick={() => onAdvanceStatus(record)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Chuyển bước"><ArrowRight size={16} /></button>
             )}
             <button onClick={() => onEdit(record)} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Sửa"><Pencil size={16} /></button>

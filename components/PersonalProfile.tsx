@@ -1,6 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { RecordFile, RecordStatus, User, Employee, RolePermissions, DEFAULT_ROLE_PERMISSIONS, UserRole } from '../types';
+import { getEmployeeTeam } from './AssignModal';
 import StatusBadge from './StatusBadge';
 import { Briefcase, ArrowRight, CheckCircle, Clock, Send, AlertTriangle, UserCog, ChevronLeft, ChevronRight, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Bell, CalendarClock, FileCheck, Map, CheckSquare, ClipboardList, FileDown, RotateCcw, CornerUpLeft } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
@@ -141,8 +142,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
         if (isDirector) {
             return r.submittedTo === effectiveId || r.assignedTo === effectiveId || !r.submittedTo;
         }
-        // Nếu là người lãnh đạo/kiểm tra hoặc có vai trò TEAM_LEADER/Tổ trưởng/Tổ phó, họ có thể thấy hồ sơ liên quan đến họ
-        const empPosition = (employees.find(e => e.id === effectiveId)?.position || '').toLowerCase();
+        // Nếu là người lãnh đạo/kiểm tra hoặc có vai trò TEAM_LEADER/Tổ trưởng/Tổ phó, họ có thể thấy hồ sơ liên quan đến họ hoặc thành viên trong tổ
+        const emp = employees.find(e => e.id === effectiveId);
+        const empPosition = (emp?.position || '').toLowerCase();
+        const userTeam = emp ? getEmployeeTeam(emp) : '';
         const isTeamLeaderOrChecker = user.role === UserRole.TEAM_LEADER || 
                                      empPosition.includes('tổ trưởng') || 
                                      empPosition.includes('tổ phó') || 
@@ -151,7 +154,20 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                      empPosition.includes('trưởng nhóm') || 
                                      empPosition.includes('nhóm trưởng');
         if (isTeamLeaderOrChecker) {
-            return r.assignedTo === effectiveId || r.checkedBy === effectiveId || r.submittedTo === effectiveId || r.receivedBy === effectiveId;
+            // Đưa toàn bộ thành viên trong tổ vào danh sách theo dõi
+            const teamEmployeeIds = employees
+                .filter(e => getEmployeeTeam(e) === userTeam)
+                .map(e => e.id);
+            return (
+                teamEmployeeIds.includes(r.assignedTo || '') ||
+                teamEmployeeIds.includes(r.checkedBy || '') ||
+                teamEmployeeIds.includes(r.submittedTo || '') ||
+                teamEmployeeIds.includes(r.receivedBy || '') ||
+                r.assignedTo === effectiveId ||
+                r.checkedBy === effectiveId ||
+                r.submittedTo === effectiveId ||
+                r.receivedBy === effectiveId
+            );
         }
         return r.assignedTo === effectiveId;
     });
@@ -165,7 +181,9 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
             if (isDirector) {
                 return r.data?.submitted_to === effectiveId || r.data?.assigned_to === effectiveId || !r.data?.submitted_to; 
             }
-            const empPosition = (employees.find(e => e.id === effectiveId)?.position || '').toLowerCase();
+            const emp = employees.find(e => e.id === effectiveId);
+            const empPosition = (emp?.position || '').toLowerCase();
+            const userTeam = emp ? getEmployeeTeam(emp) : '';
             const isTeamLeaderOrChecker = user.role === UserRole.TEAM_LEADER || 
                                          empPosition.includes('tổ trưởng') || 
                                          empPosition.includes('tổ phó') || 
@@ -174,7 +192,17 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                          empPosition.includes('trưởng nhóm') || 
                                          empPosition.includes('nhóm trưởng');
             if (isTeamLeaderOrChecker) {
-                return r.data?.assigned_to === effectiveId || r.data?.checked_by === effectiveId || r.data?.submitted_to === effectiveId;
+                const teamEmployeeIds = employees
+                    .filter(e => getEmployeeTeam(e) === userTeam)
+                    .map(e => e.id);
+                return (
+                    teamEmployeeIds.includes(r.data?.assigned_to || '') ||
+                    teamEmployeeIds.includes(r.data?.checked_by || '') ||
+                    teamEmployeeIds.includes(r.data?.submitted_to || '') ||
+                    r.data?.assigned_to === effectiveId ||
+                    r.data?.checked_by === effectiveId ||
+                    r.data?.submitted_to === effectiveId
+                );
             }
             return r.data?.assigned_to === effectiveId;
         })
@@ -1250,20 +1278,6 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                                 Chi tiết
                                             </button>
                                             
-                                            {/* Nút Thanh lý */}
-                                            {onCreateLiquidation && (r.recordType?.includes('Trích đo') || r.recordType?.includes('đo đạc')) && (
-                                                <button onClick={() => onCreateLiquidation(r)} className="px-2 py-1.5 bg-green-50 text-green-700 border border-green-200 rounded-md hover:bg-green-100 text-xs font-bold flex items-center gap-1 shadow-sm transition-all" title="Thanh lý hợp đồng">
-                                                    <FileCheck size={14} /> Thanh lý
-                                                </button>
-                                            )}
-
-                                            {/* Nút Phụ lục gia hạn HĐ - Chỉ áp dụng cho Nhân viên Tổ đo đạc */}
-                                            {isMeasurementTeam && !(r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn') && (
-                                                <button onClick={() => { setAnnexTargetRecord(r); setIsAnnexModalOpen(true); }} className="px-2 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-md hover:bg-rose-100 text-xs font-bold flex items-center gap-1 shadow-sm transition-all" title="In phụ lục hợp đồng hệ thống">
-                                                    <FileDown size={14} /> Phụ lục
-                                                </button>
-                                            )}
-
                                             {/* Logic nút chuyển trạng thái theo từng Tab */}
                                             {activeTab === 'pending' && (
                                                 <>

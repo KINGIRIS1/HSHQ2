@@ -250,12 +250,40 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
       : false;
   }, [currentUser.employeeId, employees]);
 
+  // Xác định xem user có thuộc Bộ phận Một cửa (gồm role ONEDOOR hoặc Tổ Hành chính)
+  const isOneDoor = React.useMemo(() => {
+    if (currentUser.role === UserRole.ONEDOOR) return true;
+    if (!currentUser.employeeId) return false;
+    const emp = employees.find((e) => e.id === currentUser.employeeId);
+    if (!emp) return false;
+    const teamName = getEmployeeTeam(emp);
+    return teamName === "Tổ Hành chính";
+  }, [currentUser, employees]);
+
+  const isTeamLeader = React.useMemo(() => {
+    if (currentUser.role === UserRole.TEAM_LEADER) return true;
+    if (!currentUser.employeeId) return false;
+    const emp = employees.find((e) => e.id === currentUser.employeeId);
+    if (!emp) return false;
+    const cat = getRoleCategory(emp.position);
+    return cat.key === "leader";
+  }, [currentUser.role, currentUser.employeeId, employees]);
+
+  const isViceLeader = React.useMemo(() => {
+    if (!currentUser.employeeId) return false;
+    const emp = employees.find((e) => e.id === currentUser.employeeId);
+    if (!emp) return false;
+    const cat = getRoleCategory(emp.position);
+    return cat.key === "vice_leader";
+  }, [currentUser.employeeId, employees]);
+
   // canPerformAction is kept for backward compatibility, but we should use hasPermission where possible
   const canPerformAction =
     isAdmin ||
     isSubadmin ||
-    currentUser.role === UserRole.TEAM_LEADER ||
-    currentUser.role === UserRole.ONEDOOR ||
+    isTeamLeader ||
+    isViceLeader ||
+    isOneDoor ||
     isDirector;
 
   const [showColumnSelector, setShowColumnSelector] = React.useState(false);
@@ -495,7 +523,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector || currentUser.role === UserRole.ONEDOOR) && (
+            {(isAdmin || isSubadmin || isDirector || isOneDoor || isTeamLeader || isViceLeader) && (
               <button
                 onClick={() => props.setCurrentView("check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -516,7 +544,9 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
             {!isDirector &&
               (isAdmin ||
                 isSubadmin ||
-                currentUser.role === UserRole.ONEDOOR) && (
+                isOneDoor ||
+                isTeamLeader ||
+                isViceLeader) && (
                 <button
                   onClick={() => props.setCurrentView("handover_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -566,7 +596,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector || currentUser.role === UserRole.ONEDOOR) && (
+            {(isAdmin || isSubadmin || isDirector || isOneDoor || isTeamLeader || isViceLeader) && (
               <button
                 onClick={() => props.setCurrentView("registration_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -587,7 +617,9 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
             {!isDirector &&
               (isAdmin ||
                 isSubadmin ||
-                currentUser.role === UserRole.ONEDOOR) && (
+                isOneDoor ||
+                isTeamLeader ||
+                isViceLeader) && (
                 <button
                   onClick={() => props.setCurrentView("registration_handover_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -637,7 +669,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector || currentUser.role === UserRole.ONEDOOR) && (
+            {(isAdmin || isSubadmin || isDirector || isOneDoor || isTeamLeader || isViceLeader) && (
               <button
                 onClick={() => props.setCurrentView("archive_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "archive_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -658,7 +690,9 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
             {!isDirector &&
               (isAdmin ||
                 isSubadmin ||
-                currentUser.role === UserRole.ONEDOOR) && (
+                isOneDoor ||
+                isTeamLeader ||
+                isViceLeader) && (
                 <button
                   onClick={() => props.setCurrentView("archive_handover_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "archive_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -700,19 +734,28 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               <ClipboardList size={16} /> Kiểm tra
             </button>
 
-            <button
-              onClick={() => props.setCurrentView("congvan_check_list")}
-              className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_check_list" || currentView === "congvan_director_completed" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-            >
-              <ClipboardList size={16} /> Trình ký
-            </button>
+            {(isAdmin || isSubadmin || isDirector || isOneDoor || isTeamLeader || isViceLeader) && (
+              <button
+                onClick={() => props.setCurrentView("congvan_check_list")}
+                className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_check_list" || currentView === "congvan_director_completed" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              >
+                <ClipboardList size={16} /> Trình ký
+              </button>
+            )}
 
-            <button
-              onClick={() => props.setCurrentView("congvan_handover_list")}
-              className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-            >
-              <Send size={16} /> Giao 1 cửa
-            </button>
+            {!isDirector &&
+              (isAdmin ||
+                isSubadmin ||
+                isOneDoor ||
+                isTeamLeader ||
+                isViceLeader) && (
+                <button
+                  onClick={() => props.setCurrentView("congvan_handover_list")}
+                  className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                >
+                  <Send size={16} /> Giao 1 cửa
+                </button>
+              )}
           </div>
         )}
 
@@ -730,7 +773,8 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
 
                 {(isAdmin ||
                   isSubadmin ||
-                  currentUser.role === UserRole.TEAM_LEADER) && (
+                  isTeamLeader ||
+                  isViceLeader) && (
                   <button
                     onClick={() => props.setCurrentView("other_assign_tasks")}
                     className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "other_assign_tasks" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -741,7 +785,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector || currentUser.role === UserRole.ONEDOOR) && (
+            {(isAdmin || isSubadmin || isDirector || isOneDoor || isTeamLeader || isViceLeader) && (
               <button
                 onClick={() => props.setCurrentView("other_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "other_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -762,7 +806,9 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
             {!isDirector &&
               (isAdmin ||
                 isSubadmin ||
-                currentUser.role === UserRole.ONEDOOR) && (
+                isOneDoor ||
+                isTeamLeader ||
+                isViceLeader) && (
                 <button
                   onClick={() => props.setCurrentView("other_handover_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "other_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -807,7 +853,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
           <div className="flex flex-wrap items-center gap-3 bg-gray-50 p-2 rounded-lg relative">
             {isHandoverAny && (
               <div className="flex bg-white rounded-md border border-gray-200 p-1 mr-2 shadow-sm">
-                {currentUser?.role !== UserRole.ONEDOOR && (
+                {!isOneDoor && (
                   <button
                     onClick={() => props.setHandoverTab("today")}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition-colors ${props.handoverTab === "today" ? "bg-green-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
@@ -1020,7 +1066,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </div>
               )}
 
-            {currentUser?.role !== UserRole.ONEDOOR &&
+            {!isOneDoor &&
               (isAllRecordsAny ||
                 currentView === "other_records") && (
                 <div className="flex gap-2">
@@ -1174,14 +1220,15 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </button>
               )}
             {tabAllowedCanPerformAction &&
+              (isAdmin || isSubadmin || isDirector) &&
               isCheckAny &&
-              props.filteredRecords.length > 0 && (
+              props.selectedRecordIds.size > 0 && (
                 <button
                   onClick={props.handleConfirmSignBatch}
-                  className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-bold shadow-md"
+                  className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-bold shadow-md transition-all animate-pulse"
                 >
-                  <FileSignature size={18} /> Ký Duyệt Tất Cả (
-                  {props.filteredRecords.length})
+                  <FileSignature size={18} /> Ký Duyệt (
+                  {props.selectedRecordIds.size})
                 </button>
               )}
             {tabAllowedCanPerformAction &&
@@ -1202,6 +1249,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </button>
               )}
             {tabAllowedCanPerformAction &&
+              (isAdmin || isSubadmin || isTeamLeader || isViceLeader) &&
               isPendingCheckAny &&
               props.selectedRecordIds.size > 0 && (
                 <button
@@ -1219,6 +1267,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </button>
               )}
             {tabAllowedCanPerformAction &&
+              (isAdmin || isSubadmin || isTeamLeader || isViceLeader) &&
               (isAssignAny ||
                 isAllRecordsAny ||
                 currentView === "other_records") &&
@@ -1455,6 +1504,17 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
     );
   };
 
+  if (!isViewAllowedForUser(currentUser, currentView, employees)) {
+    return (
+      <div className="flex items-center justify-center h-full bg-slate-50">
+        <div className="text-center p-8 bg-white rounded-xl shadow-md max-w-md">
+          <p className="text-red-500 font-bold text-lg mb-2">Không có quyền truy cập</p>
+          <p className="text-slate-600 text-sm">Tài khoản của bạn không được phân quyền xem tổ này hoặc tab chức năng này.</p>
+        </div>
+      </div>
+    );
+  }
+
   switch (currentView) {
     case "dashboard":
       return <DashboardView records={records} />;
@@ -1470,7 +1530,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
         />
       );
     case "work_schedule":
-      return <WorkScheduleView currentUser={currentUser} />;
+      return <WorkScheduleView currentUser={currentUser} employees={employees} />;
     case "personal_profile":
       return (
         <PersonalProfile
@@ -1557,6 +1617,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
       return (
         <UtilitiesView
           currentUser={currentUser}
+          employees={employees}
           initialRecordForCorrection={props.recordForMapCorrection}
           records={props.records}
           onUpdateRecord={props.handleAddOrUpdateRecord}

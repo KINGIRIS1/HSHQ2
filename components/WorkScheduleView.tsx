@@ -1,17 +1,19 @@
 
-import React, { useState, useEffect } from 'react';
-import { User, WorkSchedule } from '../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { User, WorkSchedule, Employee, UserRole } from '../types';
 import { fetchWorkSchedules, saveWorkSchedule, deleteWorkSchedule } from '../services/apiWorkSchedule';
 import ScheduleForm from './work-schedule/ScheduleForm';
 import ScheduleList from './work-schedule/ScheduleList';
 import ScheduleSummary from './work-schedule/ScheduleSummary';
 import { Calendar, Plus } from 'lucide-react';
+import { getEmployeeTeam } from './AssignModal';
 
 interface WorkScheduleViewProps {
     currentUser: User;
+    employees?: Employee[];
 }
 
-const WorkScheduleView: React.FC<WorkScheduleViewProps> = ({ currentUser }) => {
+const WorkScheduleView: React.FC<WorkScheduleViewProps> = ({ currentUser, employees = [] }) => {
     const [schedules, setSchedules] = useState<WorkSchedule[]>([]);
     const [editingSchedule, setEditingSchedule] = useState<WorkSchedule | null>(null);
     const [isFormOpen, setIsFormOpen] = useState(false);
@@ -19,6 +21,31 @@ const WorkScheduleView: React.FC<WorkScheduleViewProps> = ({ currentUser }) => {
     useEffect(() => {
         loadData();
     }, []);
+
+    const userEmp = employees.find(e => e.id === currentUser.employeeId);
+    const userTeam = userEmp ? getEmployeeTeam(userEmp) : '';
+    const isSpecialTeam = userTeam === 'Tổ Hành chính' || userTeam === 'Ban Giám đốc' || currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.SUBADMIN || currentUser.role === UserRole.ONEDOOR;
+
+    const filteredSchedules = useMemo(() => {
+        if (isSpecialTeam || !employees.length) return schedules;
+        
+        const teamEmpNames = employees
+            .filter(e => getEmployeeTeam(e) === userTeam)
+            .map(e => e.name.toLowerCase().trim());
+        
+        return schedules.filter(s => {
+            const lowerExecutors = (s.executors || '').toLowerCase();
+            const lowerContent = (s.content || '').toLowerCase();
+            const lowerCreatedBy = (s.created_by || '').toLowerCase();
+            const isCreatedByMe = lowerCreatedBy === currentUser.username.toLowerCase();
+            
+            const hasTeamEmployee = teamEmpNames.some(name => 
+                lowerExecutors.includes(name) || lowerContent.includes(name)
+            );
+            
+            return hasTeamEmployee || isCreatedByMe;
+        });
+    }, [schedules, userTeam, isSpecialTeam, employees, currentUser]);
 
     const loadData = async () => {
         const data = await fetchWorkSchedules();
@@ -81,14 +108,14 @@ const WorkScheduleView: React.FC<WorkScheduleViewProps> = ({ currentUser }) => {
             <div className={`flex-1 min-w-0 transition-all duration-300 flex flex-col gap-6 overflow-y-auto pr-2 ${isFormOpen ? 'hidden md:block' : 'block'}`}>
                 <div className="h-[500px] flex-shrink-0">
                     <ScheduleList 
-                        schedules={schedules}
+                        schedules={filteredSchedules}
                         onEdit={handleEdit}
                         onDelete={handleDelete}
                     />
                 </div>
                 
                 <div className="flex-shrink-0 pb-6">
-                    <ScheduleSummary schedules={schedules} />
+                    <ScheduleSummary schedules={filteredSchedules} />
                 </div>
             </div>
         </div>
