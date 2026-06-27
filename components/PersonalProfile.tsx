@@ -6,7 +6,7 @@ import StatusBadge from './StatusBadge';
 import { Briefcase, ArrowRight, CheckCircle, Clock, Send, AlertTriangle, UserCog, ChevronLeft, ChevronRight, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Bell, CalendarClock, FileCheck, Map, CheckSquare, ClipboardList, FileDown, RotateCcw, CornerUpLeft } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { getShortRecordType } from '../constants';
-import { confirmAction } from '../utils/appHelpers';
+import { confirmAction, isRecordOverdue, isRecordApproaching } from '../utils/appHelpers';
 import { updateRecordApi } from '../services/api';
 import { fetchArchiveRecords, ArchiveRecord, saveArchiveRecord } from '../services/apiArchive';
 import SubmitModal from './receive-record/SubmitModal';
@@ -78,6 +78,13 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
     key: 'deadline',
     direction: 'desc' 
   });
+
+  const [warningFilter, setWarningFilter] = useState<'none' | 'overdue' | 'approaching'>('none');
+
+  useEffect(() => {
+    setWarningFilter('none');
+    setCurrentPage(1);
+  }, [activeTab]);
 
   const [archiveRecords, setArchiveRecords] = useState<ArchiveRecord[]>([]);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
@@ -384,11 +391,28 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
       };
 
       return list.sort((a, b) => {
+          // 1. Urgency group priority
+          const groupA = isRecordOverdue(a) ? 1 : (isRecordApproaching(a) ? 2 : 3);
+          const groupB = isRecordOverdue(b) ? 1 : (isRecordApproaching(b) ? 2 : 3);
+          
+          if (groupA !== groupB) {
+              return groupA - groupB; // 1 (overdue) first, then 2 (approaching), then 3 (normal)
+          }
+
+          // If in group 1 or 2, sort from most overdue downwards by remaining/overdue time (deadline ascending)
+          if (groupA === 1 || groupA === 2) {
+              const deadlineA = a.deadline ? new Date(a.deadline).getTime() : Infinity;
+              const deadlineB = b.deadline ? new Date(b.deadline).getTime() : Infinity;
+              return deadlineA - deadlineB;
+          }
+
+          // 2. Business status priority for normal files (Returned/Rejected)
           const aRet = isReturnedOrRejected(a);
           const bRet = isReturnedOrRejected(b);
           if (aRet && !bRet) return -1;
           if (!aRet && bRet) return 1;
 
+          // 3. Normal sorting
           const aValue = a[sort.key as keyof RecordFile];
           const bValue = b[sort.key as keyof RecordFile];
           if (!aValue) return 1;
@@ -410,12 +434,32 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
       activeTab === 'finished' ? finishedRecords :
       reminderRecords;
 
-  const totalPages = Math.ceil(displayRecords.length / itemsPerPage);
+  const tabWarningCounts = useMemo(() => {
+      let overdue = 0;
+      let approaching = 0;
+      displayRecords.forEach(r => {
+          if (isRecordOverdue(r)) overdue++;
+          else if (isRecordApproaching(r)) approaching++;
+      });
+      return { overdue, approaching };
+  }, [displayRecords]);
+
+  const filteredDisplayRecords = useMemo(() => {
+      let list = [...displayRecords];
+      if (warningFilter === 'overdue') {
+          list = list.filter(r => isRecordOverdue(r));
+      } else if (warningFilter === 'approaching') {
+          list = list.filter(r => isRecordApproaching(r));
+      }
+      return list;
+  }, [displayRecords, warningFilter]);
+
+  const totalPages = Math.ceil(filteredDisplayRecords.length / itemsPerPage);
   
   const paginatedDisplayRecords = useMemo(() => {
       const startIndex = (currentPage - 1) * itemsPerPage;
-      return displayRecords.slice(startIndex, startIndex + itemsPerPage);
-  }, [displayRecords, currentPage, itemsPerPage]);
+      return filteredDisplayRecords.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredDisplayRecords, currentPage, itemsPerPage]);
 
   const handleSort = (key: keyof RecordFile) => {
       let direction: 'asc' | 'desc' = 'asc';
@@ -1146,7 +1190,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                 )}
             </div>
             
-            <div className="flex gap-2 w-full md:w-auto">
+            <div className="flex flex-wrap md:flex-nowrap gap-2 w-full md:w-auto items-center">
                 <div className="relative w-full md:w-64">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
                     <input 
@@ -1157,6 +1201,23 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                         onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
                     />
                 </div>
+                
+                {/* Overdue Button */}
+                <button
+                    onClick={() => setWarningFilter(prev => prev === 'overdue' ? 'none' : 'overdue')}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm border ${warningFilter === 'overdue' ? 'bg-red-600 text-white' : 'bg-white text-red-600 border-red-200 hover:bg-red-50'}`}
+                >
+                    <AlertTriangle size={16} /> {tabWarningCounts.overdue}
+                </button>
+
+                {/* Approaching Button */}
+                <button
+                    onClick={() => setWarningFilter(prev => prev === 'approaching' ? 'none' : 'approaching')}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-bold transition-colors shadow-sm border ${warningFilter === 'approaching' ? 'bg-orange-500 text-white' : 'bg-white text-orange-600 border-orange-200 hover:bg-orange-50'}`}
+                >
+                    <Clock size={16} /> {tabWarningCounts.approaching}
+                </button>
+
                 <button 
                     onClick={handleExportExcel}
                     className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg text-sm font-bold hover:bg-green-700 transition-colors whitespace-nowrap"
@@ -1167,7 +1228,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
         </div>
         
         <div className="flex-1 overflow-y-auto">
-            {displayRecords.length > 0 ? (
+            {filteredDisplayRecords.length > 0 ? (
                 <table className="w-full text-left table-fixed min-w-[1160px]">
                     <thead className="bg-white border-b border-gray-200 text-xs text-gray-500 uppercase sticky top-0 shadow-sm z-10">
                         <tr>
@@ -1232,7 +1293,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                     )}
 
                                     <td className="p-3 text-center align-middle">
-                                        <StatusBadge status={r.status} />
+                                        <StatusBadge status={r.status} recordType={r.recordType} />
                                         {r.status === RecordStatus.REJECTED && (
                                             <span className="mt-1 block text-[10px] font-bold bg-red-100 text-red-800 px-1 py-0.5 rounded border border-red-200 text-center mx-auto max-w-[100px]">
                                                 Hồ sơ bị trả
@@ -1339,10 +1400,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
         </div>
 
         {/* PAGINATION FOOTER */}
-        {displayRecords.length > 0 && (
+        {filteredDisplayRecords.length > 0 && (
             <div className="border-t border-gray-100 p-3 bg-gray-50 flex justify-between items-center shrink-0">
                 <span className="text-xs text-gray-500">
-                    Hiển thị <strong>{(currentPage - 1) * itemsPerPage + 1}</strong> - <strong>{Math.min(currentPage * itemsPerPage, displayRecords.length)}</strong> trên tổng <strong>{displayRecords.length}</strong>
+                    Hiển thị <strong>{(currentPage - 1) * itemsPerPage + 1}</strong> - <strong>{Math.min(currentPage * itemsPerPage, filteredDisplayRecords.length)}</strong> trên tổng <strong>{filteredDisplayRecords.length}</strong>
                 </span>
                 <div className="flex items-center gap-1">
                     <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-1 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"><ChevronLeft size={18} /></button>

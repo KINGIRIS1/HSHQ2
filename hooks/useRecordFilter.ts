@@ -93,7 +93,7 @@ export const useRecordFilter = (
     }, [currentUser?.employeeId, employees]);
 
     // --- FILTER LOGIC ---
-    const filteredRecords = useMemo(() => {
+    const activeTabRecords = useMemo(() => {
         const uniqueMap = new Map();
         records.forEach(r => { if(r.id) uniqueMap.set(r.id, r); });
         
@@ -209,30 +209,12 @@ export const useRecordFilter = (
             } else if (handoverTab === 'returned') {
                 // Tab Đã trả kết quả: Status = RETURNED
                 result = result.filter(r => r.status === RecordStatus.RETURNED);
-                
-                // CẬP NHẬT: Lọc theo khoảng thời gian (Từ ngày - Đến ngày) thay vì 1 ngày
-                if (filterFromDate || filterToDate) {
-                    result = result.filter(r => {
-                        if (!r.resultReturnedDate) return false;
-                        const returnDate = r.resultReturnedDate;
-                        if (filterFromDate && returnDate < filterFromDate) return false;
-                        if (filterToDate && returnDate > filterToDate) return false;
-                        return true;
-                    });
-                }
             } else {
                 // Tab Lịch sử giao: Bao gồm Đã giao HOẶC (Đã rút VÀ đã có đợt xuất)
                 result = result.filter(r => 
                     r.status === RecordStatus.HANDOVER || 
                     ((r.status === RecordStatus.WITHDRAWN || r.status === RecordStatus.REJECTED) && r.exportBatch)
                 );
-                // Giữ nguyên logic lọc ngày đơn cho Lịch sử giao (theo đợt)
-                if (filterDate) {
-                    result = result.filter(r => {
-                        const dateToCheck = r.exportDate || r.completedDate;
-                        return dateToCheck?.startsWith(filterDate);
-                    });
-                }
             }
         } else if (isAssignView) {
             result = result.filter(r => r.status === RecordStatus.RECEIVED && r.isDeptSynced === true);
@@ -242,7 +224,7 @@ export const useRecordFilter = (
         const isRegistrationView = [
             'registration_records', 'registration_assign_tasks', 'registration_completed_list', 
             'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 
-            'registration_director_completed'
+            'registration_director_completed', 'registration_vao_so'
         ].includes(currentView);
 
         const isArchiveView = [
@@ -286,6 +268,12 @@ export const useRecordFilter = (
             );
         }
 
+        return result;
+    }, [records, currentView, currentUser, employees, users, handoverTab]);
+
+    const filteredRecords = useMemo(() => {
+        let result = [...activeTabRecords];
+
         // Search Term (Sử dụng searchTerm đã được tách theo view)
         if (searchTerm) {
             const lowerSearch = removeVietnameseTones(searchTerm);
@@ -314,8 +302,31 @@ export const useRecordFilter = (
             else result = result.filter(r => r.assignedTo === filterEmployee);
         }
 
-        // Date Filters (General for other views)
-        if (currentView !== 'handover_list') {
+        // Date Filters
+        const isHandoverView = [
+            'handover_list', 'registration_handover_list', 'archive_handover_list', 'congvan_handover_list', 'other_handover_list'
+        ].includes(currentView);
+
+        if (isHandoverView) {
+            if (handoverTab === 'returned') {
+                if (filterFromDate || filterToDate) {
+                    result = result.filter(r => {
+                        if (!r.resultReturnedDate) return false;
+                        const returnDate = r.resultReturnedDate;
+                        if (filterFromDate && returnDate < filterFromDate) return false;
+                        if (filterToDate && returnDate > filterToDate) return false;
+                        return true;
+                    });
+                }
+            } else if (handoverTab === 'history') {
+                if (filterDate) {
+                    result = result.filter(r => {
+                        const dateToCheck = r.exportDate || r.completedDate;
+                        return dateToCheck?.startsWith(filterDate);
+                    });
+                }
+            }
+        } else {
             if (filterSpecificDate) {
                 result = result.filter(r => r.receivedDate === filterSpecificDate);
             } else if (showAdvancedDateFilter) {
@@ -355,7 +366,7 @@ export const useRecordFilter = (
         });
 
         return result;
-    }, [records, searchTerm, filterWard, filterStatus, filterEmployee, filterDate, filterSpecificDate, filterAssignedDate, filterFromDate, filterToDate, showAdvancedDateFilter, warningFilter, currentView, sortConfig, handoverTab, currentUser, employees, users]);
+    }, [activeTabRecords, searchTerm, filterWard, filterStatus, filterEmployee, filterDate, filterSpecificDate, filterAssignedDate, filterFromDate, filterToDate, showAdvancedDateFilter, warningFilter, currentView, sortConfig, handoverTab, currentUser]);
 
     const paginatedRecords = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
@@ -368,56 +379,16 @@ export const useRecordFilter = (
     const warningCount = useMemo(() => {
         let overdue = 0;
         let approaching = 0;
-        if (records.length > 0 && currentUser) {
-            const isRegistrationView = [
-                'registration_records', 'registration_assign_tasks', 'registration_completed_list', 
-                'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 
-                'registration_director_completed'
-            ].includes(currentView);
-
-            const isArchiveView = [
-                'archive_records', 'archive_assign_tasks', 'archive_completed_list', 
-                'archive_pending_check_list', 'archive_check_list', 'archive_handover_list', 
-                'archive_director_completed'
-            ].includes(currentView);
-
-            const isCongVanView = [
-                'congvan_records', 'congvan_assign_tasks', 'congvan_completed_list', 
-                'congvan_pending_check_list', 'congvan_check_list', 'congvan_handover_list', 
-                'congvan_director_completed'
-            ].includes(currentView);
-
-            const isOtherView = [
-                'other_records', 'other_assign_tasks', 'other_check_list', 'other_handover_list', 'other_director_completed'
-            ].includes(currentView);
-
-            const isMeasurementView = [
-                'all_records', 'assign_tasks', 'completed_list', 'pending_check_list', 'check_list', 'handover_list', 'director_completed'
-            ].includes(currentView);
-
-            const isReg = (type: string | null | undefined): boolean => {
-                if (!type) return false;
-                const t = type.trim().toLowerCase();
-                return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
-            };
-
-            records.forEach(r => {
+        if (currentUser) {
+            activeTabRecords.forEach(r => {
                 if (r.status === RecordStatus.HANDOVER || r.status === RecordStatus.WITHDRAWN) return; 
                 if (!checkWarningPermission(r)) return; 
-                
-                // Filter by recordType based on view group
-                if (isArchiveView && r.recordType !== 'Cung cấp tài liệu đất đai' && r.recordType !== 'Sao lục') return;
-                if (isCongVanView && r.recordType !== 'Công văn') return;
-                if (isRegistrationView && !isReg(r.recordType)) return;
-                if (isOtherView && !['CMD', 'Tòa án', 'Thi hành án'].includes(r.recordType || '')) return;
-                if (isMeasurementView && (['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '') || isReg(r.recordType))) return;
-
                 if (isRecordOverdue(r)) overdue++;
                 else if (isRecordApproaching(r)) approaching++;
             });
         }
         return { overdue, approaching };
-    }, [records, currentUser, employees, currentView]);
+    }, [activeTabRecords, currentUser, employees]);
 
     return {
         filteredRecords, paginatedRecords, totalPages, warningCount,

@@ -765,7 +765,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                     {record.code}
                 </span>
                 <h2 className="text-lg font-bold text-gray-800 uppercase">{record.recordType}</h2>
-                <StatusBadge status={displayStatus} />
+                <StatusBadge status={displayStatus} recordType={record.recordType} />
             </div>
             
             <div className="flex items-center gap-2">

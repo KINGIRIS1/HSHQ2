@@ -7,6 +7,7 @@ import {
   Holiday,
   RolePermissions,
   DepartmentPermissions,
+  RecordStatus,
 } from "../types";
 import { STATUS_LABELS } from "../constants";
 import { COLUMN_DEFS, removeVietnameseTones } from "../utils/appHelpers";
@@ -62,6 +63,7 @@ import {
   ClipboardList,
   Send,
   ShieldAlert,
+  Hash,
 } from "lucide-react";
 
 interface AppRoutesProps {
@@ -308,6 +310,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
       "registration_check_list",
       "registration_handover_list",
       "registration_director_completed",
+      "registration_vao_so",
     ].includes(currentView);
 
     const isArchiveView = [
@@ -392,23 +395,34 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
     ].includes(currentView);
 
     let title = "Danh sách Hồ sơ";
-    if (isCheckAny)
-      title = isDirector ? "Danh sách Chờ ký" : "Danh sách Trình Ký";
-    else if (isDirectorCompletedAny)
-      title = "Danh sách Hoàn thành";
-    else if (isHandoverAny)
-      title = "Danh sách Giao 1 cửa";
-    else if (isAssignAny)
-      title = "Hồ sơ chưa giao";
-    else if (isCompletedAny)
-      title = "Hồ sơ đã thực hiện";
-    else if (isPendingCheckAny)
-      title = "Hồ sơ chờ kiểm tra";
-    else if (currentView === "all_records") title = "Hồ sơ đo đạc";
-    else if (currentView === "registration_records") title = "Hồ sơ cấp giấy";
-    else if (currentView === "archive_records") title = "Hồ sơ lưu trữ";
-    else if (currentView === "congvan_records") title = "Hồ sơ công văn";
-    else if (currentView === "other_records") title = "Hồ sơ khác";
+    if (isRegistrationView) {
+      if (currentView === "registration_records") title = "Tất cả hồ sơ cấp giấy";
+      else if (currentView === "registration_assign_tasks") title = "Tiếp nhận mới (Chưa giao)";
+      else if (currentView === "registration_completed_list") title = "Danh sách Phiếu chuyển";
+      else if (currentView === "registration_pending_check_list") title = "Danh sách Trình Ký thuế";
+      else if (currentView === "registration_check_list") title = isDirector ? "Hồ sơ Chờ ký" : "Danh sách Kiểm tra";
+      else if (currentView === "registration_vao_so") title = "Vào Sổ GCN";
+      else if (currentView === "registration_handover_list") title = "Danh sách Giao 1 cửa";
+    } else {
+      if (isCheckAny)
+        title = isDirector ? "Danh sách Chờ ký" : "Danh sách Trình Ký";
+      else if (isDirectorCompletedAny)
+        title = "Danh sách Hoàn thành";
+      else if (isHandoverAny)
+        title = "Danh sách Giao 1 cửa";
+      else if (isAssignAny)
+        title = "Hồ sơ chưa giao";
+      else if (isCompletedAny)
+        title = "Hồ sơ đã thực hiện";
+      else if (isPendingCheckAny)
+        title = "Hồ sơ chờ kiểm tra";
+      else if (currentView === "all_records") title = "Hồ sơ đo đạc";
+      else if (currentView === "registration_records") title = "Hồ sơ cấp giấy";
+      else if (currentView === "registration_vao_so") title = "Vào số GCN";
+      else if (currentView === "archive_records") title = "Hồ sơ lưu trữ";
+      else if (currentView === "congvan_records") title = "Hồ sơ công văn";
+      else if (currentView === "other_records") title = "Hồ sơ khác";
+    }
 
     const subAdminEmp = employees.find((e) => e.id === currentUser.employeeId);
     let isSubAdminAllowedTab = isViewAllowedForUser(currentUser, currentView, employees);
@@ -584,14 +598,14 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   onClick={() => props.setCurrentView("registration_completed_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_completed_list" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
                 >
-                  <CheckSquare size={16} /> Đã thực hiện
+                  <CheckSquare size={16} /> Phiếu chuyển
                 </button>
 
                 <button
                   onClick={() => props.setCurrentView("registration_pending_check_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_pending_check_list" ? "border-orange-600 text-orange-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
                 >
-                  <ClipboardList size={16} /> Kiểm tra
+                  <ClipboardList size={16} /> Trình Ký thuế
                 </button>
               </>
             )}
@@ -601,7 +615,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 onClick={() => props.setCurrentView("registration_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
               >
-                <ClipboardList size={16} /> {isDirector ? "Chờ ký" : "Trình ký"}
+                <ClipboardList size={16} /> {isDirector ? "Chờ ký" : "Kiểm tra"}
               </button>
             )}
 
@@ -620,12 +634,20 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 isOneDoor ||
                 isTeamLeader ||
                 isViceLeader) && (
-                <button
-                  onClick={() => props.setCurrentView("registration_handover_list")}
-                  className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-                >
-                  <Send size={16} /> Giao 1 cửa
-                </button>
+                <>
+                  <button
+                    onClick={() => props.setCurrentView("registration_vao_so")}
+                    className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_vao_so" ? "border-indigo-600 text-indigo-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                  >
+                    <Hash size={16} /> Vào Sổ GCN
+                  </button>
+                  <button
+                    onClick={() => props.setCurrentView("registration_handover_list")}
+                    className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                  >
+                    <Send size={16} /> Giao 1 cửa
+                  </button>
+                </>
               )}
           </div>
         )}
@@ -819,7 +841,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
           </div>
         )}
 
-        {currentView === "registration_handover_list" ? (
+        {currentView === "registration_vao_so" ? (
           <div className="flex-1 overflow-hidden flex flex-col min-h-0 bg-white">
             <VaoSoView currentUser={currentUser} wards={wards} />
           </div>
@@ -1027,7 +1049,12 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   className="text-sm outline-none bg-transparent text-gray-700 font-medium cursor-pointer border-none focus:ring-0 max-w-[120px]"
                 >
                   <option value="all">Mọi trạng thái</option>
-                  {Object.entries(STATUS_LABELS).map(([key, label]) => (
+                  {Object.entries(STATUS_LABELS).filter(([key]) => {
+                    if (!isRegistrationView) {
+                      return key !== RecordStatus.TBT && key !== RecordStatus.PENDING_SUPPLEMENT;
+                    }
+                    return true;
+                  }).map(([key, label]) => (
                     <option key={key} value={key}>
                       {label}
                     </option>
@@ -1064,32 +1091,28 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </div>
               )}
 
-            {!isOneDoor &&
-              (isAllRecordsAny ||
-                currentView === "other_records") && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() =>
-                      props.setWarningFilter((prev: any) =>
-                        prev === "overdue" ? "none" : "overdue",
-                      )
-                    }
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold transition-colors shadow-sm border ${props.warningFilter === "overdue" ? "bg-red-600 text-white" : "bg-white text-red-600"}`}
-                  >
-                    <AlertTriangle size={16} /> {props.warningCount.overdue}
-                  </button>
-                  <button
-                    onClick={() =>
-                      props.setWarningFilter((prev: any) =>
-                        prev === "approaching" ? "none" : "approaching",
-                      )
-                    }
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold transition-colors shadow-sm border ${props.warningFilter === "approaching" ? "bg-orange-500 text-white" : "bg-white text-orange-600"}`}
-                  >
-                    <Clock size={16} /> {props.warningCount.approaching}
-                  </button>
-                </div>
-              )}
+            <div className="flex gap-2">
+              <button
+                onClick={() =>
+                  props.setWarningFilter((prev: any) =>
+                    prev === "overdue" ? "none" : "overdue",
+                  )
+                }
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold transition-colors shadow-sm border ${props.warningFilter === "overdue" ? "bg-red-600 text-white" : "bg-white text-red-600"}`}
+              >
+                <AlertTriangle size={16} /> {props.warningCount.overdue}
+              </button>
+              <button
+                onClick={() =>
+                  props.setWarningFilter((prev: any) =>
+                    prev === "approaching" ? "none" : "approaching",
+                  )
+                }
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-bold transition-colors shadow-sm border ${props.warningFilter === "approaching" ? "bg-orange-500 text-white" : "bg-white text-orange-600"}`}
+              >
+                <Clock size={16} /> {props.warningCount.approaching}
+              </button>
+            </div>
 
             {tabAllowedCanPerformAction && (
               <>

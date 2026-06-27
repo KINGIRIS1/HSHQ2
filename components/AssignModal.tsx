@@ -243,7 +243,7 @@ export const isViewAllowedForUser = (currentUser: User | null, viewId: string, e
     }
 
     const measurementViews = ['all_records', 'assign_tasks', 'completed_list', 'pending_check_list', 'check_list', 'handover_list', 'director_completed'];
-    const registrationViews = ['registration_records', 'registration_assign_tasks', 'registration_completed_list', 'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 'registration_director_completed'];
+    const registrationViews = ['registration_records', 'registration_assign_tasks', 'registration_completed_list', 'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 'registration_director_completed', 'registration_vao_so'];
     const archiveViews = ['archive_records', 'archive_assign_tasks', 'archive_completed_list', 'archive_pending_check_list', 'archive_check_list', 'archive_handover_list', 'archive_director_completed'];
     const otherViews = ['other_records', 'other_assign_tasks', 'other_completed_list', 'other_pending_check_list', 'other_check_list', 'other_handover_list', 'other_director_completed'];
 

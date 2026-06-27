@@ -226,7 +226,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
     if (currentView && [
         "registration_records", "registration_assign_tasks", "registration_completed_list", 
         "registration_pending_check_list", "registration_check_list", "registration_handover_list", 
-        "registration_director_completed"
+        "registration_director_completed", "registration_vao_so"
     ].includes(currentView)) {
         return REGISTRATION_PROCEDURES;
     }
@@ -840,6 +840,9 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                                             const isArchive = isArchiveType(formData.recordType);
                                             if (isArchive) {
                                                 return key !== RecordStatus.PENDING_CHECK && key !== RecordStatus.CHECKED;
+                                            }
+                                            if (!isRegistration(formData.recordType)) {
+                                                return key !== RecordStatus.TBT && key !== RecordStatus.PENDING_SUPPLEMENT;
                                             }
                                             return true;
                                         })

@@ -539,7 +539,7 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
                       }
                       return r.status;
                   };
-                  return <StatusBadge status={getDisplayStatus(record)} />;
+                  return <StatusBadge status={getDisplayStatus(record)} recordType={record.recordType} />;
                 })()}
               </div>
               <div className="flex items-center gap-3">

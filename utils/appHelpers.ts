@@ -87,6 +87,32 @@ export function calculateDeadline(type: string, receivedDateStr: string, holiday
 }
 
 export function getStatusLabel(status: RecordStatus, recordType?: string | null): string {
+    const isReg = recordType ? (
+        (() => {
+            const t = recordType.trim().toLowerCase();
+            return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
+        })()
+    ) : false;
+
+    if (isReg) {
+        switch (status) {
+            case RecordStatus.RECEIVED: return 'Tiếp nhận mới';
+            case RecordStatus.ASSIGNED: return 'DNLIS';
+            case RecordStatus.IN_PROGRESS: return 'DNLIS';
+            case RecordStatus.COMPLETED_WORK: return 'Phiếu chuyển';
+            case RecordStatus.PENDING_CHECK: return 'Trình Ký thuế';
+            case RecordStatus.TBT: return 'TBT(Thông báo thuế)';
+            case RecordStatus.CHECKED: return 'In GCN';
+            case RecordStatus.PENDING_SIGN: return 'Kiểm Tra';
+            case RecordStatus.SIGNED: return 'Trình Ký';
+            case RecordStatus.HANDOVER: return 'Giao 1 cửa';
+            case RecordStatus.RETURNED: return 'Đã trả kết quả';
+            case RecordStatus.WITHDRAWN: return 'CSD rút hồ sơ';
+            case RecordStatus.REJECTED: return 'Hồ sơ trả';
+            case RecordStatus.PENDING_SUPPLEMENT: return 'Chờ bổ sung (Người dân)';
+            default: return status;
+        }
+    }
     return STATUS_LABELS[status] || status;
 }
 

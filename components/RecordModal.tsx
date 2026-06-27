@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { RecordFile, RecordStatus, Employee, User, UserRole, Holiday } from '../types';
 import { GROUPS, EXTENDED_RECORD_TYPES, STATUS_LABELS, REGISTRATION_PROCEDURES } from '../constants';
-import { isArchiveType, groupEmployeesByDepartment, removeVietnameseTones } from '../utils/appHelpers';
+import { isArchiveType, groupEmployeesByDepartment, removeVietnameseTones, getStatusLabel } from '../utils/appHelpers';
 import { getEmployeeTeam } from './AssignModal';
 import { X, Save, Lock, User as UserIcon, MapPin, FileText, Calendar, FileCheck } from 'lucide-react';
 import RecordForm from './receive-record/RecordForm';
@@ -129,7 +129,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
     if (currentView && [
         "registration_records", "registration_assign_tasks", "registration_completed_list", 
         "registration_pending_check_list", "registration_check_list", "registration_handover_list", 
-        "registration_director_completed"
+        "registration_director_completed", "registration_vao_so"
     ].includes(currentView)) {
         return REGISTRATION_PROCEDURES;
     }
@@ -223,7 +223,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
     const isRegView = currentView && [
       "registration_records", "registration_assign_tasks", "registration_completed_list", 
       "registration_pending_check_list", "registration_check_list", "registration_handover_list", 
-      "registration_director_completed"
+      "registration_director_completed", "registration_vao_so"
     ].includes(currentView);
 
     if (isRegView) return true;
@@ -510,8 +510,11 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                                     if (isArchive) {
                                         return s !== RecordStatus.PENDING_CHECK && s !== RecordStatus.CHECKED;
                                     }
+                                    if (!isRegistrationRecord) {
+                                        return s !== RecordStatus.TBT && s !== RecordStatus.PENDING_SUPPLEMENT;
+                                    }
                                     return true;
-                                }).map(s => <option key={s} value={s}>{STATUS_LABELS[s] || s}</option>)}</select></div>
+                                }).map(s => <option key={s} value={s}>{getStatusLabel(s, isRegistrationRecord ? 'đăng ký' : null)}</option>)}</select></div>
                                 
                                 {(formData.status === RecordStatus.HANDOVER || formData.status === RecordStatus.WITHDRAWN || formData.status === RecordStatus.RETURNED || formData.status === RecordStatus.REJECTED || formData.exportBatch) && (
                                     <div><label className="block text-xs font-bold text-green-700 mb-1">{formData.status === RecordStatus.WITHDRAWN ? 'Ngày rút hồ sơ' : formData.status === RecordStatus.REJECTED ? 'Ngày trả hồ sơ' : 'Ngày hoàn thành'}</label><input type="date" className="w-full border border-green-300 rounded-md px-3 py-2 bg-green-50 font-semibold text-green-800" value={dateVal(formData.completedDate)} onChange={(e) => handleChange('completedDate', e.target.value)} /></div>

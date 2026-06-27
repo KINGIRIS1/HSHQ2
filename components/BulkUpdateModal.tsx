@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { RecordFile, Employee, RecordStatus } from '../types';
 import { STATUS_LABELS } from '../constants';
-import { isArchiveType, groupEmployeesByDepartment } from '../utils/appHelpers';
+import { isArchiveType, groupEmployeesByDepartment, getStatusLabel } from '../utils/appHelpers';
 import { X, CheckCircle2, AlertTriangle, Layers, ArrowRight } from 'lucide-react';
 
 interface BulkUpdateModalProps {
@@ -105,10 +105,22 @@ const BulkUpdateModal: React.FC<BulkUpdateModalProps> = ({
                                 if (isArchive) {
                                     return key !== RecordStatus.PENDING_CHECK && key !== RecordStatus.CHECKED;
                                 }
+                                const isAnyNonReg = selectedRecords.some(r => {
+                                    const type = (r.recordType || '').toLowerCase().trim();
+                                    return !(type.startsWith('3.') || type === 'đăng ký' || type === 'cấp giấy' || type === 'cấp đổi' || type === 'cấp lại');
+                                });
+                                if (isAnyNonReg) {
+                                    return key !== RecordStatus.TBT && key !== RecordStatus.PENDING_SUPPLEMENT;
+                                }
                                 return true;
-                            }).map(([key, label]) => (
-                                <option key={key} value={key}>{label}</option>
-                            ))}
+                            }).map(([key]) => {
+                                const isAllReg = selectedRecords.every(r => {
+                                    const type = (r.recordType || '').toLowerCase().trim();
+                                    return type.startsWith('3.') || type === 'đăng ký' || type === 'cấp giấy' || type === 'cấp đổi' || type === 'cấp lại';
+                                });
+                                const labelText = getStatusLabel(key as RecordStatus, isAllReg ? 'đăng ký' : null);
+                                return <option key={key} value={key}>{labelText}</option>;
+                            })}
                         </select>
                     )}
 
