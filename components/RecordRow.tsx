@@ -106,7 +106,7 @@ const RecordRow: React.FC<RecordRowProps> = ({
       </td>
       
       {visibleColumns.code && (
-        <td className={`${cellClass} font-medium text-blue-600 cursor-pointer`} onClick={() => { if(canPerformAction) onEdit(record); else onView(record); }}>
+        <td className={`${cellClass} font-medium text-blue-600 cursor-pointer hover:underline`} onClick={() => onView(record)} title="Nhấp vào để xem chi tiết">
           <div className="flex flex-col items-center gap-1">
               <div className="break-words font-bold leading-normal text-sm" title={record.code}>
                   {record.code}

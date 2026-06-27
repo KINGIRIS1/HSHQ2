@@ -30,20 +30,8 @@ const UtilitiesView: React.FC<UtilitiesViewProps> = ({ currentUser, employees = 
   const isSpecialTeam = isAdmin || isOneDoor || isDirector;
 
   const allowedTabs = React.useMemo(() => {
-    if (isSpecialTeam || !teamName) {
-      return ['bienban', 'vphc', 'thongtin', 'chinhly', 'tachthua', 'saiso', 'chuyendoi', 'dongbothutuc'];
-    }
-    if (teamName === 'Tổ Đo đạc') {
-      return ['saiso', 'chuyendoi', 'bienban', 'vphc'];
-    }
-    if (teamName === 'Tổ Cấp giấy') {
-      return ['chinhly', 'tachthua', 'dongbothutuc', 'thongtin'];
-    }
-    if (teamName === 'Tổ Lưu trữ') {
-      return ['thongtin'];
-    }
     return ['bienban', 'vphc', 'thongtin', 'chinhly', 'tachthua', 'saiso', 'chuyendoi', 'dongbothutuc'];
-  }, [isSpecialTeam, teamName]);
+  }, []);
 
   const [activeTab, setActiveTab] = useState<string>('bienban');
   const [defaultExportPath, setDefaultExportPath] = useState('');

@@ -481,7 +481,7 @@ export const fetchProcedureConversions = async (): Promise<ProcedureConversion[]
             .order('thu_tuc_cu', { ascending: true });
         if (error) {
             // If relation doesn't exist, fallback to mock so it never crashes
-            if (error.code === 'PGRST116' || error.message?.includes('relation "procedure_conversions" does not exist') || String(error.code) === '42P01') {
+            if (error.code === 'PGRST116' || error.code === 'PGRST205' || error.message?.includes('relation "procedure_conversions" does not exist') || error.message?.includes('procedure_conversions') || String(error.code) === '42P01') {
                 return MOCK_PROCEDURE_CONVERSIONS;
             }
             throw error;
@@ -512,7 +512,7 @@ export const saveProcedureConversions = async (records: Partial<ProcedureConvers
         const { error } = await supabase.from('procedure_conversions').insert(newRecords);
         if (error) {
             // Fallback for mock if database table not created yet
-            if (error.code === 'PGRST116' || error.message?.includes('relation "procedure_conversions" does not exist') || String(error.code) === '42P01') {
+            if (error.code === 'PGRST116' || error.code === 'PGRST205' || error.message?.includes('relation "procedure_conversions" does not exist') || error.message?.includes('procedure_conversions') || String(error.code) === '42P01') {
                 const newRecordsMock = records.map(r => ({
                     ...r,
                     id: generateId(),
@@ -539,7 +539,7 @@ export const deleteProcedureConversion = async (id: string): Promise<boolean> =>
         const { error } = await supabase.from('procedure_conversions').delete().eq('id', id);
         if (error) {
             // Find in mock fallback if relation doesn't exist
-            if (error.code === 'PGRST116' || error.message?.includes('relation "procedure_conversions" does not exist') || String(error.code) === '42P01') {
+            if (error.code === 'PGRST116' || error.code === 'PGRST205' || error.message?.includes('relation "procedure_conversions" does not exist') || error.message?.includes('procedure_conversions') || String(error.code) === '42P01') {
                 MOCK_PROCEDURE_CONVERSIONS = MOCK_PROCEDURE_CONVERSIONS.filter(r => r.id !== id);
                 return true;
             }
@@ -560,7 +560,7 @@ export const deleteAllProcedureConversions = async (): Promise<boolean> => {
     try {
         const { error } = await supabase.from('procedure_conversions').delete().neq('id', '00000000-0000-0000-0000-000000000000');
         if (error) {
-            if (error.code === 'PGRST116' || error.message?.includes('relation "procedure_conversions" does not exist') || String(error.code) === '42P01') {
+            if (error.code === 'PGRST116' || error.code === 'PGRST205' || error.message?.includes('relation "procedure_conversions" does not exist') || error.message?.includes('procedure_conversions') || String(error.code) === '42P01') {
                 MOCK_PROCEDURE_CONVERSIONS = [];
                 return true;
             }

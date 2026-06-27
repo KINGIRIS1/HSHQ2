@@ -3,7 +3,7 @@ import { RecordFile, RecordStatus, Employee } from '../../types';
 import { getNormalizedWard, STATUS_LABELS } from '../../constants';
 import { isRecordOverdue } from '../../utils/appHelpers';
 import { exportOverdueStatsToExcel } from '../../utils/excelExport';
-import { AlertTriangle, CheckCircle2, Clock, MapPin, ChevronLeft, ChevronRight, Download } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clock, MapPin, ChevronLeft, ChevronRight, Download, ListFilter } from 'lucide-react';
 
 interface OverdueStatsViewProps {
     records: RecordFile[];
@@ -82,6 +82,53 @@ const OverdueStatsView: React.FC<OverdueStatsViewProps> = ({ records, employees 
 
     const totalPages = Math.ceil(overdueData.filteredRecords.length / itemsPerPage);
 
+    const generalStats = useMemo(() => {
+        let total = 0;
+        let completed = 0;
+        let processing = 0;
+        let overduePending = 0;
+        let overdueCompleted = 0;
+
+        records.forEach(r => {
+            // Apply selectedEmployee filter
+            if (selectedEmployee !== 'all') {
+                if (selectedEmployee === 'unassigned') {
+                    if (r.assignedTo) return;
+                } else {
+                    if (r.assignedTo !== selectedEmployee) return;
+                }
+            }
+
+            total++;
+
+            const isDone = r.status === RecordStatus.HANDOVER || r.status === RecordStatus.RETURNED || r.status === RecordStatus.SIGNED || !!r.exportBatch || !!r.exportDate;
+            const isWithdrawnOrRejected = r.status === RecordStatus.WITHDRAWN || r.status === RecordStatus.REJECTED;
+
+            if (isDone) {
+                completed++;
+                if (r.deadline && (r.completedDate || r.exportDate || r.receivedDate)) {
+                    const d = new Date(r.deadline); d.setHours(0,0,0,0);
+                    const refDate = r.completedDate || r.exportDate || r.receivedDate;
+                    const c = new Date(refDate!); c.setHours(0,0,0,0);
+                    if (c > d) overdueCompleted++;
+                }
+            } else {
+                processing++;
+                if (isRecordOverdue(r)) {
+                    overduePending++;
+                }
+            }
+        });
+
+        return {
+            total,
+            completed,
+            processing,
+            overduePending,
+            overdueCompleted
+        };
+    }, [records, selectedEmployee]);
+
     // Reset page when filter changes
     React.useEffect(() => {
         setCurrentPage(1);
@@ -100,42 +147,70 @@ const OverdueStatsView: React.FC<OverdueStatsViewProps> = ({ records, employees 
     return (
         <div className="flex flex-col h-full bg-slate-100 p-4 gap-4 overflow-y-hidden">
             {/* Tóm tắt */}
-            <div className="flex gap-4 shrink-0">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 shrink-0 animate-fade-in">
+                {/* Card 1: Tổng hồ sơ */}
                 <div 
                     onClick={() => setFilterType('all')}
-                    className={`flex-1 p-4 rounded-xl border cursor-pointer transition-all ${filterType === 'all' ? 'bg-red-50 border-red-200 shadow-sm ring-1 ring-red-400' : 'bg-white border-gray-200 hover:border-red-300'}`}
+                    className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all hover:scale-[1.02] ${filterType === 'all' ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-300 shadow-sm' : 'bg-white border-blue-100 hover:border-blue-300'}`}
                 >
-                    <div className="flex items-center gap-3">
-                        <div className="bg-red-100 p-2 rounded-lg text-red-600"><AlertTriangle size={24}/></div>
-                        <div>
-                            <div className="text-2xl font-bold text-red-800">{overdueData.totalCompleted + overdueData.totalPending}</div>
-                            <div className="text-sm text-red-600 font-medium">Tổng hồ sơ trễ hạn</div>
-                        </div>
+                    <div className="bg-blue-100 p-2 rounded-lg text-blue-700"><ListFilter size={20}/></div>
+                    <div>
+                        <div className="text-2xl font-bold text-blue-900 leading-tight">{generalStats.total}</div>
+                        <div className="text-[11px] text-blue-600 uppercase font-extrabold tracking-wider">Tổng hồ sơ</div>
                     </div>
                 </div>
 
-                <div 
-                    onClick={() => setFilterType('pending')}
-                    className={`flex-1 p-4 rounded-xl border cursor-pointer transition-all ${filterType === 'pending' ? 'bg-orange-50 border-orange-200 shadow-sm ring-1 ring-orange-400' : 'bg-white border-gray-200 hover:border-orange-300'}`}
-                >
-                    <div className="flex items-center gap-3">
-                        <div className="bg-orange-100 p-2 rounded-lg text-orange-600"><Clock size={24}/></div>
-                        <div>
-                            <div className="text-2xl font-bold text-orange-800">{overdueData.totalPending}</div>
-                            <div className="text-sm text-orange-600 font-medium">Trễ - Chưa có kết quả</div>
-                        </div>
-                    </div>
-                </div>
-
+                {/* Card 2: Đã xong (Trễ - đã có kết quả) */}
                 <div 
                     onClick={() => setFilterType('completed')}
-                    className={`flex-1 p-4 rounded-xl border cursor-pointer transition-all ${filterType === 'completed' ? 'bg-yellow-50 border-yellow-200 shadow-sm ring-1 ring-yellow-400' : 'bg-white border-gray-200 hover:border-yellow-300'}`}
+                    className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all hover:scale-[1.02] ${filterType === 'completed' ? 'bg-green-50 border-green-400 ring-2 ring-green-300 shadow-sm' : 'bg-white border-green-100 hover:border-green-300'}`}
                 >
-                    <div className="flex items-center gap-3">
-                        <div className="bg-yellow-100 p-2 rounded-lg text-yellow-600"><CheckCircle2 size={24}/></div>
-                        <div>
-                            <div className="text-2xl font-bold text-yellow-800">{overdueData.totalCompleted}</div>
-                            <div className="text-sm text-yellow-600 font-medium">Trễ - Đã có kết quả</div>
+                    <div className="bg-green-100 p-2 rounded-lg text-green-700"><CheckCircle2 size={20}/></div>
+                    <div>
+                        <div className="text-2xl font-bold text-green-900 leading-tight">{generalStats.overdueCompleted}</div>
+                        <div className="text-[11px] text-green-600 uppercase font-extrabold tracking-wider">Đã xong (Trễ)</div>
+                    </div>
+                </div>
+
+                {/* Card 3: Đang xử lý (Trễ - chưa có kết quả) */}
+                <div 
+                    onClick={() => setFilterType('pending')}
+                    className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all hover:scale-[1.02] ${filterType === 'pending' ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-300 shadow-sm' : 'bg-white border-orange-100 hover:border-orange-300'}`}
+                >
+                    <div className="bg-orange-100 p-2 rounded-lg text-orange-700"><Clock size={20}/></div>
+                    <div>
+                        <div className="text-2xl font-bold text-orange-900 leading-tight">{generalStats.overduePending}</div>
+                        <div className="text-[11px] text-orange-600 uppercase font-extrabold tracking-wider">Chưa xong (Trễ)</div>
+                    </div>
+                </div>
+
+                {/* Card 4: Tổng trễ hạn */}
+                <div className={`bg-red-50 border p-3 rounded-xl flex items-center gap-3 transition-all cursor-pointer hover:scale-[1.02] ${filterType === 'all' ? 'border-red-400 ring-2 ring-red-300 shadow-sm' : 'border-red-100'}`} onClick={() => setFilterType('all')}>
+                    <div className="bg-red-200 p-2 rounded-lg text-red-700">
+                        <AlertTriangle size={20}/>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                        <div 
+                            className={`flex justify-between items-center text-red-800 cursor-pointer px-1 rounded hover:bg-red-100/50 transition-colors ${filterType === 'pending' ? 'bg-red-100/80 font-bold' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); setFilterType('pending'); }} 
+                            title="Xem trễ - chưa có kết quả"
+                        >
+                            <span className="text-xs font-semibold">Chưa xong:</span>
+                            <span className="text-base font-bold">{generalStats.overduePending}</span>
+                        </div>
+                        <div 
+                            className={`flex justify-between items-center text-red-600/80 cursor-pointer px-1 rounded hover:bg-red-100/50 transition-colors ${filterType === 'completed' ? 'bg-red-100/80 font-bold' : ''}`}
+                            onClick={(e) => { e.stopPropagation(); setFilterType('completed'); }} 
+                            title="Xem trễ - đã có kết quả"
+                        >
+                            <span className="text-xs font-semibold">Đã xong:</span>
+                            <span className="text-xs font-bold">{generalStats.overdueCompleted}</span>
+                        </div>
+                        <div 
+                            className="text-[10px] text-red-600 uppercase font-bold text-center mt-1 pt-1 border-t border-red-200 cursor-pointer hover:underline" 
+                            onClick={(e) => { e.stopPropagation(); setFilterType('all'); }}
+                        >
+                            Tổng trễ hạn: {generalStats.overduePending + generalStats.overdueCompleted}
                         </div>
                     </div>
                 </div>

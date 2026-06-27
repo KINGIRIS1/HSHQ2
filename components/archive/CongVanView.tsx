@@ -1368,13 +1368,15 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                   className="hidden"
                 />
               </label>
-              <button
-                onClick={handleAddNew}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-bold shadow-sm shadow-blue-100 transition-all text-sm"
-              >
-                <Plus size={18} /> Thêm Công Văn Mới
-              </button>
             </>
+          )}
+          {(isManager || (currentUser.role as string) === "TEAM_LEADER" || (currentUser.role as string) === "team_leader") && (
+            <button
+              onClick={handleAddNew}
+              className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-bold shadow-sm shadow-blue-100 transition-all text-sm"
+            >
+              <Plus size={18} /> Thêm mới
+            </button>
           )}
         </div>
       </div>
@@ -1386,7 +1388,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
           <div className="w-96 bg-white rounded-xl shadow-md border border-gray-100 p-6 flex flex-col shrink-0 overflow-y-auto animate-in slide-in-from-left duration-250 z-20">
             <div className="flex justify-between items-center pb-4 border-b border-gray-100 mb-6">
               <h3 className="font-bold text-gray-900 text-lg">
-                {editingId ? "Cập nhật Công văn" : "Thêm mới Công văn"}
+                {editingId ? "Cập nhật Công văn" : "Thêm mới"}
               </h3>
               <button
                 onClick={() => setIsFormOpen(false)}
@@ -1863,7 +1865,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                             </button>
                           )}
 
-                          {isManager && (
+                          {(isManager || (currentUser.role as string) === "TEAM_LEADER" || (currentUser.role as string) === "team_leader") && (
                             <>
                               <button
                                 onClick={() => handleEdit(r)}

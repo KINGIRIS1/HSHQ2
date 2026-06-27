@@ -1664,6 +1664,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
           records={records}
           employees={employees}
           wards={wards}
+          currentUser={currentUser}
         />
       );
     default:

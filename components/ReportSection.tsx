@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { BarChart3, FileSpreadsheet, Loader2, Sparkles, Download, CalendarDays, Printer, Layout, FileText, ListFilter, CheckCircle2, Clock, AlertTriangle, Settings, Key, X, Save, MapPin, UserCheck, ChevronLeft, ChevronRight, PieChart, CheckCircle, Ruler, FolderArchive, CalendarRange, Coins } from 'lucide-react';
-import { RecordFile, RecordStatus, Employee } from '../types';
+import { RecordFile, RecordStatus, Employee, User } from '../types';
 import { getNormalizedWard, STATUS_LABELS, REGISTRATION_PROCEDURES } from '../constants';
 import { isRecordOverdue, removeVietnameseTones, isRecordApproaching } from '../utils/appHelpers';
 import { saveGeminiKey, getGeminiKey } from '../services/geminiService';
@@ -26,9 +26,77 @@ interface ReportSectionProps {
     records: RecordFile[];
     wards: string[]; 
     employees: Employee[];
+    currentUser: User;
 }
 
-const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerating, onGenerate, onExportExcel, records, wards, employees }) => {
+const ReportSection: React.FC<ReportSectionProps> = ({ 
+    reportContent, 
+    isGenerating, 
+    onGenerate, 
+    onExportExcel, 
+    records: rawRecords, 
+    wards, 
+    employees: rawEmployees,
+    currentUser 
+}) => {
+    // Filter employees and records based on the user's team / department (tổ)
+    const employees = useMemo(() => {
+        if (!currentUser) return rawEmployees;
+        const roleStr = (currentUser.role as string).toUpperCase();
+        const isSystemAdmin = roleStr === 'ADMIN' || roleStr === 'SUBADMIN';
+        if (isSystemAdmin) return rawEmployees;
+
+        const userEmp = rawEmployees.find(e => e.id === currentUser.employeeId);
+        if (!userEmp) return rawEmployees; // fallback if no employee mapping
+
+        const dept = userEmp.department.toLowerCase();
+        // Exception for administrative/leadership who can view everything
+        const isPrivilegedDept = dept.includes('hành chính') || dept.includes('giám đốc') || dept.includes('lãnh đạo') || dept.includes('quản trị');
+        if (isPrivilegedDept) return rawEmployees;
+
+        // Regular department: only see employees in their own department
+        return rawEmployees.filter(e => e.department.toLowerCase() === dept);
+    }, [rawEmployees, currentUser]);
+
+    const records = useMemo(() => {
+        if (!currentUser) return rawRecords;
+        const roleStr = (currentUser.role as string).toUpperCase();
+        const isSystemAdmin = roleStr === 'ADMIN' || roleStr === 'SUBADMIN';
+        if (isSystemAdmin) return rawRecords;
+
+        const userEmp = rawEmployees.find(e => e.id === currentUser.employeeId);
+        if (!userEmp) return rawRecords; // fallback
+
+        const dept = userEmp.department.toLowerCase();
+        const isPrivilegedDept = dept.includes('hành chính') || dept.includes('giám đốc') || dept.includes('lãnh đạo') || dept.includes('quản trị');
+        if (isPrivilegedDept) return rawRecords;
+
+        // Determine matching domains based on department
+        const isMeasureDept = dept.includes('đo đạc') || dept.includes('kỹ thuật');
+        const isRegDept = dept.includes('cấp giấy') || dept.includes('đăng ký') || dept.includes('biến động') || dept.includes('thẩm định') || dept.includes('pháp chế');
+        const isArchiveDept = dept.includes('lưu trữ') || dept.includes('một cửa') || dept.includes('thông tin');
+
+        // Only see records assigned to employees of the same department, OR matching department domain
+        const empIds = new Set(rawEmployees.filter(e => e.department.toLowerCase() === dept).map(e => e.id));
+        return rawRecords.filter(r => {
+            if (r.assignedTo && empIds.has(r.assignedTo)) return true;
+
+            // Domain matching
+            if (isMeasureDept) {
+                const isMeasureRecord = !['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '') && !isReg(r.recordType);
+                return isMeasureRecord;
+            }
+            if (isRegDept) {
+                return isReg(r.recordType);
+            }
+            if (isArchiveDept) {
+                const isArchiveRecord = ['Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '');
+                return isArchiveRecord;
+            }
+
+            return false;
+        });
+    }, [rawRecords, rawEmployees, currentUser]);
     const [fromDate, setFromDate] = useState(() => {
         return '2025-01-01';
     });
@@ -54,11 +122,67 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
     // Pagination States
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(20);
+    const [listFilterType, setListFilterType] = useState<'all' | 'completed' | 'processing' | 'overdue_pending' | 'overdue_completed'>('all');
 
     const [dailyStatsRecords, setDailyStatsRecords] = useState<RecordFile[]>([]);
 
     // --- NEW LOGIC FOR MAIN TABS (Đo đạc vs Cấp giấy vs Lưu trữ) ---
-    const [mainTab, setMainTab] = useState<'measurement' | 'archive' | 'registration'>('measurement');
+    const allowedMainTabs = useMemo(() => {
+        if (!currentUser) return ['measurement', 'registration', 'archive'];
+        
+        const roleStr = (currentUser.role as string).toUpperCase();
+        const isSystemAdmin = roleStr === 'ADMIN' || roleStr === 'SUBADMIN';
+        if (isSystemAdmin) return ['measurement', 'registration', 'archive'];
+
+        const userEmp = rawEmployees.find(e => e.id === currentUser.employeeId);
+        if (!userEmp) return ['measurement', 'registration', 'archive']; // fallback
+
+        const dept = userEmp.department.toLowerCase();
+        // Exception for administrative/leadership who can view everything
+        const isPrivilegedDept = dept.includes('hành chính') || dept.includes('giám đốc') || dept.includes('lãnh đạo') || dept.includes('quản trị');
+        if (isPrivilegedDept) return ['measurement', 'registration', 'archive'];
+
+        const allowed: string[] = [];
+        if (dept.includes('đo đạc') || dept.includes('kỹ thuật')) {
+            allowed.push('measurement');
+        }
+        if (dept.includes('cấp giấy') || dept.includes('đăng ký') || dept.includes('biến động') || dept.includes('thẩm định') || dept.includes('pháp chế')) {
+            allowed.push('registration');
+        }
+        if (dept.includes('lưu trữ') || dept.includes('một cửa') || dept.includes('thông tin')) {
+            allowed.push('archive');
+        }
+
+        // If no match found, let them see what corresponds or fallback to default
+        if (allowed.length === 0) return ['measurement', 'registration', 'archive'];
+        return allowed;
+    }, [rawEmployees, currentUser]);
+
+    const [mainTab, setMainTab] = useState<'measurement' | 'archive' | 'registration'>(() => {
+        // Find first allowed tab on initialization if possible
+        if (currentUser) {
+            const roleStr = (currentUser.role as string).toUpperCase();
+            if (roleStr === 'ADMIN' || roleStr === 'SUBADMIN') return 'measurement';
+            const userEmp = rawEmployees.find(e => e.id === currentUser.employeeId);
+            if (userEmp) {
+                const dept = userEmp.department.toLowerCase();
+                const isPrivilegedDept = dept.includes('hành chính') || dept.includes('giám đốc') || dept.includes('lãnh đạo') || dept.includes('quản trị');
+                if (isPrivilegedDept) return 'measurement';
+                
+                if (dept.includes('đo đạc') || dept.includes('kỹ thuật')) return 'measurement';
+                if (dept.includes('cấp giấy') || dept.includes('đăng ký') || dept.includes('biến động') || dept.includes('thẩm định') || dept.includes('pháp chế')) return 'registration';
+                if (dept.includes('lưu trữ') || dept.includes('một cửa') || dept.includes('thông tin')) return 'archive';
+            }
+        }
+        return 'measurement';
+    });
+
+    useEffect(() => {
+        if (allowedMainTabs.length > 0 && !allowedMainTabs.includes(mainTab)) {
+            setMainTab(allowedMainTabs[0] as any);
+        }
+    }, [allowedMainTabs, mainTab]);
+
     const [archiveRecords, setArchiveRecords] = useState<RecordFile[]>([]);
 
     useEffect(() => {
@@ -178,17 +302,58 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
         });
     }, [activeRecords, fromDate, toDate, selectedWard]);
 
-    // Reset pagination when data changes
+    // Reset pagination and card filter when data changes
     useEffect(() => {
         setCurrentPage(1);
+        setListFilterType('all');
     }, [filteredData]);
+
+    const listFilteredRecords = useMemo(() => {
+        return filteredData.filter(r => {
+            if (listFilterType === 'all') return true;
+            if (listFilterType === 'completed') {
+                return r.status === RecordStatus.HANDOVER || 
+                       r.status === RecordStatus.RETURNED || 
+                       r.status === RecordStatus.SIGNED ||
+                       !!r.exportBatch || !!r.exportDate;
+            }
+            if (listFilterType === 'processing') {
+                const isDone = r.status === RecordStatus.HANDOVER || 
+                               r.status === RecordStatus.RETURNED || 
+                               r.status === RecordStatus.SIGNED ||
+                               !!r.exportBatch || !!r.exportDate;
+                const isWithdrawn = r.status === RecordStatus.WITHDRAWN || r.status === RecordStatus.REJECTED;
+                return !isDone && !isWithdrawn;
+            }
+            if (listFilterType === 'overdue_pending') {
+                const isDone = r.status === RecordStatus.HANDOVER || 
+                               r.status === RecordStatus.RETURNED || 
+                               r.status === RecordStatus.SIGNED ||
+                               !!r.exportBatch || !!r.exportDate;
+                const isWithdrawn = r.status === RecordStatus.WITHDRAWN || r.status === RecordStatus.REJECTED;
+                return !isDone && !isWithdrawn && isRecordOverdue(r);
+            }
+            if (listFilterType === 'overdue_completed') {
+                const isDone = r.status === RecordStatus.HANDOVER || 
+                               r.status === RecordStatus.RETURNED || 
+                               r.status === RecordStatus.SIGNED ||
+                               !!r.exportBatch || !!r.exportDate;
+                if (!isDone) return false;
+                if (!r.deadline || !r.completedDate) return false;
+                const d = new Date(r.deadline); d.setHours(0,0,0,0);
+                const c = new Date(r.completedDate); c.setHours(0,0,0,0);
+                return c > d;
+            }
+            return true;
+        });
+    }, [filteredData, listFilterType]);
 
     const paginatedData = useMemo(() => {
         const start = (currentPage - 1) * itemsPerPage;
-        return filteredData.slice(start, start + itemsPerPage);
-    }, [filteredData, currentPage, itemsPerPage]);
+        return listFilteredRecords.slice(start, start + itemsPerPage);
+    }, [listFilteredRecords, currentPage, itemsPerPage]);
 
-    const totalPages = Math.ceil(filteredData.length / itemsPerPage);
+    const totalPages = Math.ceil(listFilteredRecords.length / itemsPerPage);
 
     // --- STATS CHO CÁC TAB ---
     // Updated: Hỗ trợ lọc theo nhân viên khi ở tab Employee
@@ -348,24 +513,30 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
         <div className="flex flex-col h-full overflow-hidden relative bg-slate-50">
             {/* MAIN TAB SWITCHER */}
             <div className="bg-white border-b border-gray-200 flex px-4 pt-2 gap-1 shrink-0">
-                <button 
-                    onClick={() => setMainTab('measurement')}
-                    className={`px-6 py-3 text-sm font-bold rounded-t-lg border-t border-l border-r transition-all flex items-center gap-2 ${mainTab === 'measurement' ? 'bg-blue-50 border-gray-200 text-blue-700 border-b-transparent relative top-[1px]' : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'}`}
-                >
-                    <Ruler size={18} /> Báo cáo Đo đạc
-                </button>
-                <button 
-                    onClick={() => setMainTab('registration')}
-                    className={`px-6 py-3 text-sm font-bold rounded-t-lg border-t border-l border-r transition-all flex items-center gap-2 ${mainTab === 'registration' ? 'bg-emerald-50 border-gray-200 text-emerald-700 border-b-transparent relative top-[1px]' : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'}`}
-                >
-                    <FileText size={18} /> Báo cáo Cấp giấy
-                </button>
-                <button 
-                    onClick={() => setMainTab('archive')}
-                    className={`px-6 py-3 text-sm font-bold rounded-t-lg border-t border-l border-r transition-all flex items-center gap-2 ${mainTab === 'archive' ? 'bg-orange-50 border-gray-200 text-orange-700 border-b-transparent relative top-[1px]' : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'}`}
-                >
-                    <FolderArchive size={18} /> Báo cáo Lưu trữ
-                </button>
+                {allowedMainTabs.includes('measurement') && (
+                    <button 
+                        onClick={() => setMainTab('measurement')}
+                        className={`px-6 py-3 text-sm font-bold rounded-t-lg border-t border-l border-r transition-all flex items-center gap-2 ${mainTab === 'measurement' ? 'bg-blue-50 border-gray-200 text-blue-700 border-b-transparent relative top-[1px]' : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'}`}
+                    >
+                        <Ruler size={18} /> Báo cáo Đo đạc
+                    </button>
+                )}
+                {allowedMainTabs.includes('registration') && (
+                    <button 
+                        onClick={() => setMainTab('registration')}
+                        className={`px-6 py-3 text-sm font-bold rounded-t-lg border-t border-l border-r transition-all flex items-center gap-2 ${mainTab === 'registration' ? 'bg-emerald-50 border-gray-200 text-emerald-700 border-b-transparent relative top-[1px]' : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'}`}
+                    >
+                        <FileText size={18} /> Báo cáo Cấp giấy
+                    </button>
+                )}
+                {allowedMainTabs.includes('archive') && (
+                    <button 
+                        onClick={() => setMainTab('archive')}
+                        className={`px-6 py-3 text-sm font-bold rounded-t-lg border-t border-l border-r transition-all flex items-center gap-2 ${mainTab === 'archive' ? 'bg-orange-50 border-gray-200 text-orange-700 border-b-transparent relative top-[1px]' : 'bg-gray-50 border-transparent text-gray-500 hover:bg-gray-100'}`}
+                    >
+                        <FolderArchive size={18} /> Báo cáo Lưu trữ
+                    </button>
+                )}
             </div>
 
             {/* Toolbar */}
@@ -437,38 +608,6 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
                         </button>
                     </div>
                 </div>
-
-                {/* STATS CARDS: HIỂN THỊ LUÔN (Theo yêu cầu layout mới) */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
-                    <div className="bg-blue-50 border border-blue-100 p-3 rounded-xl flex items-center gap-3">
-                        <div className="bg-blue-200 p-2 rounded-lg text-blue-700"><ListFilter size={20}/></div>
-                        <div><div className="text-2xl font-bold text-blue-800">{generalStats.total}</div><div className="text-xs text-blue-600 uppercase font-bold">Tổng hồ sơ</div></div>
-                    </div>
-                    <div className="bg-green-50 border border-green-100 p-3 rounded-xl flex items-center gap-3">
-                        <div className="bg-green-200 p-2 rounded-lg text-green-700"><CheckCircle2 size={20}/></div>
-                        <div><div className="text-2xl font-bold text-green-800">{generalStats.completed}</div><div className="text-xs text-green-600 uppercase font-bold">Đã xong</div></div>
-                    </div>
-                    <div className="bg-orange-50 border border-orange-100 p-3 rounded-xl flex items-center gap-3">
-                        <div className="bg-orange-200 p-2 rounded-lg text-orange-700"><Clock size={20}/></div>
-                        <div><div className="text-2xl font-bold text-orange-800">{generalStats.processing}</div><div className="text-xs text-orange-600 uppercase font-bold">Đang xử lý</div></div>
-                    </div>
-                    <div className="bg-red-50 border border-red-100 p-3 rounded-xl flex items-center gap-3">
-                        <div className="bg-red-200 p-2 rounded-lg text-red-700"><AlertTriangle size={20}/></div>
-                        <div className="flex-1">
-                            <div className="flex justify-between items-center text-red-800">
-                                <span className="text-xs font-semibold">Chưa xong:</span>
-                                <span className="text-xl font-bold">{generalStats.overduePending}</span>
-                            </div>
-                            <div className="flex justify-between items-center text-red-600/70">
-                                <span className="text-xs font-semibold">Đã xong:</span>
-                                <span className="text-sm font-bold">{generalStats.overdueCompleted}</span>
-                            </div>
-                            <div className="text-[10px] text-red-600 uppercase font-bold text-center mt-1 pt-1 border-t border-red-200">
-                                Tổng trễ hạn
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             {/* Content Tabs */}
@@ -521,6 +660,78 @@ const ReportSection: React.FC<ReportSectionProps> = ({ reportContent, isGenerati
             <div className="flex-1 overflow-hidden bg-slate-100 p-0">
                 {activeTab === 'list' && (
                     <div className="bg-white rounded-none h-full overflow-hidden flex flex-col animate-fade-in-up p-4">
+                        {/* Thống kê nhanh danh sách hồ sơ */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 shrink-0 animate-fade-in">
+                            {/* Card 1: Tổng hồ sơ */}
+                            <div 
+                                onClick={() => setListFilterType('all')}
+                                className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all hover:scale-[1.02] ${listFilterType === 'all' ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-300 shadow-sm' : 'bg-white border-blue-100 hover:border-blue-300'}`}
+                            >
+                                <div className="bg-blue-100 p-2 rounded-lg text-blue-700"><ListFilter size={18}/></div>
+                                <div>
+                                    <div className="text-xl font-bold text-blue-950 leading-tight">{generalStats.total}</div>
+                                    <div className="text-[10px] text-blue-600 uppercase font-extrabold tracking-wider mt-0.5">Tổng hồ sơ</div>
+                                </div>
+                            </div>
+
+                            {/* Card 2: Đã xong */}
+                            <div 
+                                onClick={() => setListFilterType('completed')}
+                                className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all hover:scale-[1.02] ${listFilterType === 'completed' ? 'bg-green-50 border-green-400 ring-2 ring-green-300 shadow-sm' : 'bg-white border-green-100 hover:border-green-300'}`}
+                            >
+                                <div className="bg-green-100 p-2 rounded-lg text-green-700"><CheckCircle2 size={18}/></div>
+                                <div>
+                                    <div className="text-xl font-bold text-green-950 leading-tight">{generalStats.completed}</div>
+                                    <div className="text-[10px] text-green-600 uppercase font-extrabold tracking-wider mt-0.5">Đã xong</div>
+                                </div>
+                            </div>
+
+                            {/* Card 3: Đang xử lý */}
+                            <div 
+                                onClick={() => setListFilterType('processing')}
+                                className={`p-3 rounded-xl border flex items-center gap-3 cursor-pointer transition-all hover:scale-[1.02] ${listFilterType === 'processing' ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-300 shadow-sm' : 'bg-white border-orange-100 hover:border-orange-300'}`}
+                            >
+                                <div className="bg-orange-100 p-2 rounded-lg text-orange-700"><Clock size={18}/></div>
+                                <div>
+                                    <div className="text-xl font-bold text-orange-950 leading-tight">{generalStats.processing}</div>
+                                    <div className="text-[10px] text-orange-600 uppercase font-extrabold tracking-wider mt-0.5">Đang xử lý</div>
+                                </div>
+                            </div>
+
+                            {/* Card 4: Tổng trễ hạn */}
+                            <div 
+                                className={`p-3 rounded-xl border flex items-center gap-3 transition-all hover:scale-[1.02] ${
+                                    (listFilterType === 'overdue_pending' || listFilterType === 'overdue_completed')
+                                        ? 'bg-red-50 border-red-400 ring-2 ring-red-300 shadow-sm'
+                                        : 'bg-white border-red-100 hover:border-red-300'
+                                }`}
+                            >
+                                <div 
+                                    className="bg-red-100 p-2 rounded-lg text-red-700 cursor-pointer hover:bg-red-200"
+                                    onClick={() => setListFilterType(listFilterType === 'overdue_pending' ? 'all' : 'overdue_pending')}
+                                    title="Xem tất cả trễ chưa xong"
+                                >
+                                    <AlertTriangle size={18}/>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <div 
+                                        className={`flex justify-between items-center text-red-950 cursor-pointer px-1 rounded hover:bg-red-50/80 transition-all ${listFilterType === 'overdue_pending' ? 'bg-red-100/70 font-bold' : ''}`}
+                                        onClick={() => setListFilterType('overdue_pending')}
+                                    >
+                                        <span className="text-[11px] font-bold">Chưa xong:</span>
+                                        <span className="text-base font-bold">{generalStats.overduePending}</span>
+                                    </div>
+                                    <div 
+                                        className={`flex justify-between items-center text-red-700/80 cursor-pointer px-1 rounded hover:bg-red-50/80 transition-all ${listFilterType === 'overdue_completed' ? 'bg-red-100/70 font-bold' : ''}`}
+                                        onClick={() => setListFilterType('overdue_completed')}
+                                    >
+                                        <span className="text-[10px] font-bold">Đã xong:</span>
+                                        <span className="text-xs font-bold">{generalStats.overdueCompleted}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="flex-1 overflow-auto rounded-xl border border-gray-200">
                             <table className="w-full text-left text-sm">
                                 <thead className="bg-gray-50 text-xs text-gray-500 uppercase font-bold sticky top-0 shadow-sm z-10">
