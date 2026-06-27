@@ -100,6 +100,12 @@ const CongVanView: React.FC<CongVanViewProps> = ({
   >("all");
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const archiveEmployees = useMemo(() => {
+    return employees.filter(emp => {
+      const dept = (emp.department || '').toLowerCase();
+      return dept.includes('lưu trữ') || dept.includes('luu tru') || dept.includes('sao lục') || dept.includes('sao luc') || dept.includes('thông tin') || dept.includes('thong tin') || dept.includes('archive');
+    });
+  }, [employees]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
 
@@ -1261,7 +1267,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
               onChange={(e) => setFilterEmployee(e.target.value)}
             >
               <option value="">Tất cả Nhân viên</option>
-              {employees.map((e) => (
+              {archiveEmployees.map((e) => (
                 <option key={e.id} value={e.id}>
                   {e.name}
                 </option>
@@ -1956,7 +1962,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
             setSelectedIds(new Set());
           }}
           onConfirm={handleConfirmAssign}
-          employees={employees}
+          employees={archiveEmployees}
           selectedRecords={records
             .filter((r) => selectedIds.has(r.id))
             .map(

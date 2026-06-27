@@ -853,14 +853,12 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
           <div className="flex flex-wrap items-center gap-3 bg-gray-50 p-2 rounded-lg relative">
             {isHandoverAny && (
               <div className="flex bg-white rounded-md border border-gray-200 p-1 mr-2 shadow-sm">
-                {!isOneDoor && (
-                  <button
-                    onClick={() => props.setHandoverTab("today")}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition-colors ${props.handoverTab === "today" ? "bg-green-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
-                  >
-                    <ListChecks size={16} /> Chờ giao
-                  </button>
-                )}
+                <button
+                  onClick={() => props.setHandoverTab("today")}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition-colors ${props.handoverTab === "today" ? "bg-green-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
+                >
+                  <ListChecks size={16} /> Chờ giao
+                </button>
                 <button
                   onClick={() => props.setHandoverTab("history")}
                   className={`flex items-center gap-2 px-3 py-1.5 rounded text-sm font-medium transition-colors ${props.handoverTab === "history" ? "bg-green-600 text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}
