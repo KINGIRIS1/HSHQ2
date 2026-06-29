@@ -13,19 +13,9 @@ import {
 import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../../services/docxService';
 import DocxPreviewModal from '../DocxPreviewModal';
 import { updateRecordApi, fetchContracts } from '../../services/api';
-import { calculateDeadline } from '../../utils/appHelpers';
+import { calculateDeadline, isRegType } from '../../utils/appHelpers';
 import SystemReceiptTemplate from '../receive-record/SystemReceiptTemplate';
 import SystemAnnexTemplate from '../receive-record/SystemAnnexTemplate';
-
-const isRegType = (type: string | null | undefined): boolean => {
-    if (!type) return false;
-    const t = type.trim().toLowerCase();
-    const REG_PROCEDURES = [
-        "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
-        "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
-    ];
-    return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
-};
 
 interface MobileDetailModalProps {
   isOpen: boolean;
@@ -920,6 +910,8 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
             data={systemReceiptData} 
             receivingWard={systemReceiptData.ward || employees.find(e => e.id === currentUser?.employeeId)?.managedWards?.[0] || 'Tân Khai'}
             onClose={() => setSystemReceiptData(null)} 
+            currentUser={currentUser}
+            employees={employees}
         />
       )}
       {isAnnexOpen && record && (

@@ -3,24 +3,14 @@ import React, { useState, useEffect } from 'react';
 import { RecordFile, Employee, User, UserRole, SplitItem, RecordStatus, Holiday } from '../types';
 import { getNormalizedWard, REGISTRATION_PROCEDURES } from '../constants';
 import StatusBadge from './StatusBadge';
-import { X, MapPin, FileText, User as UserIcon, Receipt, DollarSign, CheckCircle2, Circle, Send, FileSignature, CheckSquare, CalendarClock, FileCheck, Calculator, Loader2, StickyNote, Save, Bell, Printer, Pencil, Trash2, Info, FileDown, AlertTriangle, Activity, ArrowRight } from 'lucide-react';
+import { X, MapPin, FileText, User as UserIcon, Receipt, DollarSign, CheckCircle2, Circle, Send, FileSignature, CheckSquare, CalendarClock, FileCheck, Calculator, Loader2, StickyNote, Save, Bell, Printer, Pencil, Trash2, Info, FileDown, AlertTriangle, Activity, ArrowRight, RotateCcw } from 'lucide-react';
 import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../services/docxService';
 import DocxPreviewModal from './DocxPreviewModal';
 import { updateRecordApi, fetchContracts } from '../services/api';
-import { calculateDeadline } from '../utils/appHelpers';
+import { calculateDeadline, isDefaultTaxProcedure, isRegType, getGcnWorkflowStepsHelper } from '../utils/appHelpers';
 import { getEmployeeTeam } from './AssignModal';
 import SystemReceiptTemplate from './receive-record/SystemReceiptTemplate';
 import SystemAnnexTemplate from './receive-record/SystemAnnexTemplate';
-
-const isRegType = (type: string | null | undefined): boolean => {
-    if (!type) return false;
-    const t = type.trim().toLowerCase();
-    const REG_PROCEDURES = [
-        "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
-        "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
-    ];
-    return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
-};
 
 interface DetailModalProps {
   isOpen: boolean;
@@ -132,138 +122,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
     }
 
     if (isGCN) {
-        const hasTax = !!record.hasTax;
-        const transferToDNLis = !!record.transferToDNLis;
-        const currentStatus = record.status;
-
-        if (hasTax) {
-            if (transferToDNLis) {
-                const s0 = currentStatus === RecordStatus.RECEIVED ? 'current' : 'completed';
-                
-                let s1: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.ASSIGNED) s1 = 'current';
-                else if (currentStatus !== RecordStatus.RECEIVED) s1 = 'completed';
-
-                let s2: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.IN_PROGRESS) s2 = 'current';
-                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED].includes(currentStatus)) s2 = 'completed';
-
-                let s3: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.COMPLETED_WORK) s3 = 'current';
-                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS].includes(currentStatus)) s3 = 'completed';
-
-                let s4: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.TBT) s4 = 'current';
-                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK].includes(currentStatus)) s4 = 'completed';
-
-                let s5: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.PENDING_CHECK) s5 = 'current';
-                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT].includes(currentStatus)) s5 = 'completed';
-
-                let s6: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.CHECKED) s6 = 'current';
-                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK].includes(currentStatus)) s6 = 'completed';
-
-                let s7: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.PENDING_SIGN) s7 = 'current';
-                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK, RecordStatus.CHECKED].includes(currentStatus)) s7 = 'completed';
-
-                let s8: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.SIGNED) s8 = 'current';
-                else if ([RecordStatus.HANDOVER, RecordStatus.RETURNED].includes(currentStatus)) s8 = 'completed';
-
-                return {
-                    type: 'gcn_tax_dnlis',
-                    title: 'Cấp giấy (Có thuế + chạy DNLis)',
-                    steps: [
-                        { label: 'Tiếp nhận mới', duration: 'Nhận HS', status: s0 },
-                        { label: 'DNLIS', duration: '1 ngày', status: s1 },
-                        { label: 'Phiếu chuyển', duration: '2 ngày', status: s2 },
-                        { label: 'Trình ký Thuế', duration: '7 ngày*', status: s3, desc: 'Tham khảo' },
-                        { label: 'Thông báo thuế', duration: '0 ngày', status: s4 },
-                        { label: 'In GCN', duration: '38 ngày', status: s5, desc: '40 ngày - 2 ngày khâu sau' },
-                        { label: 'Thẩm tra', duration: '1 ngày', status: s6 },
-                        { label: 'Trình ký GCN', duration: '4 giờ', status: s7 },
-                        { label: 'Giao 1 cửa', duration: '4 giờ', status: s8 }
-                    ]
-                };
-            } else {
-                const s0 = currentStatus === RecordStatus.RECEIVED ? 'current' : 'completed';
-                
-                let s1: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if ([RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS].includes(currentStatus)) s1 = 'current';
-                else if (currentStatus !== RecordStatus.RECEIVED) s1 = 'completed';
-
-                let s2: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.COMPLETED_WORK) s2 = 'current';
-                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS].includes(currentStatus)) s2 = 'completed';
-
-                let s3: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.TBT) s3 = 'current';
-                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK].includes(currentStatus)) s3 = 'completed';
-
-                let s4: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.PENDING_CHECK) s4 = 'current';
-                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT].includes(currentStatus)) s4 = 'completed';
-
-                let s5: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.CHECKED) s5 = 'current';
-                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK].includes(currentStatus)) s5 = 'completed';
-
-                let s6: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.PENDING_SIGN) s6 = 'current';
-                else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK, RecordStatus.CHECKED].includes(currentStatus)) s6 = 'completed';
-
-                let s7: 'completed' | 'current' | 'upcoming' = 'upcoming';
-                if (currentStatus === RecordStatus.SIGNED) s7 = 'current';
-                else if ([RecordStatus.HANDOVER, RecordStatus.RETURNED].includes(currentStatus)) s7 = 'completed';
-
-                return {
-                    type: 'gcn_tax_no_dnlis',
-                    title: 'Cấp giấy (Có thuế + không DNLis)',
-                    steps: [
-                        { label: 'Tiếp nhận mới', duration: 'Nhận HS', status: s0 },
-                        { label: 'Phiếu chuyển', duration: '3 ngày', status: s1 },
-                        { label: 'Trình ký Thuế', duration: '7 ngày*', status: s2, desc: 'Tham khảo' },
-                        { label: 'Thông báo thuế', duration: '0 ngày', status: s3 },
-                        { label: 'In GCN', duration: '38 ngày', status: s4, desc: '40 ngày - 2 ngày khâu sau' },
-                        { label: 'Thẩm tra', duration: '1 ngày', status: s5 },
-                        { label: 'Trình ký GCN', duration: '4 giờ', status: s6 },
-                        { label: 'Giao 1 cửa', duration: '4 giờ', status: s7 }
-                    ]
-                };
-            }
-        } else {
-            const s0 = currentStatus === RecordStatus.RECEIVED ? 'current' : 'completed';
-            
-            let s1: 'completed' | 'current' | 'upcoming' = 'upcoming';
-            if ([RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.PENDING_CHECK, RecordStatus.TBT].includes(currentStatus)) s1 = 'current';
-            else if (![RecordStatus.RECEIVED].includes(currentStatus)) s1 = 'completed';
-
-            let s2: 'completed' | 'current' | 'upcoming' = 'upcoming';
-            if (currentStatus === RecordStatus.CHECKED) s2 = 'current';
-            else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK].includes(currentStatus)) s2 = 'completed';
-
-            let s3: 'completed' | 'current' | 'upcoming' = 'upcoming';
-            if (currentStatus === RecordStatus.PENDING_SIGN) s3 = 'current';
-            else if (![RecordStatus.RECEIVED, RecordStatus.ASSIGNED, RecordStatus.IN_PROGRESS, RecordStatus.COMPLETED_WORK, RecordStatus.TBT, RecordStatus.PENDING_CHECK, RecordStatus.CHECKED].includes(currentStatus)) s3 = 'completed';
-
-            let s4: 'completed' | 'current' | 'upcoming' = 'upcoming';
-            if (currentStatus === RecordStatus.SIGNED) s4 = 'current';
-            else if ([RecordStatus.HANDOVER, RecordStatus.RETURNED].includes(currentStatus)) s4 = 'completed';
-
-            return {
-                type: 'gcn_no_tax',
-                title: 'Cấp giấy (Không thuế)',
-                steps: [
-                    { label: 'Tiếp nhận mới', duration: 'Nhận HS', status: s0 },
-                    { label: 'In GCN', duration: '28 ngày', status: s1, desc: '30 ngày - 2 ngày khâu sau' },
-                    { label: 'Thẩm tra', duration: '1 ngày', status: s2 },
-                    { label: 'Trình ký GCN', duration: '4 giờ', status: s3 },
-                    { label: 'Giao 1 cửa', duration: '4 giờ', status: s4 }
-                ]
-            };
-        }
+        return getGcnWorkflowStepsHelper(record, holidays || []);
     }
 
     return null;
@@ -466,13 +325,55 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
   const handleToggleDefect = async () => {
       if (!activeRecord) return;
       
-      if (activeRecord.hasDefect) {
+      if (activeRecord.hasDefect || activeRecord.status === RecordStatus.PENDING_SUPPLEMENT) {
           // Open the re-receive option dialog instead of a simple confirm
           setResumeMode('supplement');
           setIsResumeDialogOpen(true);
       } else {
           setDefectReasonInput('');
           setIsDefectDialogOpen(true);
+      }
+  };
+
+  const handleConfirmSupplement = async () => {
+      if (!activeRecord || !supplementReasonInput.trim()) return;
+      setIsSavingSupplement(true);
+
+      const today = new Date();
+      const todayStr = today.toLocaleDateString('vi-VN');
+      const todayISO = today.toISOString();
+
+      const updatedRecord: RecordFile = {
+          ...activeRecord,
+          preSupplementStatus: activeRecord.status,
+          preSupplementStepIndex: activeRecord.currentStepIndex !== undefined ? activeRecord.currentStepIndex : 0,
+          status: RecordStatus.PENDING_SUPPLEMENT,
+          defectReason: supplementReasonInput, // Đồng bộ lý do vào defectReason cho tương thích
+          supplementReason: supplementReasonInput,
+          supplementLegalBasis: supplementLegalBasisInput || null,
+          supplementDate: todayISO,
+          notes: activeRecord.notes 
+              ? `${activeRecord.notes}\n[Trả HS Chờ bổ sung - Ngày ${todayStr}]: ${supplementReasonInput}` 
+              : `[Trả HS Chờ bổ sung - Ngày ${todayStr}]: ${supplementReasonInput}`
+      };
+
+      try {
+          const result = await updateRecordApi(updatedRecord);
+          setIsSavingSupplement(false);
+          setIsSupplementDialogOpen(false);
+          setSupplementReasonInput('');
+          setSupplementLegalBasisInput('');
+          if (result) {
+              setLocalRecord(updatedRecord);
+              alert('Đã chuyển trạng thái hồ sơ thành Chờ dân bổ sung thành công!');
+              onRefreshData?.();
+          } else {
+              alert('Không thể cập nhật trạng thái hồ sơ.');
+          }
+      } catch (err) {
+          console.error(err);
+          setIsSavingSupplement(false);
+          alert('Có lỗi xảy ra.');
       }
   };
 
@@ -485,29 +386,43 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       const todayStr = today.toLocaleDateString('vi-VN');
       const todayISO = today.toISOString();
 
+      // Khôi phục trạng thái và bước chi tiết trước khi bị trả chờ bổ sung
+      const restoredStatus = activeRecord.preSupplementStatus || RecordStatus.IN_PROGRESS;
+      const restoredStepIndex = activeRecord.preSupplementStepIndex !== undefined && activeRecord.preSupplementStepIndex !== null 
+          ? activeRecord.preSupplementStepIndex 
+          : activeRecord.currentStepIndex;
+
       if (resumeMode === 'supplement') {
           // Re-calculate deadline and set receivedDate to today for recalculating date from scratch
           const newDeadline = calculateDeadline(activeRecord.recordType || '', todayISO, holidays || [], !!activeRecord.hasTax);
           
           updatedRecord = {
               ...activeRecord,
+              status: restoredStatus,
+              currentStepIndex: restoredStepIndex,
+              preSupplementStatus: null,
+              preSupplementStepIndex: null,
               hasDefect: false,
               defectReason: null,
               receivedDate: todayISO,
               deadline: newDeadline,
               notes: activeRecord.notes 
-                  ? `${activeRecord.notes}\n[Bổ sung HS - Tiếp nhận lại ngày ${todayStr}]: Tính lại ngày hẹn trả (${newDeadline}) từ đầu` 
-                  : `[Bổ sung HS - Tiếp nhận lại ngày ${todayStr}]: Tính lại ngày hẹn trả (${newDeadline}) từ đầu`
+                  ? `${activeRecord.notes}\n[Bổ sung HS - Tiếp nhận lại ngày ${todayStr}]: Quay lại bước trước khi trả, tính lại ngày hẹn trả (${newDeadline}) từ đầu` 
+                  : `[Bổ sung HS - Tiếp nhận lại ngày ${todayStr}]: Quay lại bước trước khi trả, tính lại ngày hẹn trả (${newDeadline}) từ đầu`
           };
       } else {
           // Simple resume without changing receivedDate and deadline
           updatedRecord = {
               ...activeRecord,
+              status: restoredStatus,
+              currentStepIndex: restoredStepIndex,
+              preSupplementStatus: null,
+              preSupplementStepIndex: null,
               hasDefect: false,
               defectReason: null,
               notes: activeRecord.notes 
-                  ? `${activeRecord.notes}\n[Đã sửa đổi ngày ${todayStr}]: Hủy đánh dấu sai sót` 
-                  : `[Đã sửa đổi ngày ${todayStr}]: Hủy đánh dấu sai sót`
+                  ? `${activeRecord.notes}\n[Tiếp nhận lại ngày ${todayStr}]: Hủy trạng thái Chờ bổ sung, giữ nguyên hạn trả gốc` 
+                  : `[Tiếp nhận lại ngày ${todayStr}]: Hủy trạng thái Chờ bổ sung, giữ nguyên hạn trả gốc`
           };
       }
 
@@ -832,69 +747,130 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                             {record.defectReason || "Chưa ghi cụ thể lý do."}
                         </p>
                         <p className="text-[11px] text-red-600 font-semibold mt-1">
-                            * Quy trình xử lý (kiểm tra, trình ký, chuyển 1 cửa) vẫn tiến hành bình thường. Trạng thái cuối cùng của hồ sơ sẽ được tự động chuyển thành "Hồ sơ trả" khi giao qua 1 cửa.
-                        </p>
-                    </div>
-                </div>
-            )}
-            
-            {/* TRÌNH THEO DÕI QUY TRÌNH (PROCESS TRACKER) */}
-            {(() => {
-                const workflow = getWorkflowSteps();
-                if (!workflow) return null;
+                            * Quy trình xử lý (kiểm tra, trình ký, chuyển 1 cửa) vẫn ti�                          <div className="relative flex items-center justify-between overflow-x-auto py-4 px-2 min-w-[700px] custom-scrollbar gap-2">
+                              {workflow.steps.map((step, idx) => { const s = step as any;
+                                  const isLast = idx === workflow.steps.length - 1;
+                                  let circleClass = "";
+                                  let lineClass = "";
+                                  let textClass = "";
+                                  let iconNode = null;
 
-                return (
-                    <div className="mb-6 bg-white border border-gray-200 rounded-xl p-5 shadow-sm animate-fade-in">
-                         <h3 className="text-xs font-bold text-gray-700 uppercase mb-4 flex items-center gap-2 border-l-4 border-indigo-600 pl-2">
-                              <Activity size={16} className="text-indigo-600 animate-pulse"/>
-                              <span>Quy trình xử lý: <span className="text-indigo-700 font-extrabold">{workflow.title}</span></span>
-                         </h3>
-                         
-                         <div className="relative flex items-center justify-between overflow-x-auto py-4 px-2 min-w-[700px] custom-scrollbar gap-2">
-                             {workflow.steps.map((step, idx) => {
-                                 const isLast = idx === workflow.steps.length - 1;
-                                 let circleClass = "";
-                                 let lineClass = "";
-                                 let textClass = "";
-                                 let iconNode = null;
+                                  if (s.status === 'completed') {
+                                      circleClass = "bg-emerald-50 border-emerald-500 text-emerald-600 shadow-[0_0_8px_rgba(16,185,129,0.2)]";
+                                      lineClass = "bg-emerald-500";
+                                      textClass = "text-emerald-700 font-bold";
+                                      iconNode = <CheckCircle2 size={16} />;
+                                  } else if (s.status === 'current') {
+                                      circleClass = "bg-blue-50 border-blue-600 text-blue-700 ring-4 ring-blue-100 shadow-[0_0_12px_rgba(37,99,235,0.4)] animate-pulse";
+                                      lineClass = "bg-gray-200";
+                                      textClass = "text-blue-700 font-extrabold scale-105 transform origin-left";
+                                      iconNode = <Loader2 size={16} className="animate-spin" />;
+                                  } else {
+                                      circleClass = "bg-gray-50 border-gray-200 text-gray-400";
+                                      lineClass = "bg-gray-100";
+                                      textClass = "text-gray-400 font-medium";
+                                      iconNode = <Circle size={14} className="opacity-40" />;
+                                  }
 
-                                 if (step.status === 'completed') {
-                                     circleClass = "bg-emerald-50 border-emerald-500 text-emerald-600 shadow-[0_0_8px_rgba(16,185,129,0.2)]";
-                                     lineClass = "bg-emerald-500";
-                                     textClass = "text-emerald-700 font-bold";
-                                     iconNode = <CheckCircle2 size={16} />;
-                                 } else if (step.status === 'current') {
-                                     circleClass = "bg-blue-50 border-blue-600 text-blue-700 ring-4 ring-blue-100 shadow-[0_0_12px_rgba(37,99,235,0.4)] animate-pulse";
-                                     lineClass = "bg-gray-200";
-                                     textClass = "text-blue-700 font-extrabold scale-105 transform origin-left";
-                                     iconNode = <Loader2 size={16} className="animate-spin" />;
-                                 } else {
-                                     circleClass = "bg-gray-50 border-gray-200 text-gray-400";
-                                     lineClass = "bg-gray-100";
-                                     textClass = "text-gray-400 font-medium";
-                                     iconNode = <Circle size={14} className="opacity-40" />;
-                                 }
+                                  const getExecutionDate = (stepLabel: string, stepStatus: RecordStatus) => {
+                                      if (!record) return null;
+                                      const label = stepLabel.toLowerCase();
+                                      if (label.includes("ranh") || label.includes("dnlis")) {
+                                          return record.assignedDate;
+                                      }
+                                      if (label.includes("mộc kê")) {
+                                          return record.assignedDate;
+                                      }
+                                      if (label.includes("kiểm tra thế chấp")) {
+                                          return record.assignedDate;
+                                      }
+                                      if (label.includes("niêm yết") || label.includes("công văn")) {
+                                          return record.assignedDate;
+                                      }
+                                      if (label.includes("phiếu chuyển thuế") || label.includes("phiếu chuyển")) {
+                                          return record.completedWorkDate;
+                                      }
+                                      if (label.includes("trình ký thuế")) {
+                                          return record.completedWorkDate;
+                                      }
+                                      if (label.includes("tbt")) {
+                                          return record.taxPaymentDate;
+                                      }
+                                      if (label.includes("in gcn") || label.includes("in giấy")) {
+                                          return record.pendingCheckDate;
+                                      }
+                                      if (label.includes("thẩm tra")) {
+                                          return record.checkedDate;
+                                      }
+                                      if (label.includes("trình ký gcn") || label.includes("trình ký giấy")) {
+                                          return record.submissionDate;
+                                      }
+                                      if (label.includes("vô số")) {
+                                          return record.approvalDate;
+                                      }
+                                      if (label.includes("giao 1 cửa") || label.includes("giao một cửa")) {
+                                          return record.completedDate;
+                                      }
+                                      
+                                      if (stepStatus === RecordStatus.IN_PROGRESS) return record.assignedDate;
+                                      if (stepStatus === RecordStatus.COMPLETED_WORK) return record.completedWorkDate;
+                                      if (stepStatus === RecordStatus.PENDING_CHECK) return record.pendingCheckDate;
+                                      if (stepStatus === RecordStatus.CHECKED) return record.checkedDate;
+                                      if (stepStatus === RecordStatus.PENDING_SIGN) return record.submissionDate;
+                                      if (stepStatus === RecordStatus.SIGNED) return record.approvalDate;
+                                      if (stepStatus === RecordStatus.HANDOVER) return record.completedDate;
+                                      return null;
+                                  };
 
-                                 return (
-                                     <div key={idx} className="flex-1 flex items-center relative">
-                                         {/* Step body */}
-                                         <div className="flex flex-col items-center flex-1 z-10">
-                                             <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${circleClass}`}>
-                                                 {iconNode}
-                                             </div>
-                                             <div className="text-center mt-2.5 max-w-[120px]">
-                                                 <p className={`text-xs truncate transition-all leading-tight ${textClass}`} title={step.label}>
-                                                     {step.label}
-                                                 </p>
-                                                 <span className={`text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded-full font-bold ${
-                                                     step.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
-                                                     step.status === 'current' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'
-                                                 }`}>
-                                                     {step.duration}
-                                                 </span>
-                                                 {step.desc && (
-                                                     <p className="text-[9px] text-gray-400 italic mt-1 leading-none max-w-[100px] mx-auto truncate" title={step.desc}>
-                                                         {step.desc}
+                                  const execDate = getExecutionDate(s.label, s.overallStatus);
+
+                                  return (
+                                      <div key={idx} className="flex-1 flex items-center relative">
+                                          {/* Step body */}
+                                          <div className="flex flex-col items-center flex-1 z-10">
+                                              <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${circleClass}`}>
+                                                  {iconNode}
+                                              </div>
+                                              <div className="text-center mt-2.5 max-w-[120px]">
+                                                  <p className={`text-xs truncate transition-all leading-tight ${textClass}`} title={s.label}>
+                                                      {s.label}
+                                                  </p>
+                                                  <span className={`text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded-full font-bold ${
+                                                      s.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
+                                                      s.status === 'current' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'
+                                                  }`}>
+                                                      {s.duration}
+                                                  </span>
+                                                  {s.status === 'completed' && execDate ? (
+                                                      <p className="text-[9px] text-emerald-600 font-extrabold mt-1 leading-none" title={`Thực hiện lúc: ${formatDate(execDate)}`}>
+                                                          {formatDate(execDate)}
+                                                      </p>
+                                                  ) : s.deadlineDate ? (
+                                                      <p className={`text-[9px] font-bold mt-1 leading-none ${s.status === 'current' ? 'text-blue-600 animate-pulse' : 'text-gray-400'}`} title={`Hạn chót bước: ${formatDate(s.deadlineDate.toISOString())}`}>
+                                                          Hạn: {formatDate(s.deadlineDate.toISOString())}
+                                                      </p>
+                                                  ) : (
+                                                      <p className="text-[9px] text-gray-400 mt-1 leading-none">---</p>
+                                                  )}
+                                                  {s.desc && (
+                                                      <p className="text-[9px] text-gray-400 italic mt-1 leading-none max-w-[100px] mx-auto truncate" title={s.desc}>
+                                                          {s.desc}
+                                                      </p>
+                                                  )}
+                                              </div>
+                                          </div>
+
+                                          {/* Connector line to next step */}
+                                          {!isLast && (
+                                              <div className="absolute top-[18px] left-1/2 right-[-50%] h-[2px] z-0 pointer-events-none pr-4">
+                                                  <div className={`h-full w-full transition-all duration-300 ${lineClass}`} />
+                                              </div>
+                                          )}
+                                      </div>
+                                  );
+                              })}
+                          </div>ame="text-[9px] text-gray-400 italic mt-1 leading-none max-w-[100px] mx-auto truncate" title={s.desc}>
+                                                         {s.desc}
                                                      </p>
                                                  )}
                                              </div>
@@ -1147,6 +1123,67 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
 
                 {/* COLUMN 3: TIẾN ĐỘ & NHẮC VIỆC */}
                 <div className="space-y-6">
+                    {/* KHẨN CẤP: TRẢ CHỜ DÂN BỔ SUNG */}
+                    {isRegType(record.recordType) && (
+                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden p-5 space-y-3.5">
+                            <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-2 border-l-4 border-amber-500 pl-2">
+                                <AlertTriangle size={15} className="text-amber-500 animate-pulse" />
+                                <span>Yêu cầu bổ sung hồ sơ</span>
+                            </h4>
+
+                            {record.status === RecordStatus.PENDING_SUPPLEMENT ? (
+                                <div className="space-y-3">
+                                    <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg text-amber-900 text-xs">
+                                        <p className="font-bold uppercase mb-1 flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping"></span>
+                                            Chờ dân bổ sung giấy tờ
+                                        </p>
+                                        <p className="leading-relaxed mt-1.5">
+                                            <span className="font-semibold text-amber-800">Nội dung yêu cầu:</span>{" "}
+                                            {record.supplementReason || record.defectReason || 'Chưa có chi tiết yêu cầu.'}
+                                        </p>
+                                        {record.supplementLegalBasis && (
+                                            <p className="mt-1">
+                                                <span className="font-semibold text-amber-800">Căn cứ pháp lý:</span>{" "}
+                                                {record.supplementLegalBasis}
+                                            </p>
+                                        )}
+                                        {record.supplementDate && (
+                                            <p className="text-[10px] text-amber-600 font-medium mt-2">
+                                                Ngày chuyển: {formatDate(record.supplementDate)}
+                                            </p>
+                                        )}
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            setResumeMode('supplement');
+                                            setIsResumeDialogOpen(true);
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer"
+                                    >
+                                        <RotateCcw size={14} /> Tiếp nhận lại hồ sơ bổ sung
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    <p className="text-[11px] text-gray-500 leading-normal">
+                                        Đóng băng tiến độ xử lý và chuyển hồ sơ về trạng thái "Chờ dân bổ sung" để làm công văn trả dân tại Trung tâm hành chính công.
+                                    </p>
+                                    <button
+                                        onClick={() => {
+                                            setSupplementReasonInput('');
+                                            setSupplementLegalBasisInput('');
+                                            setIsSupplementDialogOpen(true);
+                                        }}
+                                        className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 rounded-lg text-xs font-bold transition-all shadow-sm cursor-pointer"
+                                    >
+                                        <AlertTriangle size={14} /> Trả hồ sơ chờ dân khắc phục
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* TIMELINE */}
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                         <div className="bg-indigo-600 px-5 py-3 flex items-center gap-2">
@@ -1330,6 +1367,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                 data={systemReceiptData} 
                 receivingWard={systemReceiptData.ward || employees.find(e => e.id === currentUser?.employeeId)?.managedWards?.[0] || 'Tân Khai'}
                 onClose={() => setSystemReceiptData(null)} 
+                currentUser={currentUser}
+                employees={employees}
             />
         )}
         {isAnnexOpen && record && (
@@ -1460,6 +1499,60 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                               style={{ backgroundColor: '#dc2626' }}
                           >
                               {isSavingDefect ? <Loader2 size={13} className="animate-spin" /> : <AlertTriangle size={13} />}
+                              Xác nhận trả
+                          </button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {isSupplementDialogOpen && (
+          <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+              <div className="bg-white rounded-xl shadow-2xl border border-amber-150 w-full max-w-md overflow-hidden animate-fade-in-up">
+                  <div className="bg-amber-500 px-5 py-3 text-white font-bold text-sm flex items-center gap-2">
+                       <AlertTriangle size={16} />
+                       <span>TRẢ HỒ SƠ CHỜ DÂN BỔ SUNG / KHẮC PHỤC</span>
+                  </div>
+                  <div className="p-5 space-y-4">
+                      <p className="text-xs text-gray-600 leading-relaxed">
+                          Nhập lý do sai sót hoặc các giấy tờ người dân cần bổ sung chi tiết bên dưới. Hệ thống sẽ tạm thời đóng băng tiến độ và chuyển trạng thái hồ sơ thành <span className="font-bold text-amber-600">"Chờ dân bổ sung"</span>.
+                      </p>
+                      
+                      <div>
+                          <label className="text-xs font-bold text-gray-700 block mb-1">Nội dung yêu cầu bổ sung / sai sót (*):</label>
+                          <textarea
+                              className="w-full border border-gray-300 rounded-md p-2.5 text-xs focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none h-24 bg-white"
+                              placeholder="Nhập nội dung cần bổ sung, chỉnh sửa..."
+                              value={supplementReasonInput}
+                              onChange={(e) => setSupplementReasonInput(e.target.value)}
+                          />
+                      </div>
+
+                      <div>
+                          <label className="text-xs font-bold text-gray-700 block mb-1">Căn cứ pháp lý (nếu có):</label>
+                          <input
+                              type="text"
+                              className="w-full border border-gray-300 rounded-md p-2.5 text-xs focus:ring-1 focus:ring-amber-500 focus:border-amber-500 outline-none bg-white font-medium"
+                              placeholder="Ví dụ: Khoản 2 Điều 10 Luật Đất đai năm 2024..."
+                              value={supplementLegalBasisInput}
+                              onChange={(e) => setSupplementLegalBasisInput(e.target.value)}
+                          />
+                      </div>
+                      
+                      <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                          <button
+                              onClick={() => { setIsSupplementDialogOpen(false); setSupplementReasonInput(''); setSupplementLegalBasisInput(''); }}
+                              className="px-3 py-1.5 bg-gray-100 text-gray-700 text-xs font-bold rounded hover:bg-gray-200 transition-all border border-gray-200 cursor-pointer"
+                          >
+                              Hủy bỏ
+                          </button>
+                          <button
+                              onClick={handleConfirmSupplement}
+                              disabled={isSavingSupplement || !supplementReasonInput.trim()}
+                              className="px-3.5 py-1.5 bg-amber-500 text-white text-xs font-bold rounded hover:bg-amber-600 disabled:opacity-50 transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                          >
+                              {isSavingSupplement ? <Loader2 size={13} className="animate-spin" /> : <AlertTriangle size={13} />}
                               Xác nhận trả
                           </button>
                       </div>

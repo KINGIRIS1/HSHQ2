@@ -45,23 +45,32 @@ export function calculateDeadline(type: string, receivedDateStr: string, holiday
         daysToAdd = 30;
     }
     
-    const t = (type || '').trim().toLowerCase();
-    const isReg = t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
+    // Note: The user requested that the receipt's appointment date (expected) should NOT include the financial obligation payment time.
+    // So even if hasTax is true, we do not add the 10 tax days for the initial appointment deadline on receipt.
+    const hoursToAdd = daysToAdd * 8;
+    const finalDate = addWorkingTime(receivedDateStr, `${hoursToAdd} giờ`, holidays);
+    return formatDateKey(finalDate);
+}
 
-    if (isReg && hasTax) {
-        daysToAdd += 10;
+export function addWorkingTime(startDate: Date | string, durationStr: string, holidays: Holiday[] = [], stepLabel: string = ''): Date {
+    const start = typeof startDate === 'string' ? new Date(startDate) : startDate;
+    const lowerLabel = (stepLabel || '').toLowerCase();
+    const duration = durationStr.toLowerCase();
+    
+    // Check if the step is calendar days (niêm yết / xã niêm yết / công văn)
+    const isCalDays = lowerLabel.includes("niêm yết") || lowerLabel.includes("công văn") || lowerLabel.includes("ngày nghỉ") || lowerLabel.includes("ko ke ngay nghi");
+
+    if (isCalDays) {
+        const days = parseInt(duration) || 0;
+        const res = new Date(start);
+        res.setDate(res.getDate() + days);
+        return res;
     }
-    
-    const startDate = new Date(receivedDateStr);
-    let count = 0;
-    let currentDate = new Date(startDate);
-    
+
     const holidaySet = new Set<string>();
-    const currentYear = startDate.getFullYear();
-    const listHolidays = holidays || [];
-    
-    [currentYear, currentYear + 1].forEach(year => {
-        listHolidays.forEach(h => {
+    const startYear = start.getFullYear();
+    [startYear, startYear + 1, startYear + 2].forEach(year => {
+        (holidays || []).forEach(h => {
             if (h.isLunar) {
                 const solar = getSolarDateFromLunar(h.day, h.month, year);
                 if (solar) holidaySet.add(formatDateKey(solar));
@@ -72,47 +81,62 @@ export function calculateDeadline(type: string, receivedDateStr: string, holiday
         });
     });
 
-    while (count < daysToAdd) {
-        currentDate.setDate(currentDate.getDate() + 1);
-        const dayOfWeek = currentDate.getDay(); 
-        const dateString = formatDateKey(currentDate);
-        const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-        const isHoliday = holidaySet.has(dateString);
+    let currentDate = new Date(start);
 
-        if (!isWeekend && !isHoliday) {
-            count++;
+    if (duration.includes('ngày')) {
+        const daysToAdd = parseInt(duration) || 0;
+        let countedDays = 0;
+        while (countedDays < daysToAdd) {
+            currentDate.setDate(currentDate.getDate() + 1);
+            const dayOfWeek = currentDate.getDay(); // 0 = Sunday, 6 = Saturday
+            const dateString = formatDateKey(currentDate);
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            const isHoliday = holidaySet.has(dateString);
+            if (!isWeekend && !isHoliday) {
+                countedDays++;
+            }
+        }
+    } else if (duration.includes('giờ')) {
+        const hoursToAdd = parseInt(duration) || 0;
+        if (hoursToAdd >= 8) {
+            const daysToAdd = Math.floor(hoursToAdd / 8);
+            let countedDays = 0;
+            while (countedDays < daysToAdd) {
+                currentDate.setDate(currentDate.getDate() + 1);
+                const dayOfWeek = currentDate.getDay();
+                const dateString = formatDateKey(currentDate);
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                const isHoliday = holidaySet.has(dateString);
+                if (!isWeekend && !isHoliday) {
+                    countedDays++;
+                }
+            }
+            const remainingHours = hoursToAdd % 8;
+            if (remainingHours > 0) {
+                currentDate.setHours(currentDate.getHours() + remainingHours);
+            }
+        } else {
+            let hoursRemaining = hoursToAdd;
+            while (hoursRemaining > 0) {
+                currentDate.setHours(currentDate.getHours() + 1);
+                const dayOfWeek = currentDate.getDay();
+                const dateString = formatDateKey(currentDate);
+                const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+                const isHoliday = holidaySet.has(dateString);
+                if (isWeekend || isHoliday) {
+                    currentDate.setDate(currentDate.getDate() + 1);
+                    currentDate.setHours(8, 0, 0, 0);
+                } else {
+                    hoursRemaining--;
+                }
+            }
         }
     }
-    return formatDateKey(currentDate);
+
+    return currentDate;
 }
 
 export function getStatusLabel(status: RecordStatus, recordType?: string | null): string {
-    const isReg = recordType ? (
-        (() => {
-            const t = recordType.trim().toLowerCase();
-            return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
-        })()
-    ) : false;
-
-    if (isReg) {
-        switch (status) {
-            case RecordStatus.RECEIVED: return 'Tiếp nhận mới';
-            case RecordStatus.ASSIGNED: return 'DNLIS';
-            case RecordStatus.IN_PROGRESS: return 'DNLIS';
-            case RecordStatus.COMPLETED_WORK: return 'Phiếu chuyển';
-            case RecordStatus.PENDING_CHECK: return 'Trình Ký thuế';
-            case RecordStatus.TBT: return 'TBT(Thông báo thuế)';
-            case RecordStatus.CHECKED: return 'In GCN';
-            case RecordStatus.PENDING_SIGN: return 'Kiểm Tra';
-            case RecordStatus.SIGNED: return 'Trình Ký';
-            case RecordStatus.HANDOVER: return 'Giao 1 cửa';
-            case RecordStatus.RETURNED: return 'Đã trả kết quả';
-            case RecordStatus.WITHDRAWN: return 'CSD rút hồ sơ';
-            case RecordStatus.REJECTED: return 'Hồ sơ trả';
-            case RecordStatus.PENDING_SUPPLEMENT: return 'Chờ bổ sung (Người dân)';
-            default: return status;
-        }
-    }
     return STATUS_LABELS[status] || status;
 }
 
@@ -144,6 +168,280 @@ export function removeVietnameseTones(str: string): string {
     str = str.replace(/ + /g, " ");
     str = str.trim();
     return str;
+}
+
+export function isDefaultTaxProcedure(type: string | null | undefined): boolean {
+    if (!type) return false;
+    const t = removeVietnameseTones(type).toLowerCase();
+    return ['thua ke', 'tang cho', 'chuyen nhuong', 'thoa thuan', 'chuyen muc dich', 'tach thua', 'hop thua'].some(keyword => t.includes(keyword));
+}
+
+export function isRegType(type: string | null | undefined): boolean {
+    return true; // Applied GCN detailed step progress tracking to all procedures
+}
+
+export interface GcnStepConfig {
+    label: string;
+    duration: string;
+    overallStatus: RecordStatus;
+    deadlineDate?: Date | null;
+    isOverdue?: boolean;
+    isUrgent?: boolean;
+    status?: 'completed' | 'current' | 'upcoming';
+}
+
+export function getGcnWorkflowStepsHelper(record: RecordFile, holidays: Holiday[] = []): {
+    type: string;
+    title: string;
+    steps: GcnStepConfig[];
+} {
+    const isPreJuly2025 = (() => {
+        const dateStr = record.issueDate || record.receivedDate || record.assignedDate;
+        if (!dateStr) return true;
+        const date = new Date(dateStr);
+        const targetDate = new Date('2025-07-01');
+        return date < targetDate;
+    })();
+
+    let workflowType = record.gcnWorkflowType;
+    if (!workflowType) {
+        const rType = (record.recordType || '').toLowerCase();
+        if (rType.includes('cấp lại') || rType.includes('3.7')) {
+            workflowType = (record.hasConcurrentTransfer || record.hasTax) ? 'quy_trinh_5' : 'quy_trinh_4';
+        } else if (!record.hasTax && !isDefaultTaxProcedure(record.recordType)) {
+            workflowType = 'quy_trinh_3';
+        } else if (isPreJuly2025 || rType.includes('tách thửa') || rType.includes('3.8') || rType.includes('3.10')) {
+            workflowType = 'quy_trinh_1';
+        } else {
+            workflowType = 'quy_trinh_2';
+        }
+    }
+
+    let stepConfigs: GcnStepConfig[] = [];
+    let title = '';
+
+    if (workflowType === 'quy_trinh_1') {
+        title = 'Quy trình 1: DNLIS';
+        stepConfigs = [
+            { label: "DNLIS (Nhập và chỉnh ranh)", duration: "8 giờ", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "Phiếu chuyển Thuế", duration: "16 giờ", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "Trình ký Thuế", duration: "0 giờ", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "TBT", duration: "0 giờ", overallStatus: RecordStatus.TBT },
+            { label: "In GCN", duration: "5 ngày", overallStatus: RecordStatus.PENDING_CHECK },
+            { label: "Thẩm tra", duration: "8 giờ", overallStatus: RecordStatus.CHECKED },
+            { label: "Trình Ký GCN", duration: "4 giờ", overallStatus: RecordStatus.PENDING_SIGN },
+            { label: "Vô số GCN", duration: "4 giờ", overallStatus: RecordStatus.SIGNED },
+            { label: "Giao 1 cửa", duration: "4 giờ", overallStatus: RecordStatus.HANDOVER }
+        ];
+    } else if (workflowType === 'quy_trinh_2') {
+        title = 'Quy trình 2: Phiếu Chuyển Thuế';
+        stepConfigs = [
+            { label: "Phiếu chuyển Thuế", duration: "24 giờ", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "Trình ký Thuế", duration: "0 giờ", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "TBT", duration: "0 giờ", overallStatus: RecordStatus.TBT },
+            { label: "In GCN", duration: "5 ngày", overallStatus: RecordStatus.PENDING_CHECK },
+            { label: "Thẩm tra", duration: "8 giờ", overallStatus: RecordStatus.CHECKED },
+            { label: "Trình Ký GCN", duration: "4 giờ", overallStatus: RecordStatus.PENDING_SIGN },
+            { label: "Vô số GCN", duration: "4 giờ", overallStatus: RecordStatus.SIGNED },
+            { label: "Giao 1 cửa", duration: "4 giờ", overallStatus: RecordStatus.HANDOVER }
+        ];
+    } else if (workflowType === 'quy_trinh_3') {
+        title = 'Quy trình 3: In GCN';
+        stepConfigs = [
+            { label: "In GCN", duration: "5 ngày", overallStatus: RecordStatus.PENDING_CHECK },
+            { label: "Thẩm tra", duration: "8 giờ", overallStatus: RecordStatus.CHECKED },
+            { label: "Trình Ký GCN", duration: "4 giờ", overallStatus: RecordStatus.PENDING_SIGN },
+            { label: "Vô số GCN", duration: "4 giờ", overallStatus: RecordStatus.SIGNED },
+            { label: "Giao 1 cửa", duration: "4 giờ", overallStatus: RecordStatus.HANDOVER }
+        ];
+    } else if (workflowType === 'quy_trinh_4') {
+        title = 'Quy trình 4: Cấp Lại In GCN';
+        stepConfigs = [
+            { label: "Biên bản mộc kê", duration: "8 giờ", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "Biên bản kiểm tra thế chấp", duration: "8 giờ", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "Lập công văn gửi Xã & Chờ niêm yết (Tính cả ngày nghỉ)", duration: "30 ngày", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "In GCN", duration: "5 ngày", overallStatus: RecordStatus.PENDING_CHECK },
+            { label: "Thẩm tra", duration: "8 giờ", overallStatus: RecordStatus.CHECKED },
+            { label: "Trình Ký GCN", duration: "4 giờ", overallStatus: RecordStatus.PENDING_SIGN },
+            { label: "Vô số GCN", duration: "4 giờ", overallStatus: RecordStatus.SIGNED },
+            { label: "Giao 1 cửa", duration: "4 giờ", overallStatus: RecordStatus.HANDOVER }
+        ];
+    } else {
+        title = 'Quy trình 5: Cấp Lại Có thuế';
+        stepConfigs = [
+            { label: "Biên bản mộc kê", duration: "8 giờ", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "Biên bản kiểm tra thế chấp", duration: "8 giờ", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "Lập công văn gửi Xã & Chờ niêm yết (Tính cả ngày nghỉ)", duration: "30 ngày", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "Phiếu chuyển Thuế", duration: "16 giờ", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "Trình ký Thuế", duration: "0 giờ", overallStatus: RecordStatus.IN_PROGRESS },
+            { label: "TBT", duration: "0 giờ", overallStatus: RecordStatus.TBT },
+            { label: "In GCN", duration: "5 ngày", overallStatus: RecordStatus.PENDING_CHECK },
+            { label: "Thẩm tra", duration: "8 giờ", overallStatus: RecordStatus.CHECKED },
+            { label: "Trình Ký GCN", duration: "4 giờ", overallStatus: RecordStatus.PENDING_SIGN },
+            { label: "Vô số GCN", duration: "4 giờ", overallStatus: RecordStatus.SIGNED },
+            { label: "Giao 1 cửa", duration: "4 giờ", overallStatus: RecordStatus.HANDOVER }
+        ];
+    }
+
+    // Proportional scaling of GCN workflow step durations to synchronize with the total received days of the procedure
+    let totalProcedureDays = 30;
+    const rTypeLower = (record.recordType || '').toLowerCase();
+    if (rTypeLower.includes('cmđ') || rTypeLower.includes('cmd') || rTypeLower.includes('2.7 trích lục cmđ')) {
+        totalProcedureDays = 2;
+    } else if (rTypeLower.includes('cung cấp tài liệu đất đai') || 
+        rTypeLower.includes('cung cấp dữ liệu đất đai') || 
+        rTypeLower.includes('dữ liệu đất đai') || 
+        rTypeLower.includes('trích lục quy hoạch') || 
+        rTypeLower.includes('cung cấp số thửa đất') || 
+        rTypeLower.includes('cung cấp số thửa') || 
+        rTypeLower.includes('trích lục')) {
+        totalProcedureDays = 10;
+    } else if (rTypeLower.includes('trích đo') || rTypeLower.includes('cắm mốc') || rTypeLower.includes('tách thửa')) {
+        totalProcedureDays = 30;
+    }
+
+    const getDefaultWeight = (label: string): number => {
+        const l = label.toLowerCase();
+        if (l.includes("ranh") || l.includes("dnlis")) return 1;
+        if (l.includes("phiếu chuyển thuế") || l.includes("phiếu chuyển")) return 2;
+        if (l.includes("trình ký thuế")) return 0;
+        if (l.includes("tbt")) return 0;
+        if (l.includes("in gcn") || l.includes("in giấy")) return 5;
+        if (l.includes("thẩm tra")) return 1;
+        if (l.includes("trình ký gcn") || l.includes("trình ký giấy")) return 0.5;
+        if (l.includes("vô số")) return 0.5;
+        if (l.includes("giao 1 cửa") || l.includes("giao một cửa")) return 0.5;
+        if (l.includes("mộc kê")) return 1;
+        if (l.includes("thế chấp")) return 1;
+        return 0;
+    };
+
+    const stepsWithWeights = stepConfigs.map(s => {
+        const isFixedCal = s.label.toLowerCase().includes("niêm yết") || s.label.toLowerCase().includes("công văn");
+        return {
+            ...s,
+            weight: isFixedCal ? 0 : getDefaultWeight(s.label),
+            isFixedCal
+        };
+    });
+
+    const totalWeightSum = stepsWithWeights.reduce((sum, s) => sum + s.weight, 0);
+
+    if (totalWeightSum > 0) {
+        stepConfigs = stepsWithWeights.map(s => {
+            if (s.isFixedCal) {
+                return { label: s.label, duration: s.duration, overallStatus: s.overallStatus };
+            }
+            if (s.weight === 0) {
+                return { label: s.label, duration: "0 giờ", overallStatus: s.overallStatus };
+            }
+            const stepHours = Math.max(1, Math.round((s.weight / totalWeightSum) * totalProcedureDays * 8));
+            return { label: s.label, duration: `${stepHours} giờ`, overallStatus: s.overallStatus };
+        });
+    }
+
+    // Determine current step index
+    let currentStepIndex = record.currentStepIndex;
+    if (currentStepIndex === undefined || currentStepIndex === null) {
+        if (record.status === RecordStatus.RECEIVED) {
+            currentStepIndex = 0;
+        } else if ([RecordStatus.HANDOVER, RecordStatus.RETURNED].includes(record.status)) {
+            currentStepIndex = stepConfigs.length - 1;
+        } else {
+            let targetLabel = "";
+            const status = record.status;
+            if (status === RecordStatus.TBT) {
+                targetLabel = "TBT";
+            } else if (status === RecordStatus.PENDING_CHECK) {
+                targetLabel = "In GCN";
+            } else if (status === RecordStatus.CHECKED) {
+                targetLabel = "Thẩm tra";
+            } else if (status === RecordStatus.PENDING_SIGN) {
+                targetLabel = "Trình Ký GCN";
+            } else if (status === RecordStatus.SIGNED) {
+                targetLabel = "Vô số GCN";
+            } else if (status === RecordStatus.HANDOVER || status === RecordStatus.RETURNED) {
+                targetLabel = "Giao 1 cửa";
+            } else if (status === RecordStatus.IN_PROGRESS) {
+                const firstProgressIdx = stepConfigs.findIndex(s => s.overallStatus === RecordStatus.IN_PROGRESS);
+                currentStepIndex = firstProgressIdx !== -1 ? firstProgressIdx : 0;
+            } else if (status === RecordStatus.COMPLETED_WORK) {
+                const compIdx = stepConfigs.findIndex(s => s.overallStatus === RecordStatus.COMPLETED_WORK);
+                if (compIdx !== -1) {
+                    currentStepIndex = compIdx;
+                } else {
+                    const trinhKyIdx = stepConfigs.findIndex(s => s.label.includes("Trình ký Thuế"));
+                    currentStepIndex = trinhKyIdx !== -1 ? trinhKyIdx : 0;
+                }
+            }
+
+            if (currentStepIndex === undefined || currentStepIndex === null) {
+                const foundIdx = stepConfigs.findIndex(s => s.label.toLowerCase().includes(targetLabel.toLowerCase()) || targetLabel.toLowerCase().includes(s.label.toLowerCase()));
+                currentStepIndex = foundIdx !== -1 ? foundIdx : 0;
+            }
+        }
+    }
+
+    const baseDateStr = record.assignedDate || record.receivedDate;
+    let currentAnchor = baseDateStr ? new Date(baseDateStr) : new Date();
+
+    const tbtStepIdx = stepConfigs.findIndex(s => s.label === "TBT");
+
+    const steps = stepConfigs.map((step, idx) => {
+        const durationStr = (step.duration || '').toLowerCase();
+        let deadlineDate: Date | null = null;
+
+        if (tbtStepIdx !== -1 && idx > tbtStepIdx) {
+            if (!record.taxPaymentDate) {
+                deadlineDate = null;
+            } else {
+                if (idx === tbtStepIdx + 1) {
+                    currentAnchor = new Date(record.taxPaymentDate);
+                }
+                if (durationStr && !durationStr.includes('0') && !durationStr.includes('---')) {
+                    const deadlineDateVal = addWorkingTime(currentAnchor, durationStr, holidays, step.label);
+                    deadlineDate = deadlineDateVal;
+                    currentAnchor = deadlineDateVal;
+                }
+            }
+        } else {
+            if (durationStr && !durationStr.includes('0') && !durationStr.includes('---')) {
+                const deadlineDateVal = addWorkingTime(currentAnchor, durationStr, holidays, step.label);
+                deadlineDate = deadlineDateVal;
+                currentAnchor = deadlineDateVal;
+            }
+        }
+
+        const isFullyCompleted = [RecordStatus.HANDOVER, RecordStatus.RETURNED].includes(record.status);
+        let status: 'completed' | 'current' | 'upcoming' = 'upcoming';
+        if (isFullyCompleted) {
+            status = 'completed';
+        } else if (idx < currentStepIndex!) {
+            status = 'completed';
+        } else if (idx === currentStepIndex) {
+            status = 'current';
+        }
+
+        const today = new Date();
+        const isOverdue = !!(deadlineDate && today > deadlineDate && status === 'current');
+        
+        const diffMs = deadlineDate ? deadlineDate.getTime() - today.getTime() : 0;
+        const isUrgent = !!(deadlineDate && !isOverdue && status === 'current' && diffMs > 0 && diffMs <= 24 * 60 * 60 * 1000);
+
+        return {
+            ...step,
+            status,
+            deadlineDate,
+            isOverdue,
+            isUrgent
+        };
+    });
+
+    return {
+        type: workflowType,
+        title,
+        steps
+    };
 }
 
 // Hàm chuyển đổi Title Case (Nguyễn Văn A)
@@ -218,10 +516,7 @@ export const isRecordOverdue = (record: RecordFile): boolean => {
   const completedStatuses = [
       RecordStatus.HANDOVER,
       RecordStatus.RETURNED,
-      RecordStatus.WITHDRAWN,
-      RecordStatus.REJECTED,
-      RecordStatus.SIGNED,
-      RecordStatus.PENDING_SUPPLEMENT
+      RecordStatus.WITHDRAWN
   ];
 
   if (completedStatuses.includes(record.status)) return false;
@@ -244,10 +539,7 @@ export const isRecordApproaching = (record: RecordFile): boolean => {
   const completedStatuses = [
       RecordStatus.HANDOVER,
       RecordStatus.RETURNED,
-      RecordStatus.WITHDRAWN,
-      RecordStatus.REJECTED,
-      RecordStatus.SIGNED,
-      RecordStatus.PENDING_SUPPLEMENT
+      RecordStatus.WITHDRAWN
   ];
 
   if (completedStatuses.includes(record.status)) return false;

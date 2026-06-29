@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import Barcode from 'react-barcode';
-import { RecordFile } from '../../types';
+import { RecordFile, Employee } from '../../types';
 import { getNormalizedWard } from '../../constants';
 import { Printer } from 'lucide-react';
 
@@ -8,9 +8,11 @@ interface SystemReceiptTemplateProps {
     data: Partial<RecordFile>;
     receivingWard: string;
     onClose: () => void;
+    currentUser?: any;
+    employees?: Employee[];
 }
 
-const SystemReceiptTemplate: React.FC<SystemReceiptTemplateProps> = ({ data, receivingWard, onClose }) => {
+const SystemReceiptTemplate: React.FC<SystemReceiptTemplateProps> = ({ data, receivingWard, onClose, currentUser, employees }) => {
     const receiptRef = useRef<HTMLDivElement>(null);
     const controlSlipRef = useRef<HTMLDivElement>(null);
 
@@ -96,6 +98,19 @@ const SystemReceiptTemplate: React.FC<SystemReceiptTemplateProps> = ({ data, rec
 
     const rDate = safeParseDate(data.receivedDate, now);
     const dDate = safeParseDate(data.deadline, now);
+
+    const getReceiverName = () => {
+        if (data.receivedBy && employees) {
+            const emp = employees.find(e => e.id === data.receivedBy);
+            if (emp) return emp.name;
+        }
+        if (currentUser) {
+            return currentUser.name;
+        }
+        return '';
+    };
+
+    const receiverName = getReceiverName();
 
     // Set time to current time for exact receipt time
     if (!isNaN(rDate.getTime())) {
@@ -269,15 +284,23 @@ const SystemReceiptTemplate: React.FC<SystemReceiptTemplateProps> = ({ data, rec
                             <div className="w-1/2">
                                 <div className="font-bold">NGƯỜI NỘP HỒ SƠ</div>
                                 <div className="italic">(Ký và ghi rõ họ tên)</div>
+                                <div style={{ height: '80px' }}></div>
+                                <div className="font-bold uppercase text-[14px]">
+                                    
+                                </div>
                             </div>
                             <div className="w-1/2">
                                 <div className="font-bold">NGƯỜI TIẾP NHẬN HỒ SƠ</div>
                                 <div className="italic">(Ký và ghi rõ họ tên)</div>
+                                <div style={{ height: '80px' }}></div>
+                                <div className="font-bold uppercase text-[14px]">
+                                    {receiverName || ''}
+                                </div>
                             </div>
                         </div>
 
                         {/* Spacer for signatures to ensure it shows in print */}
-                        <div style={{ height: '120px' }}></div>
+                        <div style={{ height: '40px' }}></div>
 
                         {/* Footer */}
                         <div className="pt-4 border-t border-gray-400">

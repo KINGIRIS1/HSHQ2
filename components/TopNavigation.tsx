@@ -113,7 +113,7 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
         { id: 'registration_records', label: 'Cấp giấy', icon: FileSignature, visible: hasPermission('VIEW_RECORDS') },
         { id: 'archive_records', label: 'Lưu trữ', icon: FolderArchive, visible: hasPermission('VIEW_ARCHIVE') },
         { id: 'congvan_records', label: 'Công văn', icon: Send, visible: hasPermission('VIEW_ARCHIVE') },
-        { id: 'other_records', label: 'Khác', icon: Layers, visible: hasPermission('VIEW_RECORDS') },
+        { id: 'other_records', label: 'Vô số', icon: BookOpen, visible: hasPermission('VIEW_RECORDS') },
       ]
     },
 

@@ -87,6 +87,7 @@ interface CongVanFormData {
   receipt_number?: string;
   payment_status?: "Chưa thu" | "Đã thu";
   result_returned_date?: string;
+  assigned_to?: string;
 }
 
 const CongVanView: React.FC<CongVanViewProps> = ({
@@ -150,6 +151,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     receipt_number: "",
     payment_status: "Chưa thu",
     result_returned_date: "",
+    assigned_to: "",
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -330,7 +332,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     setShowAssignModal(true);
   };
 
-  const handleConfirmAssign = async (employeeId: string) => {
+  const handleConfirmAssign = async (employeeId: string, workflowType?: string | null) => {
     const historyEntry = {
       action: "Giao việc",
       status: "assigned",
@@ -437,23 +439,59 @@ const CongVanView: React.FC<CongVanViewProps> = ({
 
     // Map form data về cấu trúc ArchiveRecord
     let finalStatus = formData.status;
-    let assignedTo = undefined;
+    let assignedTo = formData.assigned_to || undefined;
     let assignedDate = undefined;
-    const historyEntries: any[] = [];
+    let historyEntries: any[] = [];
 
-    if (!editingId && formData.status === "draft" && formData.xa_phuong) {
-      const matchedEmployee = findArchiveStaffForWard(formData.xa_phuong, employees);
-      if (matchedEmployee) {
+    if (editingId) {
+      const oldRecord = records.find(r => r.id === editingId);
+      const oldAssignedTo = oldRecord?.data?.assigned_to;
+      const oldHistory = oldRecord?.data?.history || [];
+      
+      if (assignedTo && assignedTo !== oldAssignedTo) {
         finalStatus = "assigned";
-        assignedTo = matchedEmployee.id;
+        assignedDate = new Date().toISOString();
+        historyEntries = [
+          ...oldHistory,
+          {
+            action: "Thay đổi người xử lý",
+            status: "assigned",
+            timestamp: new Date().toISOString(),
+            user: currentUser.name || currentUser.username,
+            note: `Đã chuyển giao việc từ ${getEmployeeName(oldAssignedTo)} sang ${getEmployeeName(assignedTo)}`,
+          }
+        ];
+      } else {
+        assignedTo = oldAssignedTo;
+        assignedDate = oldRecord?.data?.assigned_date;
+        historyEntries = oldHistory;
+      }
+    } else {
+      // Thêm mới
+      if (assignedTo) {
+        finalStatus = "assigned";
         assignedDate = new Date().toISOString();
         historyEntries.push({
-          action: "Giao việc tự động (Địa chỉ thửa đất)",
+          action: "Giao việc thủ công",
           status: "assigned",
           timestamp: new Date().toISOString(),
-          user: "Hệ thống",
-          note: `Đã tự động giao cho ${matchedEmployee.name} phụ trách địa bàn ${formData.xa_phuong}`,
+          user: currentUser.name || currentUser.username,
+          note: `Đã giao việc cho nhân viên: ${getEmployeeName(assignedTo)}`,
         });
+      } else if (formData.xa_phuong) {
+        const matchedEmployee = findArchiveStaffForWard(formData.xa_phuong, employees);
+        if (matchedEmployee) {
+          finalStatus = "assigned";
+          assignedTo = matchedEmployee.id;
+          assignedDate = new Date().toISOString();
+          historyEntries.push({
+            action: "Giao việc tự động (Địa chỉ thửa đất)",
+            status: "assigned",
+            timestamp: new Date().toISOString(),
+            user: "Hệ thống",
+            note: `Đã tự động giao cho ${matchedEmployee.name} phụ trách địa bàn ${formData.xa_phuong}`,
+          });
+        }
       }
     }
 
@@ -509,6 +547,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
       receipt_number: "",
       payment_status: "Chưa thu",
       result_returned_date: "",
+      assigned_to: "",
     });
   };
 
@@ -899,6 +938,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
       receipt_number: r.data?.receipt_number || "",
       payment_status: r.data?.payment_status || "Chưa thu",
       result_returned_date: r.data?.result_returned_date || "",
+      assigned_to: r.data?.assigned_to || "",
     });
     setIsFormOpen(true);
   };
@@ -1168,7 +1208,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
           onClick={() => handleTabChange("congvan_completed_list", "executed")}
           className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${subTab === "executed" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
         >
-          <CheckSquare size={16} /> Đã thực hiện
+          <CheckSquare size={16} /> Đang thực hiện
         </button>
         <button
           onClick={() => handleTabChange("congvan_pending_check_list", "assigned")}
@@ -1480,6 +1520,26 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                 />
               </div>
 
+              <div>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  Người giao việc / Người xử lý
+                </label>
+                <select
+                  className="w-full border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-4 py-3 text-sm outline-none bg-white font-medium text-gray-700 transition-all"
+                  value={formData.assigned_to || ""}
+                  onChange={(e) =>
+                    setFormData({ ...formData, assigned_to: e.target.value })
+                  }
+                >
+                  <option value="">-- Để tự động hoặc giao việc sau --</option>
+                  {archiveEmployees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.department || "Lưu trữ"})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Nếu đang sửa trạng thái completed thì lấy thêm thông tin bàn giao */}
               {formData.status === "completed" && (
                 <div className="p-4 bg-green-50/30 rounded-xl border border-green-100 flex flex-col gap-4">
@@ -1528,12 +1588,14 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                         type="text"
                         className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm outline-none font-mono"
                         value={formData.receipt_number || ""}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const val = e.target.value;
                           setFormData({
                             ...formData,
-                            receipt_number: e.target.value,
-                          })
-                        }
+                            receipt_number: val,
+                            payment_status: val.trim() ? "Đã thu" : formData.payment_status,
+                          });
+                        }}
                         placeholder="Số biên lai..."
                       />
                     </div>

@@ -195,6 +195,14 @@ export interface RecordFile {
   hasTax?: boolean;             // Hồ sơ có thuế
   transferToDNLis?: boolean;    // Chuyển qua DNLis
 
+  // Các trường mới cho Luồng Quy Trình Cấp Giấy (Chi nhánh Hớn Quản)
+  gcnWorkflowType?: string | null;             // 'quy_trinh_1' | 'quy_trinh_2' | 'quy_trinh_3' | 'quy_trinh_4'
+  hasConcurrentTransfer?: boolean | null;       // Có chuyển nhượng đồng thời? (Có/Không)
+  preSupplementStatus?: RecordStatus | null;     // Lưu trạng thái trước khi bị trả chờ bổ sung
+  preSupplementStepIndex?: number | null;       // Lưu bước chi tiết trước khi bị trả
+  currentStepIndex?: number | null;             // Bước hiện tại trong quy trình chi tiết (0-indexed)
+  taxPaymentDate?: string | null;               // Ngày người dân đóng thuế
+
   // Giá trực tiếp cho hồ sơ
   price?: number | null;
   advancePayment?: number | null;

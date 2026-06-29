@@ -88,6 +88,12 @@ const RecordRow: React.FC<RecordRowProps> = ({
     return teamName === "Tổ Hành chính";
   }, [currentUser, employees]);
 
+  const isStepProgressionAllowed = React.useMemo(() => {
+    if (!currentUser) return false;
+    const r = currentUser.role;
+    return r === 'ADMIN' || r === 'SUBADMIN' || r === 'TEAM_LEADER';
+  }, [currentUser]);
+
   // Class chung cho các ô: Căn trên (align-top)
   const cellClass = "p-3 align-top";
 
@@ -350,7 +356,7 @@ const RecordRow: React.FC<RecordRowProps> = ({
                 </button>
             )}
 
-            {record.status !== RecordStatus.HANDOVER && record.status !== RecordStatus.WITHDRAWN && record.status !== RecordStatus.RETURNED && !record.resultReturnedDate && !isOneDoor && (
+            {record.status !== RecordStatus.HANDOVER && record.status !== RecordStatus.WITHDRAWN && record.status !== RecordStatus.RETURNED && !record.resultReturnedDate && isStepProgressionAllowed && (
               <button onClick={() => onAdvanceStatus(record)} className="p-1.5 text-green-600 hover:bg-green-50 rounded-lg transition-colors" title="Chuyển bước"><ArrowRight size={16} /></button>
             )}
             <button onClick={() => onEdit(record)} className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors" title="Sửa"><Pencil size={16} /></button>

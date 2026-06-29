@@ -10,7 +10,7 @@ export const API_BASE_URL = 'https://dajjhubrhybodggbqapt.supabase.co';
 export const APP_VERSION = '2.1.0';
 
 export const STATUS_LABELS: Record<RecordStatus, string> = {
-  [RecordStatus.RECEIVED]: 'Tiếp nhận mới',
+  [RecordStatus.RECEIVED]: 'Chưa giao',
   [RecordStatus.ASSIGNED]: 'Đã giao việc',
   [RecordStatus.IN_PROGRESS]: 'Đang thực hiện',
   [RecordStatus.COMPLETED_WORK]: 'Đã thực hiện', // MỚI: Đã bổ sung

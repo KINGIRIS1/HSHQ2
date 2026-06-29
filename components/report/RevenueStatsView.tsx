@@ -313,13 +313,6 @@ const RevenueStatsView: React.FC<RevenueStatsViewProps> = ({ records, employees,
                         Khoảng thời gian: <span className="font-bold text-teal-700">{formatDate(fromDate)}</span> đến <span className="font-bold text-teal-700">{formatDate(toDate)}</span>
                     </p>
                 </div>
-                <button
-                    onClick={handleExportExcel}
-                    className="flex items-center gap-2 bg-teal-600 text-white hover:bg-teal-700 active:scale-95 transition-all font-bold text-sm px-4 py-2.5 rounded-xl shadow-md"
-                >
-                    <FileSpreadsheet size={18} />
-                    Xuất Excel Nguồn Thu
-                </button>
             </div>
 
             {/* General Overview Metrics Grid */}

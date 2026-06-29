@@ -6,7 +6,7 @@ import StatusBadge from './StatusBadge';
 import { Briefcase, ArrowRight, CheckCircle, Clock, Send, AlertTriangle, UserCog, ChevronLeft, ChevronRight, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Bell, CalendarClock, FileCheck, Map, CheckSquare, ClipboardList, FileDown, RotateCcw, CornerUpLeft } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { getShortRecordType } from '../constants';
-import { confirmAction, isRecordOverdue, isRecordApproaching } from '../utils/appHelpers';
+import { confirmAction, isRecordOverdue, isRecordApproaching, getGcnWorkflowStepsHelper } from '../utils/appHelpers';
 import { updateRecordApi } from '../services/api';
 import { fetchArchiveRecords, ArchiveRecord, saveArchiveRecord } from '../services/apiArchive';
 import SubmitModal from './receive-record/SubmitModal';
@@ -1042,10 +1042,36 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
           record.exportDate ||
           record.resultReturnedDate
       ) {
-           return { color: 'text-gray-600', icon: null, text: '' };
+           return { color: 'text-gray-400 font-medium', icon: null, text: '' };
       }
 
-      // 2. Nếu chưa xong, kiểm tra deadline
+      // Check current GCN step deadline status
+      if (record.recordType && isRegType(record.recordType)) {
+          try {
+              const workflow = getGcnWorkflowStepsHelper(record);
+              const currentStep = workflow.steps.find(s => s.status === 'current');
+              if (currentStep) {
+                  if (currentStep.isOverdue) {
+                      return { 
+                          color: 'text-red-600 font-extrabold flex items-center gap-1 bg-red-50 border border-red-200 rounded px-1.5 py-0.5', 
+                          icon: <AlertCircle size={14} className="text-red-600 animate-pulse" />, 
+                          text: `Trễ bước: ${currentStep.label}` 
+                      };
+                  }
+                  if (currentStep.isUrgent) {
+                      return { 
+                          color: 'text-amber-600 font-bold flex items-center gap-1 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5', 
+                          icon: <Clock size={14} className="text-amber-600" />, 
+                          text: `Sắp trễ: ${currentStep.label}` 
+                      };
+                  }
+              }
+          } catch (e) {
+              console.error('Error tracking GCN workflow steps:', e);
+          }
+      }
+
+      // 2. Nếu chưa xong, kiểm tra deadline chung
       const deadlineStr = record.deadline;
       if (!deadlineStr) return { color: 'text-gray-600', icon: null, text: '' };
       

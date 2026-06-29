@@ -454,7 +454,10 @@ const ReceiveRecord: React.FC<ReceiveRecordProps> = ({ onSave, onDelete, wards, 
                 calculateDeadline={calculateDeadline}
                 generateCode={(w, d, rType) => calculateNextCode(w, d, [], rType)} 
                 onPrint={handlePreviewDocx}
-                onCancelEdit={() => setEditingRecord(null)}
+                onCancelEdit={() => {
+                    setEditingRecord(null);
+                    setViewMode('list');
+                }}
                 currentUser={currentUser}
                 employees={employees}
                 currentView="receive_record"
@@ -497,6 +500,8 @@ const ReceiveRecord: React.FC<ReceiveRecordProps> = ({ onSave, onDelete, wards, 
               data={systemReceiptData} 
               receivingWard={systemReceiptData.ward || employees.find(e => e.id === currentUser.employeeId)?.managedWards?.[0] || 'Tân Khai'}
               onClose={() => setSystemReceiptData(null)} 
+              currentUser={currentUser}
+              employees={employees}
           />
       )}
     </div>

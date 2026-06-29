@@ -195,7 +195,29 @@ export const useRecordFilter = (
             // Tab Kiểm tra: Hiển thị hồ sơ Chờ kiểm tra và Đã kiểm tra
             result = result.filter(r => r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED);
         } else if (isCompletedWorkView) {
-            result = result.filter(r => r.status === RecordStatus.COMPLETED_WORK);
+            const isRegView = [
+                'registration_records', 'registration_assign_tasks', 'registration_completed_list', 
+                'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 
+                'registration_director_completed'
+            ].includes(currentView);
+
+            if (isRegView) {
+                // Đối với Cấp giấy, Bàn làm việc (completed_list) hiển thị các hồ sơ đang xử lý bao gồm: ASSIGNED, IN_PROGRESS, TBT, COMPLETED_WORK, PENDING_SUPPLEMENT
+                result = result.filter(r => 
+                    r.status === RecordStatus.ASSIGNED ||
+                    r.status === RecordStatus.IN_PROGRESS ||
+                    r.status === RecordStatus.TBT ||
+                    r.status === RecordStatus.COMPLETED_WORK ||
+                    r.status === RecordStatus.PENDING_SUPPLEMENT
+                );
+            } else {
+                result = result.filter(r => r.status === RecordStatus.COMPLETED_WORK);
+            }
+
+            // Nếu người đăng nhập là Nhân viên, chỉ hiển thị hồ sơ được phân công cho họ tại bàn làm việc
+            if (currentUser && currentUser.role === UserRole.EMPLOYEE) {
+                result = result.filter(r => r.assignedTo === currentUser.employeeId);
+            }
         } else if (isDirectorCompletedView) {
             result = result.filter(r => r.submittedTo === currentUser?.employeeId && r.status !== RecordStatus.PENDING_SIGN && r.status !== RecordStatus.RECEIVED && r.status !== RecordStatus.ASSIGNED && r.status !== RecordStatus.IN_PROGRESS && r.status !== RecordStatus.COMPLETED_WORK);
         } else if (isHandoverView) {
@@ -217,14 +239,14 @@ export const useRecordFilter = (
                 );
             }
         } else if (isAssignView) {
-            result = result.filter(r => r.status === RecordStatus.RECEIVED && r.isDeptSynced === true);
+            result = result.filter(r => r.status === RecordStatus.RECEIVED);
         }
 
         // Filter by recordType based on view group
         const isRegistrationView = [
             'registration_records', 'registration_assign_tasks', 'registration_completed_list', 
             'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 
-            'registration_director_completed', 'registration_vao_so'
+            'registration_director_completed'
         ].includes(currentView);
 
         const isArchiveView = [

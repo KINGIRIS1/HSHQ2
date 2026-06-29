@@ -64,6 +64,8 @@ import {
   Send,
   ShieldAlert,
   Hash,
+  Printer,
+  Globe,
 } from "lucide-react";
 
 interface AppRoutesProps {
@@ -310,7 +312,6 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
       "registration_check_list",
       "registration_handover_list",
       "registration_director_completed",
-      "registration_vao_so",
     ].includes(currentView);
 
     const isArchiveView = [
@@ -397,11 +398,10 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
     let title = "Danh sách Hồ sơ";
     if (isRegistrationView) {
       if (currentView === "registration_records") title = "Tất cả hồ sơ cấp giấy";
-      else if (currentView === "registration_assign_tasks") title = "Tiếp nhận mới (Chưa giao)";
-      else if (currentView === "registration_completed_list") title = "Danh sách Phiếu chuyển";
-      else if (currentView === "registration_pending_check_list") title = "Danh sách Trình Ký thuế";
-      else if (currentView === "registration_check_list") title = isDirector ? "Hồ sơ Chờ ký" : "Danh sách Kiểm tra";
-      else if (currentView === "registration_vao_so") title = "Vào Sổ GCN";
+      else if (currentView === "registration_assign_tasks") title = "Hồ sơ chưa giao";
+      else if (currentView === "registration_completed_list") title = "Hồ sơ đang thực hiện";
+      else if (currentView === "registration_pending_check_list") title = "Hồ sơ chờ kiểm tra";
+      else if (currentView === "registration_check_list") title = isDirector ? "Hồ sơ Chờ ký" : "Danh sách Trình Ký";
       else if (currentView === "registration_handover_list") title = "Danh sách Giao 1 cửa";
     } else {
       if (isCheckAny)
@@ -413,7 +413,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
       else if (isAssignAny)
         title = "Hồ sơ chưa giao";
       else if (isCompletedAny)
-        title = "Hồ sơ đã thực hiện";
+        title = "Hồ sơ đang thực hiện";
       else if (isPendingCheckAny)
         title = "Hồ sơ chờ kiểm tra";
       else if (currentView === "all_records") title = "Hồ sơ đo đạc";
@@ -424,75 +424,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
       else if (currentView === "other_records") title = "Hồ sơ khác";
     }
 
-    const subAdminEmp = employees.find((e) => e.id === currentUser.employeeId);
-    let isSubAdminAllowedTab = isViewAllowedForUser(currentUser, currentView, employees);
-    if (isSubadmin) {
-      if (!subAdminEmp) {
-        isSubAdminAllowedTab = false;
-      } else {
-        const rawDept = subAdminEmp.department || "";
-        const removeAccents = (s: string) => {
-          return s
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .replace(/đ/g, "d")
-            .replace(/Đ/g, "D");
-        };
-        const cleanDept = removeAccents(rawDept.toLowerCase());
-
-        if (isMeasurementView) {
-          isSubAdminAllowedTab =
-            isSubAdminAllowedTab && (
-            cleanDept.includes("do dac") ||
-            cleanDept.includes("ky thuat") ||
-            cleanDept.includes("to do") ||
-            cleanDept.includes("dia chinh") ||
-            cleanDept.includes("noi nghiep") ||
-            cleanDept.includes("ngoai nghiep"));
-        } else if (isRegistrationView) {
-          isSubAdminAllowedTab = isSubAdminAllowedTab && (cleanDept.includes("dang ky") || cleanDept.includes("cap giay"));
-        } else if (isArchiveView) {
-          isSubAdminAllowedTab = isSubAdminAllowedTab && (cleanDept.includes("luu tru") || cleanDept.includes("van phong") || cleanDept.includes("hanh chinh"));
-        } else if (isCongVanView) {
-          isSubAdminAllowedTab = isSubAdminAllowedTab && (cleanDept.includes("cong van") || cleanDept.includes("van phong") || cleanDept.includes("hanh chinh"));
-        }
-      }
-    }
-
-    if (!isSubAdminAllowedTab) {
-      const emp = employees.find((e) => e.id === currentUser.employeeId);
-      const teamName = emp ? getEmployeeTeam(emp) : '';
-      let allowedTabName = '';
-      if (teamName === 'Tổ Đo đạc') allowedTabName = 'Hồ sơ đo đạc';
-      if (teamName === 'Tổ Cấp giấy') allowedTabName = 'Hồ sơ cấp giấy';
-      if (teamName === 'Tổ Lưu trữ') allowedTabName = 'Hồ sơ lưu trữ & Công văn';
-
-      return (
-        <div className="flex flex-col items-center justify-center p-12 bg-white rounded-xl shadow-sm border border-gray-100 flex-1 h-full text-center">
-          <div className="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mb-6 ring-8 ring-red-50/50">
-            <ShieldAlert size={36} />
-          </div>
-          <h3 className="text-xl font-bold text-gray-800 mb-2">Quyền Truy Cập Hạn Chế</h3>
-          <p className="text-gray-500 max-w-md mb-6 leading-relaxed text-sm">
-            Bạn là tổ trưởng/tổ phó thuộc <strong className="text-blue-700">{teamName}</strong>. Theo quy định phân quyền, bạn chỉ được phép quản lý và giải quyết hồ sơ trong phạm vi tab thuộc tổ của mình.
-          </p>
-          {allowedTabName && (
-            <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl flex items-center gap-3 max-w-md mx-auto mb-4">
-              <div className="p-2 bg-blue-100 text-blue-700 rounded-lg">
-                <FileText size={20} />
-              </div>
-              <div className="text-left">
-                <p className="text-xs text-blue-500 font-bold uppercase tracking-wider">Tab được phép truy cập</p>
-                <p className="text-sm font-bold text-blue-900">{allowedTabName}</p>
-              </div>
-            </div>
-          )}
-          <span className="text-xs text-gray-400 italic max-w-sm block">
-            (*) Ban lãnh đạo, Tổ hành chính và Bộ phận Một cửa được quyền xem hồ sơ ở tất cả các tab để theo dõi tiến độ.
-          </span>
-        </div>
-      );
-    }
+    const isSubAdminAllowedTab = isViewAllowedForUser(currentUser, currentView, employees);
 
     const tabAllowedCanPerformAction = canPerformAction && isSubAdminAllowedTab;
 
@@ -525,7 +457,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   onClick={() => props.setCurrentView("completed_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "completed_list" || currentView === "archive_completed_list" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
                 >
-                  <CheckSquare size={16} /> Đã thực hiện
+                  <CheckSquare size={16} /> Đang thực hiện
                 </button>
 
                 <button
@@ -598,14 +530,14 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   onClick={() => props.setCurrentView("registration_completed_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_completed_list" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
                 >
-                  <CheckSquare size={16} /> Phiếu chuyển
+                  <CheckSquare size={16} /> Đang thực hiện
                 </button>
 
                 <button
                   onClick={() => props.setCurrentView("registration_pending_check_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_pending_check_list" ? "border-orange-600 text-orange-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
                 >
-                  <ClipboardList size={16} /> Trình Ký thuế
+                  <ClipboardList size={16} /> Kiểm tra
                 </button>
               </>
             )}
@@ -615,7 +547,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 onClick={() => props.setCurrentView("registration_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
               >
-                <ClipboardList size={16} /> {isDirector ? "Chờ ký" : "Kiểm tra"}
+                <ClipboardList size={16} /> {isDirector ? "Chờ ký" : "Trình ký"}
               </button>
             )}
 
@@ -634,20 +566,12 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 isOneDoor ||
                 isTeamLeader ||
                 isViceLeader) && (
-                <>
-                  <button
-                    onClick={() => props.setCurrentView("registration_vao_so")}
-                    className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_vao_so" ? "border-indigo-600 text-indigo-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-                  >
-                    <Hash size={16} /> Vào Sổ GCN
-                  </button>
-                  <button
-                    onClick={() => props.setCurrentView("registration_handover_list")}
-                    className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
-                  >
-                    <Send size={16} /> Giao 1 cửa
-                  </button>
-                </>
+                <button
+                  onClick={() => props.setCurrentView("registration_handover_list")}
+                  className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+                >
+                  <Send size={16} /> Giao 1 cửa
+                </button>
               )}
           </div>
         )}
@@ -679,7 +603,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   onClick={() => props.setCurrentView("archive_completed_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "archive_completed_list" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
                 >
-                  <CheckSquare size={16} /> Đã thực hiện
+                  <CheckSquare size={16} /> Đang thực hiện
                 </button>
 
                 <button
@@ -746,7 +670,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               onClick={() => props.setCurrentView("congvan_completed_list")}
               className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_completed_list" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
             >
-              <CheckSquare size={16} /> Đã thực hiện
+              <CheckSquare size={16} /> Đang thực hiện
             </button>
 
             <button
@@ -841,7 +765,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
           </div>
         )}
 
-        {currentView === "registration_vao_so" ? (
+        {(currentView === "registration_vao_so" || currentView === "other_records") ? (
           <div className="flex-1 overflow-hidden flex flex-col min-h-0 bg-white">
             <VaoSoView currentUser={currentUser} wards={wards} />
           </div>

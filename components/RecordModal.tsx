@@ -129,7 +129,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
     if (currentView && [
         "registration_records", "registration_assign_tasks", "registration_completed_list", 
         "registration_pending_check_list", "registration_check_list", "registration_handover_list", 
-        "registration_director_completed", "registration_vao_so"
+        "registration_director_completed"
     ].includes(currentView)) {
         return REGISTRATION_PROCEDURES;
     }
@@ -223,7 +223,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
     const isRegView = currentView && [
       "registration_records", "registration_assign_tasks", "registration_completed_list", 
       "registration_pending_check_list", "registration_check_list", "registration_handover_list", 
-      "registration_director_completed", "registration_vao_so"
+      "registration_director_completed"
     ].includes(currentView);
 
     if (isRegView) return true;
@@ -240,7 +240,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
     const type = (formData.recordType || initialData?.recordType || '');
     if (!type) return false;
     const t = removeVietnameseTones(type).toLowerCase();
-    return ['thua ke', 'tang cho', 'chuyen nhuong', 'thoa thuan', 'chuyen muc dich khong xin phep'].some(keyword => t.includes(keyword));
+    return ['thua ke', 'tang cho', 'chuyen nhuong', 'thoa thuan', 'chuyen muc dich', 'tach thua', 'hop thua'].some(keyword => t.includes(keyword));
   }, [formData.recordType, initialData?.recordType]);
 
   useEffect(() => {
@@ -412,7 +412,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
         if (field === 'recordType') {
             const t = String(value).toLowerCase().trim();
             const isRegVal = t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
-            const isDefaultTax = ['thua ke', 'tang cho', 'chuyen nhuong', 'thoa thuan', 'chuyen muc dich khong xin phep'].some(keyword => removeVietnameseTones(String(value)).toLowerCase().includes(keyword));
+            const isDefaultTax = ['thua ke', 'tang cho', 'chuyen nhuong', 'thoa thuan', 'chuyen muc dich', 'tach thua', 'hop thua'].some(keyword => removeVietnameseTones(String(value)).toLowerCase().includes(keyword));
             if (isDefaultTax) {
                 newData.hasTax = true;
             } else if (isRegVal) {
@@ -458,6 +458,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                     initialData={initialData}
                     onSave={async (record) => {
                         onSubmit(record);
+                        onClose();
                         return record;
                     }}
                     wards={wards}

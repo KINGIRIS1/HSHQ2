@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx-js-style';
 import { RecordFile, RecordStatus, Employee, Holiday } from '../types';
 import { RECORD_TYPES, REGISTRATION_PROCEDURES } from '../constants';
 import { fetchHolidays } from '../services/api';
+import { removeVietnameseTones } from '../utils/appHelpers';
 import { X, Upload, FileSpreadsheet, Save, Loader2, AlertCircle, Check, RefreshCw, PlusCircle, AlertTriangle } from 'lucide-react';
 
 interface ImportModalProps {
@@ -11,6 +12,7 @@ interface ImportModalProps {
   onClose: () => void;
   onImport: (records: RecordFile[], mode: 'create' | 'update', onProgress?: (processed: number, total: number) => void) => Promise<boolean>;
   employees: Employee[];
+  currentView?: string;
 }
 
 // Helper: Solar date from Lunar (Giống ReceiveRecord)
@@ -32,7 +34,7 @@ const formatDateKey = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
-const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, employees }) => {
+const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, employees, currentView }) => {
   type PreviewRecord = RecordFile & { _errors?: string[] };
   const [previewData, setPreviewData] = useState<PreviewRecord[]>([]);
   const [fileName, setFileName] = useState('');
@@ -47,6 +49,22 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
   const [selectedSheet, setSelectedSheet] = useState<string>('');
 
   const [progress, setProgress] = useState<{ processed: number, total: number } | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('dat_dai');
+
+  useEffect(() => {
+    if (!currentView) return;
+    if (currentView.includes('reg_')) {
+      setSelectedTemplate('dang_ky_bien_dong');
+    } else if (currentView.includes('archive_')) {
+      setSelectedTemplate('sao_luc');
+    } else if (currentView.includes('congvan_')) {
+      setSelectedTemplate('cong_van');
+    } else if (currentView.includes('other_')) {
+      setSelectedTemplate('ho_so_khac');
+    } else {
+      setSelectedTemplate('dat_dai');
+    }
+  }, [currentView, isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -592,6 +610,10 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
               if (hasTaxCell !== undefined) {
                   const str = String(hasTaxCell).trim().toLowerCase();
                   record.hasTax = (str === 'có' || str === 'yes' || str === 'true' || str === '1');
+              } else if (record.recordType) {
+                  const t = removeVietnameseTones(record.recordType).toLowerCase();
+                  const isDefaultTax = ['thua ke', 'tang cho', 'chuyen nhuong', 'thoa thuan', 'chuyen muc dich', 'tach thua', 'hop thua'].some(keyword => t.includes(keyword));
+                  record.hasTax = isDefaultTax;
               }
 
               // 30. Chuyển DNLIS
@@ -860,9 +882,27 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
                     </div>
                 )}
 
-                <button onClick={handleDownloadTemplate} className="flex items-center gap-2 text-blue-600 bg-blue-50 px-4 py-2 rounded-lg hover:bg-blue-100 transition-colors shadow-sm font-medium border border-blue-200">
-                    <FileSpreadsheet size={18} /> Tải File Mẫu
-                </button>
+                <div className="flex items-center bg-blue-50 border border-blue-200 rounded-lg p-1 shadow-sm">
+                    <select
+                        value={selectedTemplate}
+                        onChange={(e) => setSelectedTemplate(e.target.value)}
+                        className="bg-transparent border-none text-blue-800 text-sm font-medium focus:outline-none px-2 py-1 cursor-pointer"
+                    >
+                        <option value="dat_dai">Mẫu Hồ Sơ Đất Đai</option>
+                        <option value="dang_ky_bien_dong">Mẫu Đăng Ký Biến Động</option>
+                        <option value="sao_luc">Mẫu Sao Lục Lưu Trữ</option>
+                        <option value="cong_van">Mẫu Công Văn Hành Chính</option>
+                        <option value="ho_so_khac">Mẫu Hồ Sơ Khác</option>
+                        <option value="day_du">Mẫu Đầy Đủ Các Trường</option>
+                    </select>
+                    <button 
+                        onClick={handleDownloadTemplate} 
+                        className="flex items-center gap-1.5 text-blue-600 hover:text-blue-800 transition-colors px-3 py-1 font-semibold text-sm border-l border-blue-200"
+                        title="Tải mẫu Excel đã chọn"
+                    >
+                        <FileSpreadsheet size={16} /> Tải Mẫu
+                    </button>
+                </div>
                 {fileName && <span className="text-sm text-gray-600 font-medium">{fileName}</span>}
                 {previewData.length > 0 && <div className="ml-auto flex items-center gap-2 text-sm text-blue-700 bg-blue-100 px-3 py-1.5 rounded-full">
                     <Check size={16} /> Đã đọc <strong>{previewData.length}</strong> dòng ({selectedSheet})

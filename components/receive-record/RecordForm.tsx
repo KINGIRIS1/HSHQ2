@@ -208,7 +208,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
   const isDefaultTaxProcedure = React.useCallback((type: string | null | undefined): boolean => {
       if (!type) return false;
       const t = removeVietnameseTones(type).toLowerCase();
-      return ['thua ke', 'tang cho', 'chuyen nhuong', 'thoa thuan', 'chuyen muc dich khong xin phep'].some(keyword => t.includes(keyword));
+      return ['thua ke', 'tang cho', 'chuyen nhuong', 'thoa thuan', 'chuyen muc dich', 'tach thua', 'hop thua'].some(keyword => t.includes(keyword));
   }, []);
 
   // Lọc danh sách loại hồ sơ hiển thị (tất cả các thủ tục) theo phân hệ đang làm việc
@@ -226,7 +226,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
     if (currentView && [
         "registration_records", "registration_assign_tasks", "registration_completed_list", 
         "registration_pending_check_list", "registration_check_list", "registration_handover_list", 
-        "registration_director_completed", "registration_vao_so"
+        "registration_director_completed"
     ].includes(currentView)) {
         return REGISTRATION_PROCEDURES;
     }
@@ -557,12 +557,24 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
         if (field === 'hasTax' && !value) {
             newData.transferToDNLis = false;
         }
+        if (field === 'assignedTo') {
+            if (value) {
+                newData.status = RecordStatus.IN_PROGRESS;
+                newData.currentStepIndex = 0;
+                newData.assignedDate = new Date().toISOString();
+            } else {
+                newData.status = RecordStatus.RECEIVED;
+                newData.currentStepIndex = null;
+                newData.assignedDate = null;
+            }
+        }
         if (field === 'recordType' || field === 'receivedDate' || field === 'hasTax' || field === 'transferToDNLis') {
             const rType = newData.recordType;
             const rDate = newData.receivedDate;
             const hTax = newData.hasTax;
             if (rType && rDate) newData.deadline = calculateDeadline(rType, rDate, hTax);
         }
+
         
         if (field === 'recordType') {
             const valLower = String(value).toLowerCase();
@@ -814,6 +826,54 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                             )}
                         </div>
 
+                        {isRegistration(formData.recordType) && (
+                            <div className="bg-blue-50/30 border border-blue-100/80 rounded-lg p-3 grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
+                                <div>
+                                    <label className="block text-xs font-bold text-blue-800 mb-1">Cấu hình Quy trình Cấp giấy</label>
+                                    <select
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs bg-white font-medium text-gray-700"
+                                        value={formData.gcnWorkflowType || ''}
+                                        onChange={(e) => {
+                                            const val = e.target.value || null;
+                                            handleChange('gcnWorkflowType', val);
+                                            if (val === 'quy_trinh_4') {
+                                                handleChange('hasConcurrentTransfer', false);
+                                                handleChange('hasTax', false);
+                                            } else if (val === 'quy_trinh_5') {
+                                                handleChange('hasConcurrentTransfer', true);
+                                                handleChange('hasTax', true);
+                                            }
+                                        }}
+                                    >
+                                        <option value="">-- Tự động nhận diện quy trình --</option>
+                                        <option value="quy_trinh_1">Quy trình 1: DNLIS</option>
+                                        <option value="quy_trinh_2">Quy trình 2: Phiếu chuyển thuế</option>
+                                        <option value="quy_trinh_3">Quy trình 3: In GCN</option>
+                                        <option value="quy_trinh_4">Quy trình 4: Cấp Lại In GCN</option>
+                                        <option value="quy_trinh_5">Quy trình 5: Cấp Lại Có thuế</option>
+                                    </select>
+                                </div>
+                                
+                                {(formData.gcnWorkflowType === 'quy_trinh_4' || (!formData.gcnWorkflowType && (formData.recordType || '').toLowerCase().includes('cấp lại'))) && (
+                                    <div className="animate-fade-in">
+                                        <label className="block text-xs font-bold text-teal-800 mb-1">Có chuyển nhượng đồng thời?</label>
+                                        <select
+                                            className="w-full border border-teal-200 rounded-md px-3 py-2 text-xs bg-teal-50 font-bold text-teal-800"
+                                            value={formData.hasConcurrentTransfer === true ? 'true' : formData.hasConcurrentTransfer === false ? 'false' : ''}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                handleChange('hasConcurrentTransfer', val === 'true' ? true : val === 'false' ? false : null);
+                                            }}
+                                        >
+                                            <option value="">-- Chọn trạng thái chuyển nhượng --</option>
+                                            <option value="false">Không chuyển nhượng đồng thời</option>
+                                            <option value="true">Có chuyển nhượng đồng thời (Có thuế)</option>
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {/* Row 2: Ngày nhận, Hẹn trả, Ngày giao NV, Trạng thái */}
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                             <div>
@@ -922,6 +982,54 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                                 </div>
                             )}
                         </div>
+
+                        {isRegistration(formData.recordType) && (
+                            <div className="bg-blue-50/30 border border-blue-100/80 rounded-lg p-3 grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
+                                <div>
+                                    <label className="block text-xs font-bold text-blue-800 mb-1">Cấu hình Quy trình Cấp giấy</label>
+                                    <select
+                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs bg-white font-medium text-gray-700"
+                                        value={formData.gcnWorkflowType || ''}
+                                        onChange={(e) => {
+                                            const val = e.target.value || null;
+                                            handleChange('gcnWorkflowType', val);
+                                            if (val === 'quy_trinh_4') {
+                                                handleChange('hasConcurrentTransfer', false);
+                                                handleChange('hasTax', false);
+                                            } else if (val === 'quy_trinh_5') {
+                                                handleChange('hasConcurrentTransfer', true);
+                                                handleChange('hasTax', true);
+                                            }
+                                        }}
+                                    >
+                                        <option value="">-- Tự động nhận diện quy trình --</option>
+                                        <option value="quy_trinh_1">Quy trình 1: DNLIS</option>
+                                        <option value="quy_trinh_2">Quy trình 2: Phiếu chuyển thuế</option>
+                                        <option value="quy_trinh_3">Quy trình 3: In GCN</option>
+                                        <option value="quy_trinh_4">Quy trình 4: Cấp Lại In GCN</option>
+                                        <option value="quy_trinh_5">Quy trình 5: Cấp Lại Có thuế</option>
+                                    </select>
+                                </div>
+                                
+                                {((formData.gcnWorkflowType === 'quy_trinh_4' || formData.gcnWorkflowType === 'quy_trinh_5') || (!formData.gcnWorkflowType && (formData.recordType || '').toLowerCase().includes('cấp lại'))) && (
+                                    <div className="animate-fade-in">
+                                        <label className="block text-xs font-bold text-teal-800 mb-1">Có chuyển nhượng đồng thời?</label>
+                                        <select
+                                            className="w-full border border-teal-200 rounded-md px-3 py-2 text-xs bg-teal-50 font-bold text-teal-800"
+                                            value={formData.hasConcurrentTransfer === true ? 'true' : formData.hasConcurrentTransfer === false ? 'false' : ''}
+                                            onChange={(e) => {
+                                                const val = e.target.value;
+                                                handleChange('hasConcurrentTransfer', val === 'true' ? true : val === 'false' ? false : null);
+                                            }}
+                                        >
+                                            <option value="">-- Chọn trạng thái chuyển nhượng --</option>
+                                            <option value="false">Không chuyển nhượng đồng thời</option>
+                                            <option value="true">Có chuyển nhượng đồng thời (Có thuế)</option>
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         {/* Row 2: Mã hồ sơ, Ngày nhận, Hẹn trả */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

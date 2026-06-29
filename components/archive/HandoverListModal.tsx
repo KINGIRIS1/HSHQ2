@@ -240,7 +240,13 @@ const HandoverListModal: React.FC<HandoverListModalProps> = ({
                 <input
                   type="text"
                   value={receiptNumber}
-                  onChange={(e) => setReceiptNumber(e.target.value)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setReceiptNumber(val);
+                    if (val.trim()) {
+                      setPaymentStatus("Đã thu");
+                    }
+                  }}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-500 outline-none font-mono"
                   placeholder={receiptType === "receipt" ? "Nhập số biên lai..." : "Nhập số hóa đơn..."}
                 />

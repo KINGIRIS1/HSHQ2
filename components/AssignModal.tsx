@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { Employee, RecordFile, User, UserRole } from '../types';
 import { X, Check, MapPin, User as UserIcon, Users, Search, FolderOpen, Compass, Award, FileCheck } from 'lucide-react';
-import { removeVietnameseTones } from '../utils/appHelpers';
+import { removeVietnameseTones, isRegType } from '../utils/appHelpers';
 
 interface AssignModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (employeeId: string) => void;
+  onConfirm: (employeeId: string, workflowType?: string | null) => void;
   employees: Employee[];
   selectedRecords: RecordFile[];
   filterDepartment?: string; // Lọc theo phòng ban mặc định dưa trên luồng
@@ -189,80 +189,49 @@ export const getRoleCategory = (position?: string): { key: string; label: string
 // Hàm kiểm tra quyền xem view/tab tương ứng với Tổ & Vai trò
 export const isViewAllowedForUser = (currentUser: User | null, viewId: string, employees: Employee[]): boolean => {
   if (!currentUser) return true;
-  if (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.SUBADMIN) return true;
-
-  // Lấy thông tin nhân viên tương ứng
-  const emp = employees?.find(e => e.id === currentUser.employeeId);
-  const teamName = emp ? getEmployeeTeam(emp) : '';
-  const cat = emp ? getRoleCategory(emp.position) : { key: 'staff' };
-
-  // Ngoại lệ: "đối với tổ hành chính, ban giám đốc và nhân viên một cửa được quyền coi hết"
+  
+  // ADMIN, SUBADMIN, and TEAM_LEADER have full access to all views/tabs
   if (
-    teamName === 'Tổ Hành chính' || 
-    teamName === 'Ban Giám đốc' || 
-    currentUser.role === UserRole.ONEDOOR
+    currentUser.role === UserRole.ADMIN || 
+    currentUser.role === UserRole.SUBADMIN || 
+    currentUser.role === UserRole.TEAM_LEADER
   ) {
     return true;
   }
 
-  const isLeaderOrVice = cat.key === 'leader' || cat.key === 'vice_leader' || currentUser.role === UserRole.TEAM_LEADER;
-  const isStaff = !isLeaderOrVice;
-
-  const congvanViews = ['congvan_records', 'congvan_assign_tasks', 'congvan_completed_list', 'congvan_pending_check_list', 'congvan_check_list', 'congvan_handover_list', 'congvan_director_completed'];
-
-  // 1. "đối với nhân viên chỉ xem được cá nhân, tiện ích và lịch công tác của tổ mình"
-  if (isStaff) {
-    const allowedStaffViews = [
-      'personal_profile',
-      'utilities',
-      'work_schedule',
-      'dashboard',
-      'internal_chat',
-      'account_settings'
-    ];
-    if (teamName === 'Tổ Lưu trữ' && congvanViews.includes(viewId)) {
-      return true;
-    }
-    return allowedStaffViews.includes(viewId);
+  // ONEDOOR has full access to all views/tabs
+  if (currentUser.role === UserRole.ONEDOOR) {
+    return true;
   }
 
-  // 2. "tổ trưởng/tổ phó sẽ xem được: báo cáo, tất cả của cá nhân và tab hồ sơ của tổ mình không xem qua tổ khác được"
+  // Get employee and their details
+  const emp = employees?.find(e => e.id === currentUser.employeeId);
+  const teamName = emp ? getEmployeeTeam(emp) : '';
+  const cat = emp ? getRoleCategory(emp.position) : { key: 'staff' };
+
+  // If they are leader or vice leader, they also have full access
+  const isLeaderOrVice = cat.key === 'leader' || cat.key === 'vice_leader';
   if (isLeaderOrVice) {
-    const allowedGeneralLeaderViews = [
-      'reports',
-      'personal_profile',
-      'dashboard',
-      'internal_chat',
-      'work_schedule',
-      'utilities',
-      'account_settings'
-    ];
-
-    if (allowedGeneralLeaderViews.includes(viewId)) {
-      return true;
-    }
-
-    const measurementViews = ['all_records', 'assign_tasks', 'completed_list', 'pending_check_list', 'check_list', 'handover_list', 'director_completed'];
-    const registrationViews = ['registration_records', 'registration_assign_tasks', 'registration_completed_list', 'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 'registration_director_completed', 'registration_vao_so'];
-    const archiveViews = ['archive_records', 'archive_assign_tasks', 'archive_completed_list', 'archive_pending_check_list', 'archive_check_list', 'archive_handover_list', 'archive_director_completed'];
-    const otherViews = ['other_records', 'other_assign_tasks', 'other_completed_list', 'other_pending_check_list', 'other_check_list', 'other_handover_list', 'other_director_completed'];
-
-    if (teamName === 'Tổ Đo đạc') {
-      return measurementViews.includes(viewId);
-    } else if (teamName === 'Tổ Cấp giấy') {
-      return registrationViews.includes(viewId);
-    } else if (teamName === 'Tổ Lưu trữ') {
-      return archiveViews.includes(viewId) || viewId === 'excerpt_management' || congvanViews.includes(viewId);
-    }
-
-    // Mặc định chặn các tab hồ sơ khác của tổ khác
-    const allRecordTabs = [...measurementViews, ...registrationViews, ...archiveViews, ...congvanViews, ...otherViews, 'excerpt_management'];
-    if (allRecordTabs.includes(viewId)) {
-      return false;
-    }
+    return true;
   }
 
-  return true;
+  // Standard employee/staff views
+  const allowedStaffViews = [
+    'personal_profile',
+    'utilities',
+    'work_schedule',
+    'dashboard',
+    'internal_chat',
+    'account_settings'
+  ];
+  
+  const congvanViews = ['congvan_records', 'congvan_assign_tasks', 'congvan_completed_list', 'congvan_pending_check_list', 'congvan_check_list', 'congvan_handover_list', 'congvan_director_completed'];
+  
+  if (teamName === 'Tổ Lưu trữ' && congvanViews.includes(viewId)) {
+    return true;
+  }
+  
+  return allowedStaffViews.includes(viewId);
 };
 
 const AssignModal: React.FC<AssignModalProps> = ({ 
@@ -277,6 +246,11 @@ const AssignModal: React.FC<AssignModalProps> = ({
   const [selectedEmpId, setSelectedEmpId] = useState<string>('');
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedWorkflow, setSelectedWorkflow] = useState<string>('');
+
+  const hasGcnRecords = useMemo(() => {
+    return (selectedRecords || []).some(r => isRegType(r.recordType));
+  }, [selectedRecords]);
 
   // Tự động xác định địa bàn mục tiêu từ các hồ sơ được chọn để đề xuất cá nhân phụ trách đúng tuyến
   const targetWardName = useMemo(() => {
@@ -328,6 +302,12 @@ const AssignModal: React.FC<AssignModalProps> = ({
       setSelectedEmpId('');
       setSearchTerm('');
       
+      if (selectedRecords && selectedRecords.length > 0) {
+        setSelectedWorkflow(selectedRecords[0].gcnWorkflowType || 'quy_trinh_1');
+      } else {
+        setSelectedWorkflow('quy_trinh_1');
+      }
+      
       let defaultTeam = '';
       if (currentUser && currentUser.employeeId) {
         const empObj = employees.find(e => e.id === currentUser.employeeId);
@@ -352,7 +332,7 @@ const AssignModal: React.FC<AssignModalProps> = ({
       
       setSelectedTeam(defaultTeam);
     }
-  }, [isOpen, currentUser, employees, filterDepartment]);
+  }, [isOpen, currentUser, employees, filterDepartment, selectedRecords]);
 
   // Lọc danh sách nhân viên trong Tổ được chọn dưa theo thanh tìm kiếm
   const filteredEmployeesOfTeam = useMemo(() => {
@@ -524,6 +504,64 @@ const AssignModal: React.FC<AssignModalProps> = ({
                 </div>
               )}
 
+              {/* GCN Workflow Selection */}
+              {hasGcnRecords && (
+                <div className="bg-slate-50 border border-blue-200 rounded-xl p-4 shadow-sm space-y-3">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-blue-100 p-1.5 rounded-lg text-blue-600">
+                      <FileCheck size={16} />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                        Chọn quy trình thực hiện (Căn cứ hồ sơ giấy)
+                      </h4>
+                      <p className="text-[11px] text-gray-500 font-medium">
+                        Căn cứ hồ sơ giấy thực tế để chỉ định quy trình thụ lý và các bước xử lý tương ứng cho nhân viên.
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    {[
+                      { id: 'quy_trinh_1', title: 'Quy trình 1: DNLIS', desc: 'DNLIS (8h) - Chuyển thuế (16h) - In GCN (5 ngày)' },
+                      { id: 'quy_trinh_2', title: 'Quy trình 2: Chuyển thuế', desc: 'Phiếu chuyển thuế (24h) - In GCN (5 ngày)' },
+                      { id: 'quy_trinh_3', title: 'Quy trình 3: In GCN', desc: 'In GCN (5 ngày) - Thẩm tra (8h) - Ký/Vô số (4h/4h)' },
+                      { id: 'quy_trinh_4', title: 'Quy trình 4: Cấp Lại In GCN', desc: 'Công văn xã (30 ngày) - In GCN (5 ngày)' },
+                      { id: 'quy_trinh_5', title: 'Quy trình 5: Cấp Lại Có thuế', desc: 'Công văn xã (30 ngày) - Thuế (16h) - In GCN (5 ngày)' },
+                    ].map((flow) => {
+                      const isFlowSelected = selectedWorkflow === flow.id;
+                      return (
+                        <div
+                          key={flow.id}
+                          onClick={() => setSelectedWorkflow(flow.id)}
+                          className={`cursor-pointer p-3 rounded-xl border text-left transition-all duration-200 relative flex flex-col justify-between ${
+                            isFlowSelected
+                              ? 'border-blue-600 bg-blue-50/75 shadow-sm ring-2 ring-blue-100'
+                              : 'border-gray-200 bg-white hover:border-blue-400 hover:shadow-xs'
+                          }`}
+                        >
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className={`text-xs font-black ${isFlowSelected ? 'text-blue-700' : 'text-slate-800'}`}>
+                                {flow.title}
+                              </span>
+                              {isFlowSelected && (
+                                <div className="w-2.5 h-2.5 rounded-full bg-blue-600 flex items-center justify-center">
+                                  <div className="w-1 h-1 rounded-full bg-white"></div>
+                                </div>
+                              )}
+                            </div>
+                            <p className="text-[10px] text-gray-500 font-medium leading-relaxed">
+                              {flow.desc}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {sortedEmployees.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 animate-fade-in">
                   {sortedEmployees.map(emp => {
@@ -566,7 +604,7 @@ const AssignModal: React.FC<AssignModalProps> = ({
                     Hủy bỏ
                 </button>
                 <button 
-                    onClick={() => selectedEmpId && onConfirm(selectedEmpId)}
+                    onClick={() => selectedEmpId && onConfirm(selectedEmpId, hasGcnRecords ? selectedWorkflow : undefined)}
                     disabled={!selectedEmpId}
                     className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-black shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 transition-all active:scale-95 flex items-center gap-2"
                 >

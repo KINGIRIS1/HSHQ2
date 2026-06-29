@@ -310,7 +310,7 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
     setShowAssignModal(true);
   };
 
-  const handleConfirmAssign = async (employeeId: string) => {
+  const handleConfirmAssign = async (employeeId: string, workflowType?: string | null) => {
     const historyEntry = {
       action: "Giao việc",
       status: "assigned",
@@ -1613,12 +1613,14 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
                         type="text"
                         className="w-full border border-green-300 bg-white rounded-lg px-3 py-2 text-sm outline-none font-mono"
                         value={formData.receipt_number || ""}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          const val = e.target.value;
                           setFormData({
                             ...formData,
-                            receipt_number: e.target.value,
-                          })
-                        }
+                            receipt_number: val,
+                            payment_status: val.trim() ? "Đã thu" : formData.payment_status,
+                          });
+                        }}
                         placeholder="Số biên lai..."
                       />
                     </div>

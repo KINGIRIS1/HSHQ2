@@ -57,7 +57,7 @@ const DailyList: React.FC<DailyListProps> = ({
 }) => {
   const [filterDate, setFilterDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedDepts, setSelectedDepts] = useState<string[]>([]); // State "Bộ phận"
+  const [selectedDept, setSelectedDept] = useState<string>('Toàn bộ'); // State "Bộ phận"
   
   // Row selection states
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -150,7 +150,7 @@ const DailyList: React.FC<DailyListProps> = ({
           };
           // Bỏ chức năng chọn toàn bộ mặc định. Tích bộ nào hiển thị bộ đó, không tích bộ nào thì không hiển thị.
           const rDept = getRecordDepartment(r);
-          if (!selectedDepts.includes(rDept)) return false;
+          if (selectedDept !== 'Toàn bộ' && rDept !== selectedDept) return false;
 
           // 3. Tìm kiếm từ khóa
           if (searchTerm) {
@@ -171,12 +171,12 @@ const DailyList: React.FC<DailyListProps> = ({
           const codeB = (b.code || '').toUpperCase();
           return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
       });
-  }, [records, filterDate, searchTerm, selectedDepts, currentUser]);
+  }, [records, filterDate, searchTerm, selectedDept, currentUser]);
 
   // Luôn bỏ tích chọn khi thay đổi ngày, bộ phận lọc để tránh nhầm lẫn (bỏ records ra để tránh xóa khi đồng bộ)
   React.useEffect(() => {
       setSelectedIds(new Set());
-  }, [filterDate, selectedDepts]);
+  }, [filterDate, selectedDept]);
 
   // --- COMPUTE SELECTED RECORDS FOR ASSIGN ---
   const selectedRecordsForAssign = useMemo(() => {
@@ -207,7 +207,7 @@ const DailyList: React.FC<DailyListProps> = ({
   };
 
   // --- BULK ASSIGN HANDLER ---
-  const handleAssignConfirm = async (employeeId: string) => {
+  const handleAssignConfirm = async (employeeId: string, workflowType?: string | null) => {
       if (!onSave) {
           alert("Lỗi: Chức năng lưu chưa được tích hợp.");
           return;
@@ -226,6 +226,9 @@ const DailyList: React.FC<DailyListProps> = ({
                   approvalDate: null,
                   completedDate: null,
               };
+              if (workflowType) {
+                  updatedRecord.gcnWorkflowType = workflowType;
+              }
               const result = await onSave(updatedRecord);
               if (result) {
                   successCount++;
@@ -596,43 +599,19 @@ const DailyList: React.FC<DailyListProps> = ({
                 /> 
             </div>
 
-            {/* Bộ phận Checkboxes Filter */}
-            <div className="flex items-center gap-3 bg-gray-50 px-3 py-1.5 border border-gray-200 rounded-lg">
+            {/* Bộ phận Select Filter */}
+            <div className="flex items-center gap-2">
                 <span className="text-sm font-semibold text-gray-700">Bộ phận:</span>
-                
-                <label className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-bold text-gray-700">
-                    <input 
-                        type="checkbox"
-                        checked={selectedDepts.length === DEPARTMENTS.length}
-                        onChange={(e) => {
-                            if (e.target.checked) {
-                                setSelectedDepts([...DEPARTMENTS]);
-                            } else {
-                                setSelectedDepts([]);
-                            }
-                        }}
-                        className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
-                    />
-                    <span>Toàn bộ</span>
-                </label>
-
-                {DEPARTMENTS.map(dept => (
-                    <label key={dept} className="flex items-center gap-1.5 cursor-pointer select-none text-xs font-semibold text-gray-700">
-                        <input 
-                            type="checkbox"
-                            checked={selectedDepts.includes(dept)}
-                            onChange={(e) => {
-                                if (e.target.checked) {
-                                    setSelectedDepts(prev => [...prev, dept]);
-                                } else {
-                                    setSelectedDepts(prev => prev.filter(d => d !== dept));
-                                }
-                            }}
-                            className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
-                        />
-                        <span>{dept}</span>
-                    </label>
-                ))}
+                <select
+                    value={selectedDept}
+                    onChange={(e) => setSelectedDept(e.target.value)}
+                    className="pl-3 pr-8 py-1.5 border border-gray-300 rounded text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer font-semibold text-gray-700"
+                >
+                    <option value="Toàn bộ">Toàn bộ</option>
+                    {DEPARTMENTS.map(dept => (
+                        <option key={dept} value={dept}>{dept}</option>
+                    ))}
+                </select>
             </div>
 
             {/* Bulk actions matching layout */}
