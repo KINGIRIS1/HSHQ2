@@ -367,7 +367,10 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
     }
 
     if (finalData.status === RecordStatus.WITHDRAWN && !finalData.completedDate) finalData.completedDate = new Date().toISOString();
-    if (finalData.status === RecordStatus.REJECTED && !finalData.completedDate) finalData.completedDate = new Date().toISOString();
+    if (finalData.status === RecordStatus.REJECTED) {
+        if (!finalData.completedDate) finalData.completedDate = new Date().toISOString();
+        if (!finalData.rejectDate) finalData.rejectDate = new Date().toISOString();
+    }
     
     if (finalData.resultReturnedDate && finalData.status !== RecordStatus.RETURNED) {
         finalData.status = RecordStatus.RETURNED;
@@ -522,6 +525,20 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                                 
                                 {(formData.status === RecordStatus.HANDOVER || formData.status === RecordStatus.WITHDRAWN || formData.status === RecordStatus.RETURNED || formData.status === RecordStatus.REJECTED || formData.exportBatch) && (
                                     <div><label className="block text-xs font-bold text-green-700 mb-1">{formData.status === RecordStatus.WITHDRAWN ? 'Ngày rút hồ sơ' : formData.status === RecordStatus.REJECTED ? 'Ngày trả hồ sơ' : 'Ngày hoàn thành'}</label><input type="date" className="w-full border border-green-300 rounded-md px-3 py-2 bg-green-50 font-semibold text-green-800" value={dateVal(formData.completedDate)} onChange={(e) => handleChange('completedDate', e.target.value)} /></div>
+                                )}
+                                
+                                {formData.status === RecordStatus.REJECTED && (
+                                    <div className="col-span-full">
+                                        <label className="block text-xs font-bold text-red-700 mb-1">Lý do trả hồ sơ <span className="text-red-500">*</span></label>
+                                        <textarea 
+                                            required
+                                            className="w-full border border-red-300 rounded-md px-3 py-2 bg-red-50 font-medium text-red-950 placeholder-red-400" 
+                                            rows={2}
+                                            placeholder="Nhập lý do trả hồ sơ chi tiết..."
+                                            value={val(formData.rejectReason)} 
+                                            onChange={(e) => handleChange('rejectReason', e.target.value)} 
+                                        />
+                                    </div>
                                 )}
                                 
                                 {/* Thêm trường hiển thị Ngày Trình Ký và Ngày Ký Duyệt nếu trạng thái tương ứng hoặc đã có giá trị */}

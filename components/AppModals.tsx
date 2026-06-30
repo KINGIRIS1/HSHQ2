@@ -111,6 +111,7 @@ const AppModals: React.FC<AppModalsProps> = (props) => {
                 onClose={() => props.setIsImportModalOpen(false)} 
                 onImport={props.handleImportRecords} 
                 employees={props.employees} 
+                currentView={props.currentView}
             />
             
             <AssignModal 

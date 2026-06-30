@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { RecordFile, RecordStatus, User, Employee, RolePermissions, DEFAULT_ROLE_PERMISSIONS, UserRole } from '../types';
+import { RecordFile, RecordStatus, User, Employee, RolePermissions, DEFAULT_ROLE_PERMISSIONS, UserRole, Holiday } from '../types';
 import { getEmployeeTeam } from './AssignModal';
 import StatusBadge from './StatusBadge';
 import { Briefcase, ArrowRight, CheckCircle, Clock, Send, AlertTriangle, UserCog, ChevronLeft, ChevronRight, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Bell, CalendarClock, FileCheck, Map, CheckSquare, ClipboardList, FileDown, RotateCcw, CornerUpLeft, FileSignature } from 'lucide-react';
@@ -28,6 +28,7 @@ interface PersonalProfileProps {
   onViewRecord: (record: RecordFile) => void;
   onCreateLiquidation?: (record: RecordFile) => void; 
   onMapCorrection?: (record: RecordFile) => void; // New Handler Prop
+  holidays?: Holiday[];
 }
 
 function removeVietnameseTones(str: string): string {
@@ -57,7 +58,7 @@ const isRegType = (type: string | null | undefined): boolean => {
     return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
 };
 
-const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDirector, users, employees, rolePermissions, onUpdateStatus, onUpdateRecord, onViewRecord, onCreateLiquidation, onMapCorrection }) => {
+const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDirector, users, employees, rolePermissions, onUpdateStatus, onUpdateRecord, onViewRecord, onCreateLiquidation, onMapCorrection, holidays }) => {
   const effectiveId = useMemo(() => {
     if (user.employeeId) return user.employeeId;
     // Tự động tìm nhân viên trùng khớp với tên hoặc tên đăng nhập của user nếu employeeId rỗng
@@ -264,12 +265,21 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
       return emp.department?.toLowerCase().includes('đo đạc') || emp.department?.toLowerCase().includes('kỹ thuật') || emp.position?.toLowerCase().includes('đo đạc');
   }, [user.employeeId, employees]);
 
-  // 1. Hồ sơ Đang thực hiện (ASSIGNED, IN_PROGRESS, COMPLETED_WORK, REJECTED)
+  // 1. Hồ sơ Đang thực hiện (ASSIGNED, IN_PROGRESS, COMPLETED_WORK, REJECTED, and also PENDING_CHECK, CHECKED, PENDING_SIGN if assigned to user so they can track/withdraw)
   const pendingRecords = useMemo(() => {
-      let list = myRecords.filter(r => 
-          (r.status === RecordStatus.ASSIGNED || r.status === RecordStatus.IN_PROGRESS || r.status === RecordStatus.COMPLETED_WORK || r.status === RecordStatus.REJECTED) &&
-          r.assignedTo === effectiveId
-      );
+      let list = myRecords.filter(r => {
+          const isAssigned = r.assignedTo === effectiveId;
+          const isPendingOrActiveStatus = 
+              r.status === RecordStatus.ASSIGNED || 
+              r.status === RecordStatus.IN_PROGRESS || 
+              r.status === RecordStatus.COMPLETED_WORK || 
+              r.status === RecordStatus.REJECTED ||
+              r.status === RecordStatus.PENDING_CHECK ||
+              r.status === RecordStatus.CHECKED ||
+              r.status === RecordStatus.PENDING_SIGN;
+          
+          return isAssigned && isPendingOrActiveStatus;
+      });
       return filterAndSort(list, searchTerm, sortConfig);
   }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
@@ -745,6 +755,36 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                  const saoluc = await fetchArchiveRecords('saoluc');
                  const congvan = await fetchArchiveRecords('congvan');
                  setArchiveRecords([...saoluc, ...congvan]);
+            }
+        } else if (isRegType(record.recordType)) {
+            const workflow = getGcnWorkflowStepsHelper(record, holidays || []);
+            let currentIdx = record.currentStepIndex;
+            if (currentIdx === undefined || currentIdx === null) {
+                currentIdx = 0;
+            }
+            if (currentIdx > 0) {
+                const prevIdx = currentIdx - 1;
+                const prevStep = workflow.steps[prevIdx];
+                if (onUpdateRecord) {
+                    await onUpdateRecord({
+                        ...record,
+                        currentStepIndex: prevIdx,
+                        status: prevStep.overallStatus,
+                        notes: updatedNotes
+                    });
+                } else {
+                    onUpdateStatus(record, prevStep.overallStatus);
+                }
+            } else {
+                if (onUpdateRecord) {
+                    await onUpdateRecord({
+                        ...record,
+                        status: RecordStatus.ASSIGNED,
+                        notes: updatedNotes
+                    });
+                } else {
+                    onUpdateStatus(record, RecordStatus.ASSIGNED);
+                }
             }
         } else {
             if (onUpdateRecord) {
@@ -1381,18 +1421,26 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                             {/* Logic nút chuyển trạng thái theo từng Tab */}
                                             {activeTab === 'pending' && (
                                                 <>
-                                                    {(r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn') ? (
-                                                        <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
-                                                            <Send size={14} /> Trình ký
+                                                    {r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED || r.status === RecordStatus.PENDING_SIGN ? (
+                                                        <button onClick={() => handleWithdraw(r)} title="Thu hồi hồ sơ" className="px-3 py-1.5 bg-gray-600 text-white rounded-md hover:bg-gray-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                            <RotateCcw size={14} /> Thu hồi
                                                         </button>
                                                     ) : (
-                                                        <button onClick={() => handleForwardToCheck(r)} title="Trình kiểm tra" className="px-3 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
-                                                            <ClipboardList size={14} /> Trình kiểm tra
-                                                        </button>
+                                                        <>
+                                                            {(r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn') ? (
+                                                                <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                                    <Send size={14} /> Trình ký
+                                                                </button>
+                                                            ) : (
+                                                                <button onClick={() => handleForwardToCheck(r)} title="Trình kiểm tra" className="px-3 py-1.5 bg-orange-600 text-white rounded-md hover:bg-orange-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                                    <ClipboardList size={14} /> Trình kiểm tra
+                                                                </button>
+                                                            )}
+                                                            <button onClick={() => handleOpenRejectModal(r)} title="Trả hồ sơ" className="px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                                <AlertTriangle size={14} /> Trả hồ sơ
+                                                            </button>
+                                                        </>
                                                     )}
-                                                    <button onClick={() => handleOpenRejectModal(r)} title="Trả hồ sơ" className="px-3 py-1.5 bg-red-600 text-white rounded-md hover:bg-red-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
-                                                        <AlertTriangle size={14} /> Trả hồ sơ
-                                                    </button>
                                                 </>
                                             )}
                                             {activeTab === 'pending_check' && (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) && (r.checkedBy === user.employeeId || r.checkedBy === effectiveId) && (

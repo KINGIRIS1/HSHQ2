@@ -25,6 +25,7 @@ const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calc
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('dat_dai');
   const bulkFileInputRef = useRef<HTMLInputElement>(null);
 
   // States for row details editor
@@ -39,26 +40,42 @@ const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calc
   const handleDownloadTemplate = () => {
       const wb = XLSX.utils.book_new();
       
-      const headers = [
-          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ THƯỜNG TRÚ', 'XÃ', 'THỬA ĐẤT SỐ', 'TỜ BẢN ĐỒ SỐ', 'DIỆN TÍCH', 'ĐẤT Ở', 'ĐẤT CLN', 'ĐẤT BHK', 'ĐẤT LUC', 'ĐẤT KHÁC', 'ĐỊA CHỈ THỬA ĐẤT', 'NƠI GIAO TRẢ KẾT QUẢ', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGƯỜI ỦY QUYỀN', 'LOẠI ỦY QUYỀN', 'NGÀY NHẬN', 'NGƯỜI TIẾP NHẬN', 'HẸN TRẢ', 'NGƯỜI XỬ LÝ', 'NGÀY GIAO', 'NGÀY ĐÃ THỰC HIỆN', 'NGÀY TRÌNH KIỂM TRA', 'NGƯỜI KIỂM TRA', 'NGÀY ĐÃ KIỂM TRA', 'NGÀY TRÌNH KÝ', 'NGƯỜI KÝ DUYỆT', 'NGÀY KÝ DUYỆT', 'NGÀY GIAO 1 CỬA', 'TRẠNG THÁI', 'ĐỢT BAN GIAO', 'NGÀY XUẤT', 'SỐ ĐO ĐẠC', 'SỐ TRÍCH LỤC', 'SỐ PHÁT HÀNH', 'SỐ VÀO SỔ', 'NGÀY CẤP SỔ', 'CÓ SAI SÓT', 'LÝ DO SAI SÓT', 'NGÀY BÁO SAI SÓT', 'LÝ DO TRẢ HỒ SƠ', 'NGÀY TRẢ HỒ SƠ', 'GHI CHÚ CHUNG', 'GHI CHÚ NỘI BỘ', 'GHI CHÚ CÁ NHÂN', 'HẸN NHẮC NHỞ', 'SỐ BIÊN LAI', 'LOẠI BIÊN LAI', 'SỐ TIỀN THU', 'NGƯỜI NHẬN KẾT QUẢ', 'NGÀY TRẢ DÂN', 'CẦN CHỈNH LÝ BẢN ĐỒ', 'HỒ SƠ CÓ THUẾ', 'CHUYỂN DNLIS', 'ĐƠN GIÁ', 'TẠM ỨNG'
-      ];
+      let headers: string[] = [];
+      let sampleData: any[][] = [];
+      let filename = 'Mau_Tiep_Nhan_Do_Dac.xlsx';
       
-      const sampleData = [
-          [
-              '', 'Nguyễn Văn A', '070012345678', '0901234567', 'Tổ 1, Tân Quan', 'Tân Quan', '123', '45', '100.5', '60', '', '', '', '', 'Tổ 1, Tân Quan', 'Tân Quan', '2.1 Trích lục', 'Xin trích lục bản đồ', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Tiếp nhận', '', '', '', '', '', '', '', 'Không', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Không', 'Không', 'Không', '310000', ''
-          ],
-          [
-              '', 'Trần Thị B', '070012345679', '0987654321', 'KP 3, Tân Khai', 'Tân Khai', '456', '78', '250.0', '100', '', '', '', '', 'KP 3, Tân Khai', 'Tân Khai', '2.3 Trích đo', 'Đo đạc cắm mốc', '', 'Lê Văn C', 'Giấy ủy quyền', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Tiếp nhận', '', '', '', '', '', '', '', 'Không', '', '', '', '', '', '', '', '', '', '', '', '', '', 'Không', 'Không', 'Không', '310000', ''
-          ]
-      ];
+      if (selectedTemplate === 'dang_ky_bien_dong') {
+          headers = [
+              'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ THƯỜNG TRÚ', 'NGƯỜI ỦY QUYỀN', 'LOẠI ỦY QUYỀN', 'XÃ', 'THỬA ĐẤT SỐ', 'TỜ BẢN ĐỒ SỐ', 'DIỆN TÍCH', 'ĐẤT Ở', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'HỒ SƠ CÓ THUẾ'
+          ];
+          sampleData = [
+              ['', 'Phạm Minh Đức', '070012345111', '0966554433', 'Tổ 5, Minh Đức', '', '', 'Minh Đức', '12', '34', '150.0', '100', '3.3 Chuyển Nhượng', 'Chuyển nhượng quyền sử dụng đất cho Nguyễn Văn Hải', 'Hợp đồng chuyển nhượng|Sổ đỏ gốc', 'Có']
+          ];
+          filename = 'Mau_Tiep_Nhan_Cap_Giay.xlsx';
+      } else if (selectedTemplate === 'sao_luc') {
+          headers = [
+              'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'SĐT', 'ĐỊA CHỈ THƯỜNG TRÚ', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'HỒ SƠ CÓ THUẾ'
+          ];
+          sampleData = [
+              ['', 'Văn phòng Đăng ký Đất đai', '02713888999', 'Số 12 Trần Hưng Đạo', 'Sao lục', 'Yêu cầu sao lục hồ sơ địa chính thửa 45 tờ 16 xã Tân Khai', 'Phiếu yêu cầu', 'Không']
+          ];
+          filename = 'Mau_Tiep_Nhan_Luu_Tru.xlsx';
+      } else {
+          headers = [
+              'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ THƯỜNG TRÚ', 'XÃ', 'THỬA ĐẤT SỐ', 'TỜ BẢN ĐỒ SỐ', 'DIỆN TÍCH', 'ĐẤT Ở', 'ĐẤT CLN', 'ĐẤT BHK', 'ĐẤT LUC', 'ĐẤT KHÁC', 'ĐỊA CHỈ THỬA ĐẤT', 'NƠI GIAO TRẢ KẾT QUẢ', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGƯỜI ỦY QUYỀN', 'LOẠI ỦY QUYỀN', 'HỒ SƠ CÓ THUẾ'
+          ];
+          sampleData = [
+              ['', 'Trần Văn Nam', '070012345678', '0901112222', 'Tổ 2, Tân Khai', 'Tân Khai', '105', '12', '120.5', '60', '', '', '', '', 'Tổ 2, Tân Khai', 'Tân Khai', '2.1 Trích lục', 'Cung cấp trích lục bản đồ phục vụ giao dịch', 'Sổ đỏ bản gốc|CCCD photo', '', '', 'Không']
+          ];
+          filename = 'Mau_Tiep_Nhan_Do_Dac.xlsx';
+      }
       
       const ws = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
       ws['!cols'] = headers.map(() => ({ wch: 18 }));
       
-      // Styling the headers in the bulk import sheet
       const headerStyle = {
           font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10, name: "Calibri" },
-          fill: { fgColor: { rgb: "2E7D32" } }, // Deep Forest Green for receiving
+          fill: { fgColor: { rgb: "2E7D32" } },
           alignment: { horizontal: "center", vertical: "center", wrapText: true },
           border: {
               top: { style: "thin", color: { rgb: "CCCCCC" } },
@@ -76,7 +93,7 @@ const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calc
       }
       
       XLSX.utils.book_append_sheet(wb, ws, "Mau_Nhap_Lieu");
-      XLSX.writeFile(wb, "Mau_Nhap_Lieu_Ho_So.xlsx");
+      XLSX.writeFile(wb, filename);
   };
 
   const handleBulkImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -158,6 +175,9 @@ const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calc
 
               const customerName = getVal(['CHỦ SỬ DỤNG', 'TÊN', 'HỌ TÊN']);
               if (!customerName) continue;
+
+              const codeValFromExcel = getVal(['MÃ HỒ SƠ', 'MÃ HS', 'CODE', 'code']);
+              const code = codeValFromExcel ? String(codeValFromExcel).trim() : '';
 
               const ward = String(getVal(['XÃ', 'PHƯỜNG', 'ĐỊA BÀN']) || '').trim() || processingWard;
               
@@ -271,7 +291,7 @@ const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calc
                   needsMapCorrection: needsMapCorrection || undefined,
                   hasTax: hasTax || undefined,
                   transferToDNLis: transferToDNLis || undefined,
-                  code: ''
+                  code: code
               });
           }
           setBulkRecords(newBulkRecords);
@@ -364,9 +384,24 @@ const BulkImport: React.FC<BulkImportProps> = ({ onSave, calculateDeadline, calc
                         </select>
                     </div>
                 )}
-                <button onClick={handleDownloadTemplate} className="bg-white text-green-700 border border-green-300 px-4 py-2 rounded-lg font-bold text-sm hover:bg-green-100 flex items-center gap-2">
-                    <Download size={16} /> Tải mẫu Excel
-                </button>
+                <div className="flex items-center bg-green-50 border border-green-200 rounded-lg p-1 shadow-sm">
+                    <select
+                        value={selectedTemplate}
+                        onChange={(e) => setSelectedTemplate(e.target.value)}
+                        className="bg-transparent border-none text-green-800 text-sm font-bold focus:outline-none px-2 py-1 cursor-pointer"
+                    >
+                        <option value="dat_dai">Mẫu Đo Đạc (Đất Đai)</option>
+                        <option value="dang_ky_bien_dong">Mẫu Cấp Giấy (Biến Động)</option>
+                        <option value="sao_luc">Mẫu Lưu Trữ (Sao Lục)</option>
+                    </select>
+                    <button 
+                        onClick={handleDownloadTemplate} 
+                        className="flex items-center gap-1.5 text-green-700 hover:text-green-900 transition-colors px-3 py-1 font-bold text-sm border-l border-green-200"
+                        title="Tải mẫu Excel đã chọn"
+                    >
+                        <Download size={16} /> Tải Mẫu
+                    </button>
+                </div>
                 <button onClick={() => bulkFileInputRef.current?.click()} className="bg-white text-blue-700 border border-blue-300 px-4 py-2 rounded-lg font-bold text-sm hover:bg-green-100 flex items-center gap-2">
                     <FileSpreadsheet size={16} /> Chọn File Excel
                 </button>

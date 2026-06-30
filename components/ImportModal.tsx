@@ -34,6 +34,16 @@ const formatDateKey = (date: Date): string => {
     return `${year}-${month}-${day}`;
 };
 
+// Helper to categorize views into main tabs: cap_giay, do_dac, luu_tru, receive (1 cửa)
+const getTabCategory = (view: string): 'cap_giay' | 'do_dac' | 'luu_tru' | 'receive' => {
+    if (!view) return 'do_dac';
+    const v = view.toLowerCase();
+    if (v === 'receive_record') return 'receive';
+    if (v.includes('registration_') || v.includes('reg_')) return 'cap_giay';
+    if (v.includes('archive_') || v.includes('congvan_')) return 'luu_tru';
+    return 'do_dac';
+};
+
 const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, employees, currentView }) => {
   type PreviewRecord = RecordFile & { _errors?: string[] };
   const [previewData, setPreviewData] = useState<PreviewRecord[]>([]);
@@ -52,19 +62,25 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
   const [selectedTemplate, setSelectedTemplate] = useState<string>('dat_dai');
 
   useEffect(() => {
-    if (!currentView) return;
-    if (currentView.includes('reg_')) {
-      setSelectedTemplate('dang_ky_bien_dong');
-    } else if (currentView.includes('archive_')) {
-      setSelectedTemplate('sao_luc');
-    } else if (currentView.includes('congvan_')) {
-      setSelectedTemplate('cong_van');
-    } else if (currentView.includes('other_')) {
-      setSelectedTemplate('ho_so_khac');
+    if (!isOpen) return;
+    if (mode === 'update') {
+      setSelectedTemplate('cap_nhat');
     } else {
-      setSelectedTemplate('dat_dai');
+      const cat = getTabCategory(currentView || '');
+      if (cat === 'cap_giay') {
+        setSelectedTemplate('dang_ky_bien_dong');
+      } else if (cat === 'luu_tru') {
+        setSelectedTemplate('sao_luc');
+      } else if (cat === 'do_dac') {
+        setSelectedTemplate('dat_dai');
+      } else {
+        // 'receive' (1 cửa) or other: default to 'dat_dai' or keep if valid for 1 door
+        if (!['dang_ky_bien_dong', 'dat_dai', 'sao_luc'].includes(selectedTemplate)) {
+          setSelectedTemplate('dat_dai');
+        }
+      }
     }
-  }, [currentView, isOpen]);
+  }, [currentView, mode, isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -370,9 +386,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
                   record.recordType = RECORD_TYPES[0];
               }
 
-              if (mode === 'create' && !record.deadline && record.recordType && record.receivedDate) {
-                  record.deadline = calculateDeadline(record.recordType, record.receivedDate);
-              }
+              // Deadline will be calculated at the end of the loop after all fields (like hasTax) are parsed
 
               if (record.recordType === 'Cung cấp tài liệu đất đai' || record.recordType === '1. Cung cấp dữ liệu đất đai') {
                   record.price = 310000;
@@ -623,11 +637,14 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
                   record.transferToDNLis = (str === 'có' || str === 'yes' || str === 'true' || str === '1');
               }
 
+              if (mode === 'create' && !record.deadline && record.recordType && record.receivedDate) {
+                  record.deadline = calculateDeadline(record.recordType, record.receivedDate, record.hasTax);
+              }
+
               record.id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
               
               if (mode === 'create') {
                   if (!record.customerName) errors.push("Thiếu tên Chủ sử dụng.");
-                  if (!record.recordType) errors.push("Thiếu Loại hồ sơ.");
               } else {
                   if (!record.code) errors.push("Thiếu Mã HS (Bắt buộc để cập nhật).");
               }
@@ -661,79 +678,21 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
   const handleDownloadTemplate = () => {
       const wb = XLSX.utils.book_new();
       
-      // 1. HUONG DAN SU DUNG
-      const instrHeaders = ["TIÊU ĐỀ / TÊN CỘT", "MÔ TẢ CHI TIẾT", "ĐỊA BÀN HOẶC ĐỊNH DẠNG", "TÍNH BẮT BUỘC"];
-      const instrRows = [
-          ["MẪU NHẬP LIỆU HỒ SƠ ĐA PHÂN HỆ QUA EXCEL", "", "", ""],
-          ["Hệ thống quản lý thông minh hồ sơ đất đai và đăng ký biến động", "", "", ""],
-          [],
-          ["[PHẦN 1] CÁC TAB BẢN MẪU HỒ SƠ CHI TIẾT:"],
-          ["- Tab '2. MAU DAY DU CAC TRUONG':", "Bản mẫu chứa đầy đủ 61 trường thông tin (tất cả các trường của hệ thống) để nhập liệu tối đa."],
-          ["- Tab '3. HO SO DAT DAI':", "Dành cho hồ sơ đo đạc, trích lục, trích đo, cấp số thửa, cung cấp dữ liệu..."],
-          ["- Tab '4. DANG KY BIEN DONG':", "Dành cho hồ sơ chuyển nhượng, tặng cho, thừa kế, thỏa thuận (quy trình 3.*)..."],
-          ["- Tab '5. SAO LUC & CONG VAN':", "Dành cho hồ sơ sao lục lưu trữ và công văn hành chính đến/đi..."],
-          ["- Tab '6. HO SO KHAC':", "Dành cho hồ sơ chuyển mục đích sử dụng (CMD), thi hành án, tòa án trưng cầu..."],
-          [],
-          ["[PHẦN 2] QUY CHUẨN ĐỊNH DẠNG HỆ THỐNG ĐỌC:"],
-          ["CHỦ SỬ DỤNG", "Họ và tên người nộp / Chủ đất. Ví dụ: Nguyễn Văn A", "Văn bản tự do", "BẮT BUỘC KHI THÊM MỚI"],
-          ["XÃ", "Tên địa bàn xã/phường nơi có thửa đất.", "Phải chọn đúng: Tân Khai, Tân Quan, Tân Hưng, Minh Đức", "BẮT BUỘC KHI THÊM MỚI"],
-          ["LOẠI HỒ SƠ", "Quy trình hồ sơ. Hệ thống dùng trường này để tự động tính thời hạn xử lý.", "VD: 2.1 Trích lục, 2.3 Trích đo, 3.3 Chuyển Nhượng, CMD, Sao lục, Công văn...", "BẮT BUỘC KHI THÊM MỚI"],
-          ["MÃ HỒ SƠ", "Mã hồ sơ định danh duy nhất.", "Cần điền chính xác nếu sử dụng chế độ 'Cập nhật thông tin'. Để trống khi Thêm mới.", "Bắt buộc khi CẬP NHẬT"],
-          ["NGÀY NHẬN", "Ngày tiếp nhận hồ sơ tại bộ phận Một cửa.", "Định dạng Ngày: YYYY-MM-DD hoặc DD/MM/YYYY (Ví dụ: 2026-06-24)", "Không bắt buộc (Tự lấy hôm nay)"],
-          ["TRẠNG THÁI", "Trạng thái hồ sơ ban đầu.", "Chọn: Tiếp nhận, Đang xử lý, Chờ kiểm tra, Đã kiểm tra, Chờ ký, Đã ký, Đã giao 1 cửa, Đã trả dân", "Không bắt buộc"],
-          [],
-          ["[PHẦN 3] QUY TẮC PHÂN BIỆT 2 CHẾ ĐỘ TRÊN HỆ THỐNG:"],
-          ["- CHẾ ĐỘ 'NHẬP HỒ SƠ MỚI':", "Thêm toàn bộ dòng mới vào hệ thống. Các trường ngày nhận, hẹn trả sẽ tự động tính nếu trống.", "", ""],
-          ["- CHẾ ĐỘ 'CẬP NHẬT THÔNG TIN':", "Sử dụng cột 'MÃ HỒ SƠ' để đối chiếu. Chỉ ghi đè dữ liệu đối với các cột xuất hiện trong file Excel.", "", ""]
-      ];
-      
-      const wsInstr = XLSX.utils.aoa_to_sheet([]);
-      XLSX.utils.sheet_add_aoa(wsInstr, instrRows, { origin: "A1" });
-      XLSX.utils.sheet_add_aoa(wsInstr, [instrHeaders], { origin: "A12" });
-      
-      wsInstr['!cols'] = [{ wch: 25 }, { wch: 45 }, { wch: 40 }, { wch: 25 }];
-      
-      if (wsInstr['A1']) {
-          wsInstr['A1'].s = {
-              font: { bold: true, color: { rgb: "1F4E79" }, sz: 14, name: "Calibri" }
-          };
-      }
-      if (wsInstr['A2']) {
-          wsInstr['A2'].s = {
-              font: { italic: true, color: { rgb: "555555" }, sz: 10, name: "Calibri" }
-          };
-      }
-      
-      const tableHeaderStyle = {
+      const headerStyle = {
           font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10, name: "Calibri" },
-          fill: { fgColor: { rgb: "5B9BD5" } },
-          alignment: { horizontal: "center", vertical: "center" }
-      };
-      
-      for (let c = 0; c < 4; c++) {
-          const cellRef = XLSX.utils.encode_cell({ r: 11, c });
-          if (wsInstr[cellRef]) {
-              wsInstr[cellRef].s = tableHeaderStyle;
+          fill: { fgColor: { rgb: "1F4E79" } },
+          alignment: { horizontal: "center", vertical: "center", wrapText: true },
+          border: {
+              top: { style: "thin", color: { rgb: "CCCCCC" } },
+              bottom: { style: "medium", color: { rgb: "1F4E79" } },
+              left: { style: "thin", color: { rgb: "CCCCCC" } },
+              right: { style: "thin", color: { rgb: "CCCCCC" } }
           }
-      }
-      
-      XLSX.utils.book_append_sheet(wb, wsInstr, '1. HUONG DAN SU DUNG');
+      };
 
       const addStyledSheet = (sheetName: string, headers: string[], rows: any[][], colWidths: number[]) => {
           const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
           ws['!cols'] = colWidths.map(w => ({ wch: w }));
-          
-          const headerStyle = {
-              font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10, name: "Calibri" },
-              fill: { fgColor: { rgb: "1F4E79" } },
-              alignment: { horizontal: "center", vertical: "center", wrapText: true },
-              border: {
-                  top: { style: "thin", color: { rgb: "CCCCCC" } },
-                  bottom: { style: "medium", color: { rgb: "1F4E79" } },
-                  left: { style: "thin", color: { rgb: "CCCCCC" } },
-                  right: { style: "thin", color: { rgb: "CCCCCC" } }
-              }
-          };
           
           for (let c = 0; c < headers.length; c++) {
               const cellRef = XLSX.utils.encode_cell({ r: 0, c });
@@ -741,63 +700,135 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
                   ws[cellRef].s = headerStyle;
               }
           }
-          
           XLSX.utils.book_append_sheet(wb, ws, sheetName);
       };
 
-      // 2. MAU TIEP NHAN DAY DU (61 TRUONG)
-      const masterHeaders = [
-          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ THƯỜNG TRÚ', 'XÃ', 'THỬA ĐẤT SỐ', 'TỜ BẢN ĐỒ SỐ', 'DIỆN TÍCH', 'ĐẤT Ở', 'ĐẤT CLN', 'ĐẤT BHK', 'ĐẤT LUC', 'ĐẤT KHÁC', 'ĐỊA CHỈ THỬA ĐẤT', 'NƠI GIAO TRẢ KẾT QUẢ', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGƯỜI ỦY QUYỀN', 'LOẠI ỦY QUYỀN', 'NGÀY NHẬN', 'NGƯỜI TIẾP NHẬN', 'HẸN TRẢ', 'NGƯỜI XỬ LÝ', 'NGÀY GIAO', 'NGÀY ĐÃ THỰC HIỆN', 'NGÀY TRÌNH KIỂM TRA', 'NGƯỜI KIỂM TRA', 'NGÀY ĐÃ KIỂM TRA', 'NGÀY TRÌNH KÝ', 'NGƯỜI KÝ DUYỆT', 'NGÀY KÝ DUYỆT', 'NGÀY GIAO 1 CỬA', 'TRẠNG THÁI', 'ĐỢT BAN GIAO', 'NGÀY XUẤT', 'SỐ ĐO ĐẠC', 'SỐ TRÍCH LỤC', 'SỐ PHÁT HÀNH', 'SỐ VÀO SỔ', 'NGÀY CẤP SỔ', 'CÓ SAI SÓT', 'LÝ DO SAI SÓT', 'NGÀY BÁO SAI SÓT', 'LÝ DO TRẢ HỒ SƠ', 'NGÀY TRẢ HỒ SƠ', 'GHI CHÚ CHUNG', 'GHI CHÚ NỘI BỘ', 'GHI CHÚ CÁ NHÂN', 'HẸN NHẮC NHỞ', 'SỐ BIÊN LAI', 'LOẠI BIÊN LAI', 'SỐ TIỀN THU', 'NGƯỜI NHẬN KẾT QUẢ', 'NGÀY TRẢ DÂN', 'CẦN CHỈNH LÝ BẢN ĐỒ', 'HỒ SƠ CÓ THUẾ', 'CHUYỂN DNLIS', 'ĐƠN GIÁ', 'TẠM ỨNG'
-      ];
-      const masterRows = [
-          [
-              'HS-MASTER-001', 'Nguyễn Chí Thanh', '070012345678', '0912345678', 'Tổ 1, Tân Khai, Hớn Quản', 'Tân Khai', '125', '15', '350.5', '100.0', '150.0', '100.5', '0.0', '0.0', 'Ấp 2, xã Tân Khai', 'Tân Khai', '2.1 Trích lục', 'Trích lục bản đồ phục vụ sang nhượng', 'Đơn xin trích lục|Sổ hồng photo', 'Nguyễn Văn B', 'Giấy ủy quyền công chứng', '2026-06-25', 'Trần Thị Hoa', '2026-06-27', 'Lê Văn Nam', '2026-06-25', '2026-06-26', '2026-06-26', 'Nguyễn Thị Hồng', '2026-06-26', '2026-06-26', 'Vũ Hoàng Quân', '2026-06-27', '2026-06-27', 'Tiếp nhận', '1', '2026-06-27', 'DD-2026-102', 'TL-2026-95', 'CC 123456', 'CH 789', '2026-06-27', 'Không', '', '', '', '', 'Khách hẹn lấy chiều', 'Cần đối chiếu thêm sổ cũ', 'Đã đo đạc kỹ', '2026-06-28', 'BL-00456', 'Biên lai', '310000', 'Nguyễn Chí Thanh', '2026-06-27', 'Không', 'Có', 'Có', '310000', '150000'
-          ]
-      ];
-      addStyledSheet('2. MAU DAY DU CAC TRUONG', masterHeaders, masterRows, masterHeaders.map(() => 18));
+      if (selectedTemplate === 'cap_nhat') {
+          // HUONG DAN SU DUNG CAP NHAT
+          const instrHeaders = ["TIÊU ĐỀ / TÊN CỘT", "MÔ TẢ CHI TIẾT", "ĐỊA BÀN HOẶC ĐỊNH DẠNG", "TÍNH BẮT BUỘC"];
+          const instrRows = [
+              ["MẪU CẬP NHẬT THÔNG TIN HỒ SƠ QUA EXCEL", "", "", ""],
+              ["Hệ thống cập nhật thông tin thông minh dựa trên Mã Hồ Sơ", "", "", ""],
+              [],
+              ["[PHẦN 1] HƯỚNG DẪN CẬP NHẬT CHUNG:"],
+              ["- Cột 'MÃ HỒ SƠ':", "Mã hồ sơ định danh duy nhất của hồ sơ cần cập nhật. Hệ thống sẽ dựa vào đây để cập nhật đúng hồ sơ."],
+              ["- Cập nhật linh hoạt:", "Chỉ cần điền các cột cần thay đổi (ví dụ: muốn đổi trạng thái thì chỉ giữ lại cột MÃ HỒ SƠ và TRẠNG THÁI)."],
+              ["- Không ghi đè trống:", "Các cột để trống trong Excel sẽ được giữ nguyên thông tin cũ trong hệ thống, không bị mất."],
+              [],
+              ["[PHẦN 2] QUY CHUẨN ĐỊNH DẠNG:"],
+              ["TRẠNG THÁI", "Chọn đúng trạng thái: Tiếp nhận, Đang xử lý, Chờ kiểm tra, Đã kiểm tra, Chờ ký, Đã ký, Đã giao 1 cửa, Đã trả dân", "Văn bản tự do", "Không bắt buộc"],
+              ["SỐ ĐO ĐẠC/TRÍCH LỤC", "Cập nhật số đo đạc hoặc số trích lục của hồ sơ chuyên môn.", "Văn bản tự do", "Không bắt buộc"],
+              ["NGÀY TRẢ DÂN", "Ngày thực tế bàn giao kết quả cho người dân.", "Định dạng Ngày: DD/MM/YYYY (Ví dụ: 27/06/2026)", "Không bắt buộc"]
+          ];
+          
+          const wsInstr = XLSX.utils.aoa_to_sheet([]);
+          XLSX.utils.sheet_add_aoa(wsInstr, instrRows, { origin: "A1" });
+          XLSX.utils.sheet_add_aoa(wsInstr, [instrHeaders], { origin: "A9" });
+          
+          wsInstr['!cols'] = [{ wch: 25 }, { wch: 50 }, { wch: 40 }, { wch: 25 }];
+          
+          if (wsInstr['A1']) {
+              wsInstr['A1'].s = { font: { bold: true, color: { rgb: "C65911" }, sz: 14, name: "Calibri" } };
+          }
+          if (wsInstr['A2']) {
+              wsInstr['A2'].s = { font: { italic: true, color: { rgb: "555555" }, sz: 10, name: "Calibri" } };
+          }
+          
+          const tableHeaderStyle = {
+              font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10, name: "Calibri" },
+              fill: { fgColor: { rgb: "F4B084" } },
+              alignment: { horizontal: "center", vertical: "center" }
+          };
+          for (let c = 0; c < 4; c++) {
+              const cellRef = XLSX.utils.encode_cell({ r: 8, c });
+              if (wsInstr[cellRef]) wsInstr[cellRef].s = tableHeaderStyle;
+          }
+          XLSX.utils.book_append_sheet(wb, wsInstr, '1. HUONG DAN CAP NHAT');
 
-      // 3. HO SO DAT DAI
-      const landHeaders = [
-          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ', 'XÃ', 'THỬA', 'TỜ', 'DIỆN TÍCH', 'ĐẤT Ở', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI'
-      ];
-      const landRows = [
-          ['HS-DAT-001', 'Trần Văn Nam', '070012345678', '0901112222', 'Tổ 2, Tân Khai', 'Tân Khai', '105', '12', '120.5', '60', '2.1 Trích lục', 'Cung cấp trích lục bản đồ phục vụ giao dịch', 'Sổ đỏ bản gốc|CCCD photo', '2026-06-20', '2026-06-24', 'Tiếp nhận'],
-          ['HS-DAT-002', 'Lê Thị Thu', '070012345679', '0988877665', 'Ấp 3, Tân Hưng', 'Tân Hưng', '88', '5', '450.0', '100', '2.3 Trích đo', 'Trích đo bản đồ phục vụ tách thửa', 'Đơn đề nghị|Sổ hồng photo', '2026-06-22', '2026-07-06', 'Đang xử lý'],
-          ['HS-DAT-003', 'Nguyễn Minh Tiến', '070012345680', '0912345678', 'Ấp 1, Tân Quan', 'Tân Quan', '215', '20', '310.2', '', '1. Cung cấp dữ liệu đất đai', 'Xin cung cấp thông tin quy hoạch sử dụng đất', 'CCCD photo', '2026-06-23', '2026-07-05', 'Tiếp nhận']
-      ];
-      addStyledSheet('3. HO SO DAT DAI', landHeaders, landRows, [14, 20, 15, 14, 22, 12, 10, 10, 12, 10, 24, 30, 25, 12, 12, 12]);
+          // CAP NHAT SHEET
+          const updateHeaders = [
+              'MÃ HỒ SƠ', 'TRẠNG THÁI', 'ĐỢT BAN GIAO', 'NGÀY XUẤT', 'SỐ ĐO ĐẠC', 'SỐ TRÍCH LỤC', 'SỐ PHÁT HÀNH', 'SỐ VÀO SỔ', 'NGÀY CẤP SỔ', 'NGƯỜI NHẬN KẾT QUẢ', 'NGÀY TRẢ DÂN', 'GHI CHÚ CHUNG'
+          ];
+          const updateRows = [
+              ['HS-DAT-001', 'Đã ký', '1', '27/06/2026', 'DD-2026-102', 'TL-2026-95', 'CC 123456', 'CH 789', '27/06/2026', 'Nguyễn Chí Thanh', '27/06/2026', 'Cập nhật thông tin thông qua mẫu Excel']
+          ];
+          addStyledSheet('2. CAP NHAT THONG TIN', updateHeaders, updateRows, [15, 15, 12, 12, 14, 14, 15, 12, 12, 20, 12, 35]);
 
-      // 4. DANG KY BIEN DONG
-      const regHeaders = [
-          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ', 'NGƯỜI ỦY QUYỀN', 'LOẠI ỦY QUYỀN', 'XÃ', 'THỬA', 'TỜ', 'DIỆN TÍCH', 'ĐẤT Ở', 'SỐ PHÁT HÀNH', 'SỐ VÀO SỔ', 'NGÀY CẤP', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI'
-      ];
-      const regRows = [
-          ['HS-BD-001', 'Phạm Minh Đức', '070012345111', '0966554433', 'Tổ 5, Minh Đức', '', '', 'Minh Đức', '12', '34', '150.0', '100', 'CC 998811', 'CH 1122', '2026-06-10', '3.3 Chuyển Nhượng', 'Chuyển nhượng quyền sử dụng đất cho Nguyễn Văn Hải', 'Hợp đồng chuyển nhượng|Sổ đỏ gốc', '2026-06-20', '2026-07-20', 'Tiếp nhận'],
-          ['HS-BD-002', 'Vũ Hoàng Quân', '070012345222', '0944332211', 'Khu phố 2, Tân Khai', 'Vũ Văn Bằng', 'Giấy ủy quyền', 'Tân Khai', '45', '16', '200.0', '200', 'DD 223344', 'CH 3344', '2026-06-12', '3.2 Tặng Cho', 'Tặng cho quyền sử dụng đất gia đình cho con trai', 'Hợp đồng tặng cho|Giấy khai sinh', '2026-06-22', '2026-07-22', 'Đang xử lý']
-      ];
-      addStyledSheet('4. DANG KY BIEN DONG', regHeaders, regRows, [14, 20, 15, 14, 22, 18, 18, 12, 10, 10, 12, 10, 15, 12, 12, 22, 30, 25, 12, 12, 12]);
+          XLSX.writeFile(wb, 'Mau_Cap_Nhat_Thong_Tin_Ho_So.xlsx');
+      } else {
+          // HUONG DAN SU DUNG NHAP MOI
+          const instrHeaders = ["TIÊU ĐỀ / TÊN CỘT", "MÔ TẢ CHI TIẾT", "ĐỊA BÀN HOẶC ĐỊNH DẠNG", "TÍNH BẮT BUỘC"];
+          const instrRows = [
+              ["MẪU NHẬP LIỆU HỒ SƠ MỚI QUA EXCEL", "", "", ""],
+              ["Hệ thống nhập liệu thông minh dành cho các bộ phận chuyên môn", "", "", ""],
+              [],
+              ["[PHẦN 1] QUY CHUẨN ĐỊNH DẠNG HỆ THỐNG ĐỌC:"],
+              ["MÃ HỒ SƠ", "Mã số định danh của hồ sơ. Nếu để trống, hệ thống sẽ tự sinh tự động.", "Định dạng chữ & số", "Không bắt buộc (Tự tạo nếu trống)"],
+              ["CHỦ SỬ DỤNG", "Họ và tên người nộp / Chủ đất. Ví dụ: Nguyễn Văn A", "Văn bản tự do", "BẮT BUỘC"],
+              ["XÃ", "Tên địa bàn xã/phường nơi có thửa đất.", "Phải chọn đúng: Tân Khai, Tân Quan, Tân Hưng, Minh Đức", "BẮT BUỘC"],
+              ["LOẠI HỒ SƠ", "Quy trình hồ sơ. Hệ thống dùng trường này để tự động tính thời hạn xử lý.", "VD: 2.1 Trích lục, 2.3 Trích đo, 3.3 Chuyển Nhượng, CMD, Sao lục, Công văn...", "BẮT BUỘC"],
+              ["HỒ SƠ CÓ THUẾ", "Đánh dấu hồ sơ có nghĩa vụ tài chính/thuế hay không để tự động cộng thêm 10 ngày xử lý.", "Điền: Có, Không, True, False hoặc để trống", "Không bắt buộc (Mặc định: Không)"]
+          ];
+          
+          const wsInstr = XLSX.utils.aoa_to_sheet([]);
+          XLSX.utils.sheet_add_aoa(wsInstr, instrRows, { origin: "A1" });
+          XLSX.utils.sheet_add_aoa(wsInstr, [instrHeaders], { origin: "A11" });
+          
+          wsInstr['!cols'] = [{ wch: 25 }, { wch: 45 }, { wch: 40 }, { wch: 25 }];
+          
+          if (wsInstr['A1']) {
+              wsInstr['A1'].s = { font: { bold: true, color: { rgb: "1F4E79" }, sz: 14, name: "Calibri" } };
+          }
+          if (wsInstr['A2']) {
+              wsInstr['A2'].s = { font: { italic: true, color: { rgb: "555555" }, sz: 10, name: "Calibri" } };
+          }
+          
+          const tableHeaderStyle = {
+              font: { bold: true, color: { rgb: "FFFFFF" }, sz: 10, name: "Calibri" },
+              fill: { fgColor: { rgb: "5B9BD5" } },
+              alignment: { horizontal: "center", vertical: "center" }
+          };
+          for (let c = 0; c < 4; c++) {
+              const cellRef = XLSX.utils.encode_cell({ r: 10, c });
+              if (wsInstr[cellRef]) wsInstr[cellRef].s = tableHeaderStyle;
+          }
+          XLSX.utils.book_append_sheet(wb, wsInstr, '1. HUONG DAN SU DUNG');
 
-      // 5. SAO LUC & CONG VAN
-      const arcHeaders = [
-          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'SĐT', 'ĐỊA CHỈ', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI', 'NGƯỜI XỬ LÝ', 'NGÀY GIAO'
-      ];
-      const arcRows = [
-          ['HS-SL-001', 'Văn phòng Đăng ký Đất đai', '02713888999', 'Số 12 Trần Hưng Đạo', 'Sao lục', 'Yêu cầu sao lục hồ sơ địa chính thửa 45 tờ 16 xã Tân Khai', 'Phiếu yêu cầu', '2026-06-23', '2026-06-25', 'Chờ kiểm tra', 'Nguyễn Thị Hoa', '2026-06-23'],
-          ['HS-CV-001', 'UBND huyện Hớn Quản', '02713777888', 'Khu hành chính huyện', 'Công văn', 'Công văn số 456/UBND về việc phối hợp đo đạc phục vụ giải phóng mặt bằng', 'Công văn đính kèm', '2026-06-24', '2026-06-26', 'Tiếp nhận', 'Trần Văn Nam', '2026-06-24']
-      ];
-      addStyledSheet('5. SAO LUC & CONG VAN', arcHeaders, arcRows, [14, 25, 14, 25, 15, 35, 20, 12, 12, 12, 18, 12]);
-
-      // 6. HO SO KHAC
-      const otherHeaders = [
-          'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ', 'XÃ', 'THỬA', 'TỜ', 'DIỆN TÍCH', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGÀY NHẬN', 'HẸN TRẢ', 'TRẠNG THÁI'
-      ];
-      const otherRows = [
-          ['HS-KHAC-001', 'Nguyễn Văn Đạt', '070012345999', '0903999888', 'Ấp 2, Tân Quan', 'Tân Quan', '72', '8', '500.0', 'CMD', 'Chuyển mục đích sử dụng đất sang đất ở', 'Đơn xin chuyển mục đích', '2026-06-24', '2026-07-24', 'Tiếp nhận'],
-          ['HS-KHAC-002', 'Tòa án Nhân dân Hớn Quản', '', '02713555444', 'Thị trấn Tân Khai', 'Tân Khai', '11', '2', '350.2', 'Tòa án', 'Trưng cầu đo đạc giải quyết tranh chấp đất đai', 'Quyết định trưng cầu', '2026-06-24', '2026-07-24', 'Tiếp nhận']
-      ];
-      addStyledSheet('6. HO SO KHAC', otherHeaders, otherRows, [14, 25, 15, 14, 25, 12, 10, 10, 12, 15, 35, 20, 12, 12, 12]);
-
-      XLSX.writeFile(wb, 'Mau_Nhap_Lieu_Da_Phan_He.xlsx');
+          if (selectedTemplate === 'dang_ky_bien_dong') {
+              // 2. DANG KY BIEN DONG / CAP GIAY
+              const regHeaders = [
+                  'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ THƯỜNG TRÚ', 'NGƯỜI ỦY QUYỀN', 'LOẠI ỦY QUYỀN', 'XÃ', 'THỬA ĐẤT SỐ', 'TỜ BẢN ĐỒ SỐ', 'DIỆN TÍCH', 'ĐẤT Ở', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'HỒ SƠ CÓ THUẾ'
+              ];
+              const regRows = [
+                  ['', 'Phạm Minh Đức', '070012345111', '0966554433', 'Tổ 5, Minh Đức', '', '', 'Minh Đức', '12', '34', '150.0', '100', '3.3 Chuyển Nhượng', 'Chuyển nhượng quyền sử dụng đất cho Nguyễn Văn Hải', 'Hợp đồng chuyển nhượng|Sổ đỏ gốc', 'Có'],
+                  ['', 'Vũ Hoàng Quân', '070012345222', '0944332211', 'Khu phố 2, Tân Khai', 'Vũ Văn Bằng', 'Giấy ủy quyền', 'Tân Khai', '45', '16', '200.0', '200', '3.2 Tặng Cho', 'Tặng cho quyền sử dụng đất gia đình cho con trai', 'Hợp đồng tặng cho|Giấy khai sinh', 'Không']
+              ];
+              addStyledSheet('2. MAU CAP GIAY NEW', regHeaders, regRows, [15, 20, 15, 14, 22, 18, 18, 12, 10, 10, 12, 10, 22, 30, 25, 15]);
+              XLSX.writeFile(wb, 'Mau_Nhap_Lieu_Cap_Giay.xlsx');
+          } else if (selectedTemplate === 'sao_luc') {
+              // 3. SAO LUC / LUU TRU
+              const arcHeaders = [
+                  'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'SĐT', 'ĐỊA CHỈ THƯỜNG TRÚ', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'HỒ SƠ CÓ THUẾ'
+              ];
+              const arcRows = [
+                  ['', 'Văn phòng Đăng ký Đất đai', '02713888999', 'Số 12 Trần Hưng Đạo', 'Sao lục', 'Yêu cầu sao lục hồ sơ địa chính thửa 45 tờ 16 xã Tân Khai', 'Phiếu yêu cầu', 'Không'],
+                  ['', 'UBND huyện Hớn Quản', '02713777888', 'Khu hành chính huyện', 'Công văn', 'Công văn số 456/UBND về việc phối hợp đo đạc phục vụ giải phóng mặt bằng', 'Công văn đính kèm', 'Không']
+              ];
+              addStyledSheet('2. MAU LUU TRU NEW', arcHeaders, arcRows, [15, 25, 14, 25, 15, 35, 20, 15]);
+              XLSX.writeFile(wb, 'Mau_Nhap_Lieu_Luu_Tru.xlsx');
+          } else {
+              // 4. DAT DAI / DO DAC (Default)
+              const landHeaders = [
+                  'MÃ HỒ SƠ', 'CHỦ SỬ DỤNG', 'CCCD', 'SĐT', 'ĐỊA CHỈ THƯỜNG TRÚ', 'XÃ', 'THỬA ĐẤT SỐ', 'TỜ BẢN ĐỒ SỐ', 'DIỆN TÍCH', 'ĐẤT Ở', 'ĐẤT CLN', 'ĐẤT BHK', 'ĐẤT LUC', 'ĐẤT KHÁC', 'ĐỊA CHỈ THỬA ĐẤT', 'NƠI GIAO TRẢ KẾT QUẢ', 'LOẠI HỒ SƠ', 'NỘI DUNG', 'GIẤY TỜ KÈM THEO', 'NGƯỜI ỦY QUYỀN', 'LOẠI ỦY QUYỀN', 'HỒ SƠ CÓ THUẾ'
+              ];
+              const landRows = [
+                  ['', 'Trần Văn Nam', '070012345678', '0901112222', 'Tổ 2, Tân Khai', 'Tân Khai', '105', '12', '120.5', '60', '', '', '', '', 'Tổ 2, Tân Khai', 'Tân Khai', '2.1 Trích lục', 'Cung cấp trích lục bản đồ phục vụ giao dịch', 'Sổ đỏ bản gốc|CCCD photo', '', '', 'Không'],
+                  ['', 'Lê Thị Thu', '070012345679', '0988877665', 'Ấp 3, Tân Hưng', 'Tân Hưng', '88', '5', '450.0', '100', '', '', '', '', 'Ấp 3, Tân Hưng', 'Tân Hưng', '2.3 Trích đo', 'Trích đo bản đồ phục vụ tách thửa', 'Đơn đề nghị|Sổ hồng photo', '', '', 'Không']
+              ];
+              addStyledSheet('2. MAU DO DAC NEW', landHeaders, landRows, [15, 20, 15, 14, 22, 12, 10, 10, 12, 10, 10, 10, 10, 10, 22, 20, 24, 30, 25, 18, 18, 15]);
+              XLSX.writeFile(wb, 'Mau_Nhap_Lieu_Do_Dac.xlsx');
+          }
+      }
   };
 
   if (!isOpen) return null;
@@ -888,12 +919,26 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
                         onChange={(e) => setSelectedTemplate(e.target.value)}
                         className="bg-transparent border-none text-blue-800 text-sm font-medium focus:outline-none px-2 py-1 cursor-pointer"
                     >
-                        <option value="dat_dai">Mẫu Hồ Sơ Đất Đai</option>
-                        <option value="dang_ky_bien_dong">Mẫu Đăng Ký Biến Động</option>
-                        <option value="sao_luc">Mẫu Sao Lục Lưu Trữ</option>
-                        <option value="cong_van">Mẫu Công Văn Hành Chính</option>
-                        <option value="ho_so_khac">Mẫu Hồ Sơ Khác</option>
-                        <option value="day_du">Mẫu Đầy Đủ Các Trường</option>
+                        {mode === 'update' ? (
+                            <option value="cap_nhat">Mẫu Cập Nhật Thông Tin</option>
+                        ) : (() => {
+                            const cat = getTabCategory(currentView || '');
+                            if (cat === 'receive') {
+                                return (
+                                    <>
+                                        <option value="dat_dai">Mẫu Đo Đạc (Đất Đai)</option>
+                                        <option value="dang_ky_bien_dong">Mẫu Cấp Giấy (Biến Động)</option>
+                                        <option value="sao_luc">Mẫu Lưu Trữ (Sao Lục)</option>
+                                    </>
+                                );
+                            } else if (cat === 'cap_giay') {
+                                return <option value="dang_ky_bien_dong">Mẫu Cấp Giấy (Biến Động)</option>;
+                            } else if (cat === 'luu_tru') {
+                                return <option value="sao_luc">Mẫu Lưu Trữ (Sao Lục)</option>;
+                            } else {
+                                return <option value="dat_dai">Mẫu Đo Đạc (Đất Đai)</option>;
+                            }
+                        })()}
                     </select>
                     <button 
                         onClick={handleDownloadTemplate} 
@@ -944,15 +989,32 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
             ) : previewData.length > 0 ? (
                 <table className="w-full text-left border-collapse">
                     <thead className="bg-gray-100 sticky top-0 shadow-sm z-10 text-xs uppercase font-bold text-gray-600">
-                        <tr>
-                            <th className="p-3 border-b">#</th>
-                            <th className="p-3 border-b">Mã HS</th>
-                            <th className="p-3 border-b">Chủ Sử Dụng</th>
-                            <th className="p-3 border-b">Trạng Thái (Dự kiến)</th>
-                            <th className="p-3 border-b">Ngày Xuất</th>
-                            <th className="p-3 border-b">Đợt</th>
-                            <th className="p-3 border-b">Kiểm duyệt lỗi</th>
-                        </tr>
+                        {mode === 'create' ? (
+                            <tr>
+                                <th className="p-3 border-b">#</th>
+                                <th className="p-3 border-b">Mã HS</th>
+                                <th className="p-3 border-b">Chủ Sử Dụng</th>
+                                <th className="p-3 border-b">Xã/Phường</th>
+                                <th className="p-3 border-b">Thửa/Bản Đồ</th>
+                                <th className="p-3 border-b">Diện tích</th>
+                                <th className="p-3 border-b">Loại Hồ Sơ</th>
+                                <th className="p-3 border-b">Có Thuế</th>
+                                <th className="p-3 border-b">Hạn trả (Dự kiến)</th>
+                                <th className="p-3 border-b">Kiểm duyệt lỗi</th>
+                            </tr>
+                        ) : (
+                            <tr>
+                                <th className="p-3 border-b">#</th>
+                                <th className="p-3 border-b">Mã HS</th>
+                                <th className="p-3 border-b">Chủ Sử Dụng</th>
+                                <th className="p-3 border-b">Trạng Thái (Mới)</th>
+                                <th className="p-3 border-b">Đợt bàn giao</th>
+                                <th className="p-3 border-b">Ngày Xuất</th>
+                                <th className="p-3 border-b">Số phát hành</th>
+                                <th className="p-3 border-b">Ngày trả dân</th>
+                                <th className="p-3 border-b">Kiểm duyệt lỗi</th>
+                            </tr>
+                        )}
                     </thead>
                     <tbody className="text-sm text-gray-700 divide-y divide-gray-100">
                         {previewData.filter(r => {
@@ -966,11 +1028,36 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
                             return (
                                 <tr key={originalIdx} className={`hover:bg-blue-50 ${hasError ? 'bg-red-50' : ''}`}>
                                     <td className="p-3">{originalIdx}</td>
-                                    <td className="p-3 font-medium text-blue-600">{record.code}</td>
-                                    <td className="p-3 font-medium text-gray-500">{record.customerName || <span className="text-gray-300 italic">(Giữ nguyên)</span>}</td>
-                                    <td className="p-3">{record.status ? <span className={`text-xs px-2 py-1 rounded-full font-bold ${record.status === RecordStatus.HANDOVER ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>{record.status}</span> : <span className="text-gray-300 italic">(Giữ nguyên)</span>}</td>
-                                    <td className="p-3 font-mono text-green-700">{record.exportDate ? record.exportDate.split('T')[0] : '-'}</td>
-                                    <td className="p-3 font-bold">{record.exportBatch || '-'}</td>
+                                    <td className="p-3 font-medium text-blue-600">{record.code || <span className="text-gray-400 italic">Tự động</span>}</td>
+                                    <td className="p-3 font-medium text-gray-700">{record.customerName || <span className="text-gray-300 italic">(Giữ nguyên)</span>}</td>
+                                    {mode === 'create' ? (
+                                        <>
+                                            <td className="p-3">{record.ward || '-'}</td>
+                                            <td className="p-3 font-mono">{record.landPlot ? `T${record.landPlot}` : ''}{record.mapSheet ? `/BĐ${record.mapSheet}` : ''}</td>
+                                            <td className="p-3">{record.area ? `${record.area} m²` : '-'}</td>
+                                            <td className="p-3 text-xs font-semibold text-gray-600">{record.recordType}</td>
+                                            <td className="p-3">
+                                                <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${record.hasTax ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-gray-100 text-gray-500'}`}>
+                                                    {record.hasTax ? 'Có thuế' : 'Không'}
+                                                </span>
+                                            </td>
+                                            <td className="p-3 font-mono text-xs text-red-600 font-bold">{record.deadline ? record.deadline.split('T')[0] : '-'}</td>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <td className="p-3">
+                                                {record.status ? (
+                                                    <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${record.status === RecordStatus.HANDOVER ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
+                                                        {record.status}
+                                                    </span>
+                                                ) : <span className="text-gray-300 italic">(Giữ nguyên)</span>}
+                                            </td>
+                                            <td className="p-3 font-bold text-center">{record.exportBatch || '-'}</td>
+                                            <td className="p-3 font-mono text-purple-700">{record.exportDate ? record.exportDate.split('T')[0] : '-'}</td>
+                                            <td className="p-3 font-mono text-gray-600">{record.issueNumber || '-'}</td>
+                                            <td className="p-3 font-mono text-green-700">{record.resultReturnedDate ? record.resultReturnedDate.split('T')[0] : '-'}</td>
+                                        </>
+                                    )}
                                     <td className="p-3">
                                         {hasError ? (
                                             <ul className="text-red-600 list-disc pl-4 text-xs font-medium">

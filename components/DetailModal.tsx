@@ -58,6 +58,13 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === record.recordType?.trim().toLowerCase())
   ));
 
+  const isTrichDo = !!(record?.recordType && (
+      record.recordType.toLowerCase().includes('trích đo') || 
+      record.recordType.toLowerCase().includes('trich do')
+  ));
+
+  const showLiquidationAndAnnex = !isGCN && isTrichDo;
+
   const getStepAssigneeName = (stepLabel: string) => {
       if (!record) return "";
       const label = stepLabel.toLowerCase();
@@ -343,7 +350,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       const currentNotes = activeRecord.notes ? `${activeRecord.notes}\n${formattedReason}` : formattedReason;
       const currentPrivateNotes = activeRecord.privateNotes ? `${activeRecord.privateNotes}\n${formattedReason}` : formattedReason;
       
-      const isReg = isRegType(activeRecord.recordType);
+      const isReg = isGCN;
       const isArchive = activeRecord.recordType === 'Sao lục' || activeRecord.recordType === 'Công văn';
       
       let nextStatus = RecordStatus.IN_PROGRESS;
@@ -744,7 +751,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
             </div>
             
             <div className="flex items-center gap-2">
-                {onCreateLiquidation && record && record.recordType !== 'Cung cấp tài liệu đất đai' && record.recordType !== 'Sao lục' && record.recordType !== 'Công văn' && (
+                {onCreateLiquidation && record && record.recordType !== 'Cung cấp tài liệu đất đai' && record.recordType !== 'Sao lục' && record.recordType !== 'Công văn' && showLiquidationAndAnnex && (
                     <button
                         onClick={() => { onClose(); onCreateLiquidation(record); }}
                         className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-200 text-green-700 rounded hover:bg-green-100 transition-all text-sm font-bold shadow-sm"
@@ -754,7 +761,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                     </button>
                 )}
 
-                {isMeasurementTeam && record && record.recordType !== 'Cung cấp tài liệu đất đai' && record.recordType !== 'Sao lục' && record.recordType !== 'Công văn' && (
+                {isMeasurementTeam && record && record.recordType !== 'Cung cấp tài liệu đất đai' && record.recordType !== 'Sao lục' && record.recordType !== 'Công văn' && showLiquidationAndAnnex && (
                     <button
                         onClick={() => setIsAnnexOpen(true)}
                         className="flex items-center gap-2 px-3 py-1.5 bg-rose-50 border border-rose-200 text-rose-700 rounded hover:bg-rose-100 transition-all text-sm font-bold shadow-sm"
@@ -1376,7 +1383,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                 {/* COLUMN 3: TIẾN ĐỘ & NHẮC VIỆC */}
                 <div className="space-y-6">
                     {/* KHẨN CẤP: TRẢ CHỜ DÂN BỔ SUNG */}
-                    {isRegType(record.recordType) && (
+                    {isGCN && (
                         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden p-5 space-y-3.5">
                             <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-2 border-l-4 border-amber-500 pl-2">
                                 <AlertTriangle size={15} className="text-amber-500 animate-pulse" />

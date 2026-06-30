@@ -57,6 +57,13 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
       record.recordType.trim().toLowerCase().includes('cấp lại')
   ));
 
+  const isTrichDo = !!(record?.recordType && (
+      record.recordType.toLowerCase().includes('trích đo') || 
+      record.recordType.toLowerCase().includes('trich do')
+  ));
+
+  const showLiquidationAndAnnex = !isGCN && isTrichDo;
+
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewFileName, setPreviewFileName] = useState('');
@@ -192,7 +199,7 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
     const currentNotes = activeRecord.notes ? `${activeRecord.notes}\n${formattedReason}` : formattedReason;
     const currentPrivateNotes = activeRecord.privateNotes ? `${activeRecord.privateNotes}\n${formattedReason}` : formattedReason;
     
-    const isReg = isRegType(activeRecord.recordType);
+    const isReg = isGCN;
     const isArchive = activeRecord.recordType === 'Sao lục' || activeRecord.recordType === 'Công văn';
     
     let nextStatus = RecordStatus.IN_PROGRESS;
@@ -1071,8 +1078,12 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
                     label={record.status === RecordStatus.REJECTED ? "HỒ SƠ TRẢ" : record.status === RecordStatus.WITHDRAWN ? "RÚT HỒ SƠ" : "HOÀN THÀNH"} 
                     icon={CheckSquare}
                     isLast={false}
-                    colorClass={{text: record.status === RecordStatus.REJECTED ? 'text-red-700' : 'text-green-700', border: record.status === RecordStatus.REJECTED ? 'border-red-600' : 'border-green-600', bg: record.status === RecordStatus.REJECTED ? 'bg-red-600' : 'bg-green-600'}}
-                    subText={record.completedDate && record.exportBatch ? `Chốt danh sách đợt: ĐỢT ${record.exportBatch}` : undefined}
+                    colorClass={{text: record.status === RecordStatus.REJECTED ? 'text-red-700 font-bold' : 'text-green-700', border: record.status === RecordStatus.REJECTED ? 'border-red-600 bg-red-50' : 'border-green-600', bg: record.status === RecordStatus.REJECTED ? 'bg-red-600' : 'bg-green-600'}}
+                    subText={record.status === RecordStatus.REJECTED 
+                      ? `Lý do: ${record.rejectReason || 'Không có lý do chi tiết'}` 
+                      : record.completedDate && record.exportBatch 
+                        ? `Chốt danh sách đợt: ĐỢT ${record.exportBatch}` 
+                        : undefined}
                   />
 
                   <TimelineItem 
@@ -1189,7 +1200,7 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
             In biên nhận
           </button>
         )}
-        {onCreateLiquidation && record && record.recordType !== 'Cung cấp tài liệu đất đai' && record.recordType !== 'Sao lục' && record.recordType !== 'Công văn' && (
+        {onCreateLiquidation && record && record.recordType !== 'Cung cấp tài liệu đất đai' && record.recordType !== 'Sao lục' && record.recordType !== 'Công văn' && showLiquidationAndAnnex && (
           <button
             onClick={() => { onClose(); onCreateLiquidation(record); }}
             className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-50 text-green-700 rounded-xl font-bold text-sm active:scale-95 transition-all"
@@ -1197,7 +1208,7 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
             <FileCheck size={18} /> Thanh lý
           </button>
         )}
-        {isMeasurementTeam && record && record.recordType !== 'Cung cấp tài liệu đất đai' && record.recordType !== 'Sao lục' && record.recordType !== 'Công văn' && (
+        {isMeasurementTeam && record && record.recordType !== 'Cung cấp tài liệu đất đai' && record.recordType !== 'Sao lục' && record.recordType !== 'Công văn' && showLiquidationAndAnnex && (
           <button
             onClick={() => setIsAnnexOpen(true)}
             className="flex-1 flex items-center justify-center gap-2 py-3 bg-rose-50 text-rose-700 rounded-xl font-bold text-sm active:scale-95 transition-all"

@@ -1520,6 +1520,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
             props.setCurrentView("receive_contract");
           }}
           onMapCorrection={props.handleMapCorrectionRequest}
+          holidays={holidays}
         />
       );
     case "receive_record":

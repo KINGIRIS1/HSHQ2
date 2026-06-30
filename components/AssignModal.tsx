@@ -121,25 +121,12 @@ export const getEmployeeTeam = (emp: Employee): string => {
   const dept = removeVietnameseTones(emp.department || '').toLowerCase().trim();
   const pos = removeVietnameseTones(emp.position || '').toLowerCase().trim();
 
-  // 1. Phân vào Ban Giám đốc
-  if (
-    dept.includes('giam doc') || 
-    dept.includes('lanh dao') || 
-    dept.includes('director') || 
-    dept.includes('ban giam doc') || 
-    pos.includes('giam doc') || 
-    pos.includes('pho giam doc') || 
-    pos.includes('truong phong')
-  ) {
-    return 'Ban Giám đốc';
-  }
-
-  // 2. Phân vào Tổ Lưu trữ
+  // 1. Phân vào Tổ Lưu trữ (Ưu tiên bộ phận chuyên môn trước)
   if (dept.includes('luu tru') || dept.includes('sao luc') || dept.includes('thong tin')) {
     return 'Tổ Lưu trữ';
   }
 
-  // 3. Phân vào Tổ Đo đạc (Chuyên môn đo vẽ, địa chính, kỹ thuật)
+  // 2. Phân vào Tổ Đo đạc (Chuyên môn đo vẽ, địa chính, kỹ thuật)
   if (
     dept.includes('do dac') || 
     dept.includes('do') || 
@@ -154,7 +141,7 @@ export const getEmployeeTeam = (emp: Employee): string => {
     return 'Tổ Đo đạc';
   }
 
-  // 4. Phân vào Tổ Cấp giấy
+  // 3. Phân vào Tổ Cấp giấy
   if (
     dept.includes('cap giay') || 
     dept.includes('dang ky') || 
@@ -163,6 +150,19 @@ export const getEmployeeTeam = (emp: Employee): string => {
     dept.includes('tham dinh')
   ) {
     return 'Tổ Cấp giấy';
+  }
+
+  // 4. Phân vào Ban Giám đốc (Chỉ dành cho Ban Lãnh đạo chung)
+  if (
+    dept.includes('giam doc') || 
+    dept.includes('lanh dao') || 
+    dept.includes('director') || 
+    dept.includes('ban giam doc') || 
+    pos.includes('giam doc') || 
+    pos.includes('pho giam doc') || 
+    pos.includes('truong phong')
+  ) {
+    return 'Ban Giám đốc';
   }
 
   // 5. Tổ Hành chính (Bộ phận còn lại: một cửa, hành chính, văn thư,...)
@@ -174,13 +174,13 @@ export const getRoleCategory = (position?: string): { key: string; label: string
   if (!position) return { key: 'staff', label: 'Chuyên viên / Nhân viên', colorClass: 'border-slate-200 bg-slate-50 text-slate-700', order: 4 };
   const p = removeVietnameseTones(position).toLowerCase().trim();
   
-  if (p.includes('giam doc') || p.includes('lanh dao') || p.includes('director') || p.includes('truong phong') || p.includes('pho giam doc') || p.includes('pho phong')) {
+  if (p.includes('giam doc') || p.includes('lanh dao') || p.includes('director') || p.includes('pho giam doc')) {
     return { key: 'director', label: 'Ban Giám đốc & Lãnh đạo', colorClass: 'border-rose-150 bg-rose-50 text-rose-800', order: 1 };
   }
-  if (p.includes('to truong') || p.includes('truong nhom') || p.includes('lead') || p.includes('truong to')) {
+  if (p.includes('to truong') || p.includes('truong nhom') || p.includes('lead') || p.includes('truong to') || p.includes('truong phong')) {
     return { key: 'leader', label: 'Tổ trưởng / Trưởng phòng', colorClass: 'border-amber-150 bg-amber-50 text-amber-800', order: 2 };
   }
-  if (p.includes('to pho') || p.includes('pho to') || p.includes('pho nhom') || p.includes('sup')) {
+  if (p.includes('to pho') || p.includes('pho to') || p.includes('pho nhom') || p.includes('sup') || p.includes('pho phong')) {
     return { key: 'vice_leader', label: 'Tổ phó / Phó phòng', colorClass: 'border-orange-150 bg-orange-50 text-orange-850', order: 3 };
   }
   return { key: 'staff', label: 'Chuyên viên / Nhân viên', colorClass: 'border-blue-150 bg-blue-50 text-blue-800', order: 4 };

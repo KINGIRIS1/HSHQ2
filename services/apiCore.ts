@@ -258,6 +258,13 @@ export const mapRecordFromDb = (item: any): any => {
         r.defectDate = r.defectdate || r.defect_date;
     }
 
+    if (r.rejectReason === undefined && (r.rejectreason !== undefined || r.reject_reason !== undefined)) {
+        r.rejectReason = r.rejectreason || r.reject_reason;
+    }
+    if (r.rejectDate === undefined && (r.rejectdate !== undefined || r.reject_date !== undefined)) {
+        r.rejectDate = r.rejectdate || r.reject_date;
+    }
+
     return r;
 };
 

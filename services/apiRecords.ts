@@ -17,7 +17,8 @@ const RECORD_DB_COLUMNS = [
     'needsMapCorrection',
     'issueNumber', 'entryNumber', 'issueDate', 'residentialArea',
     'price', 'advancePayment', 'isDeptSynced',
-    'hasDefect', 'defectReason', 'defectDate'
+    'hasDefect', 'defectReason', 'defectDate',
+    'rejectReason', 'rejectDate'
 ];
 
 const OPTIONAL_NEW_COLUMNS = [
@@ -28,7 +29,7 @@ const OPTIONAL_NEW_COLUMNS = [
     'privateNotes', 'personalNotes', 'checkedBy', 'pendingCheckDate', 'checkedDate', 'completedWorkDate',
     'price', 'advancePayment', 'isDeptSynced',
     'hasDefect', 'defectReason', 'defectDate',
-    'submittedTo', 'submissionDate'
+    'submittedTo', 'submissionDate', 'rejectReason', 'rejectDate'
 ];
 
 export const fetchRecords = async (): Promise<RecordFile[]> => {
