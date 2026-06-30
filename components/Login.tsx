@@ -30,7 +30,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, users }) => {
     setIsLoading(true);
     
     setTimeout(() => {
-        const user = users.find(u => u.username === username && u.password === password);
+        const user = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
         if (user) {
           if (rememberMe) {
               localStorage.setItem('saved_username', username);
