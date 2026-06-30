@@ -39,8 +39,7 @@ const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, records, onC
             
             // Phải là Tổ trưởng (leader) hoặc Tổ phó (vice_leader)
             const cat = getRoleCategory(emp.position);
-            const isTeamLeaderUser = u.role === UserRole.TEAM_LEADER;
-            const isLeaderOrVice = cat.key === 'leader' || cat.key === 'vice_leader' || isTeamLeaderUser;
+            const isLeaderOrVice = cat.key === 'leader' || cat.key === 'vice_leader';
             
             return isLeaderOrVice;
         } else {
