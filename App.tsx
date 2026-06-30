@@ -185,15 +185,26 @@ function App() {
       // nên không lọc theo managedWards nữa.
       if (currentUser?.role === UserRole.TEAM_LEADER && currentUser.employeeId) {
           const empId = currentUser.employeeId;
+          const leaderEmp = employees.find(e => e.id === empId);
+          const leaderTeam = leaderEmp ? getEmployeeTeam(leaderEmp) : '';
+          const teamEmployeeIds = employees
+              .filter(e => getEmployeeTeam(e) === leaderTeam)
+              .map(e => e.id);
+
           filtered = rawRecords.filter(r => {
               // Unassigned is visible so they can assign it
               if (!r.assignedTo) return true;
               
               // Assigned to themselves or they are the checker, signer/submitter, or receiver
+              // OR the record belongs to their team members
               return r.assignedTo === empId || 
                      r.checkedBy === empId || 
                      r.submittedTo === empId || 
-                     r.receivedBy === empId;
+                     r.receivedBy === empId ||
+                     teamEmployeeIds.includes(r.assignedTo || '') ||
+                     teamEmployeeIds.includes(r.checkedBy || '') ||
+                     teamEmployeeIds.includes(r.submittedTo || '') ||
+                     teamEmployeeIds.includes(r.receivedBy || '');
           });
       }
       return filtered;

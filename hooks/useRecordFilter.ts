@@ -195,24 +195,14 @@ export const useRecordFilter = (
             // Tab Kiểm tra: Hiển thị hồ sơ Chờ kiểm tra và Đã kiểm tra
             result = result.filter(r => r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED);
         } else if (isCompletedWorkView) {
-            const isRegView = [
-                'registration_records', 'registration_assign_tasks', 'registration_completed_list', 
-                'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 
-                'registration_director_completed'
-            ].includes(currentView);
-
-            if (isRegView) {
-                // Đối với Cấp giấy, Bàn làm việc (completed_list) hiển thị các hồ sơ đang xử lý bao gồm: ASSIGNED, IN_PROGRESS, TBT, COMPLETED_WORK, PENDING_SUPPLEMENT
-                result = result.filter(r => 
-                    r.status === RecordStatus.ASSIGNED ||
-                    r.status === RecordStatus.IN_PROGRESS ||
-                    r.status === RecordStatus.TBT ||
-                    r.status === RecordStatus.COMPLETED_WORK ||
-                    r.status === RecordStatus.PENDING_SUPPLEMENT
-                );
-            } else {
-                result = result.filter(r => r.status === RecordStatus.COMPLETED_WORK);
-            }
+            // Hiển thị các hồ sơ đang xử lý bao gồm: ASSIGNED, IN_PROGRESS, TBT, COMPLETED_WORK, PENDING_SUPPLEMENT cho tất cả các phân loại hồ sơ
+            result = result.filter(r => 
+                r.status === RecordStatus.ASSIGNED ||
+                r.status === RecordStatus.IN_PROGRESS ||
+                r.status === RecordStatus.TBT ||
+                r.status === RecordStatus.COMPLETED_WORK ||
+                r.status === RecordStatus.PENDING_SUPPLEMENT
+            );
 
             // Nếu người đăng nhập là Nhân viên, chỉ hiển thị hồ sơ được phân công cho họ tại bàn làm việc
             if (currentUser && currentUser.role === UserRole.EMPLOYEE) {
