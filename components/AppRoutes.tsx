@@ -299,6 +299,15 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
     return cat.key === "vice_leader";
   }, [currentUser.employeeId, employees]);
 
+  const hasTeamLeaderPrivileges = React.useMemo(() => {
+    if (currentUser.role === UserRole.TEAM_LEADER) return true;
+    if (isTeamLeader || isViceLeader) return true;
+    if (hasPermission('ASSIGN_RECORDS') || hasPermission('CHECK_RECORDS') || hasPermission('SIGN_RECORDS')) {
+      return true;
+    }
+    return false;
+  }, [currentUser.role, isTeamLeader, isViceLeader, hasPermission]);
+
   const isEmployee = currentUser.role === UserRole.EMPLOYEE;
 
   // canPerformAction is kept for backward compatibility, but we should use hasPermission where possible
@@ -466,7 +475,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
 
                 {(isAdmin ||
                   isSubadmin ||
-                  currentUser.role === UserRole.TEAM_LEADER) && (
+                  hasTeamLeaderPrivileges) && (
                   <button
                     onClick={() => props.setCurrentView("assign_tasks")}
                     className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "assign_tasks" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -491,7 +500,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector || isOneDoor || isTeamLeader || isViceLeader) && (
+            {(isAdmin || isSubadmin || isDirector || isOneDoor || hasTeamLeaderPrivileges) && (
               <button
                 onClick={() => props.setCurrentView("check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -513,8 +522,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               (isAdmin ||
                 isSubadmin ||
                 isOneDoor ||
-                isTeamLeader ||
-                isViceLeader) && (
+                hasTeamLeaderPrivileges) && (
                 <button
                   onClick={() => props.setCurrentView("handover_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -539,7 +547,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
 
                 {(isAdmin ||
                   isSubadmin ||
-                  currentUser.role === UserRole.TEAM_LEADER) && (
+                  hasTeamLeaderPrivileges) && (
                   <button
                     onClick={() => props.setCurrentView("registration_assign_tasks")}
                     className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_assign_tasks" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -564,7 +572,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector || isOneDoor || isTeamLeader || isViceLeader) && (
+            {(isAdmin || isSubadmin || isDirector || isOneDoor || hasTeamLeaderPrivileges) && (
               <button
                 onClick={() => props.setCurrentView("registration_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -586,8 +594,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               (isAdmin ||
                 isSubadmin ||
                 isOneDoor ||
-                isTeamLeader ||
-                isViceLeader) && (
+                hasTeamLeaderPrivileges) && (
                 <button
                   onClick={() => props.setCurrentView("registration_handover_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -621,7 +628,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
 
                 {(isAdmin ||
                   isSubadmin ||
-                  currentUser.role === UserRole.TEAM_LEADER) && (
+                  hasTeamLeaderPrivileges) && (
                   <button
                     onClick={() => props.setCurrentView("archive_assign_tasks")}
                     className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "archive_assign_tasks" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -646,7 +653,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector || isOneDoor || isTeamLeader || isViceLeader) && (
+            {(isAdmin || isSubadmin || isDirector || isOneDoor || hasTeamLeaderPrivileges) && (
               <button
                 onClick={() => props.setCurrentView("archive_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "archive_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -668,8 +675,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               (isAdmin ||
                 isSubadmin ||
                 isOneDoor ||
-                isTeamLeader ||
-                isViceLeader) && (
+                hasTeamLeaderPrivileges) && (
                 <button
                   onClick={() => props.setCurrentView("archive_handover_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "archive_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -711,7 +717,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               <ClipboardList size={16} /> Kiểm tra
             </button>
 
-            {(isAdmin || isSubadmin || isDirector || isOneDoor || isTeamLeader || isViceLeader) && (
+            {(isAdmin || isSubadmin || isDirector || isOneDoor || hasTeamLeaderPrivileges) && (
               <button
                 onClick={() => props.setCurrentView("congvan_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_check_list" || currentView === "congvan_director_completed" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -724,8 +730,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               (isAdmin ||
                 isSubadmin ||
                 isOneDoor ||
-                isTeamLeader ||
-                isViceLeader) && (
+                hasTeamLeaderPrivileges) && (
                 <button
                   onClick={() => props.setCurrentView("congvan_handover_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "congvan_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -750,8 +755,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
 
                 {(isAdmin ||
                   isSubadmin ||
-                  isTeamLeader ||
-                  isViceLeader) && (
+                  hasTeamLeaderPrivileges) && (
                   <button
                     onClick={() => props.setCurrentView("other_assign_tasks")}
                     className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "other_assign_tasks" ? "border-blue-600 text-blue-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -762,7 +766,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               </>
             )}
 
-            {(isAdmin || isSubadmin || isDirector || isOneDoor || isTeamLeader || isViceLeader) && (
+            {(isAdmin || isSubadmin || isDirector || isOneDoor || hasTeamLeaderPrivileges) && (
               <button
                 onClick={() => props.setCurrentView("other_check_list")}
                 className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "other_check_list" ? "border-purple-600 text-purple-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -784,8 +788,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
               (isAdmin ||
                 isSubadmin ||
                 isOneDoor ||
-                isTeamLeader ||
-                isViceLeader) && (
+                hasTeamLeaderPrivileges) && (
                 <button
                   onClick={() => props.setCurrentView("other_handover_list")}
                   className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "other_handover_list" ? "border-green-600 text-green-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -1196,7 +1199,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </button>
               )}
             {tabAllowedCanPerformAction &&
-              (isAdmin || isSubadmin || isDirector || isTeamLeader || isViceLeader) &&
+              (isAdmin || isSubadmin || isDirector || hasTeamLeaderPrivileges) &&
               isCheckAny &&
               props.selectedRecordIds.size > 0 && (
                 <button
@@ -1225,7 +1228,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </button>
               )}
             {tabAllowedCanPerformAction &&
-              (isAdmin || isSubadmin || isTeamLeader || isViceLeader) &&
+              (isAdmin || isSubadmin || hasTeamLeaderPrivileges) &&
               isPendingCheckAny &&
               props.selectedRecordIds.size > 0 && (
                 <button
@@ -1243,7 +1246,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                 </button>
               )}
             {tabAllowedCanPerformAction &&
-              (isAdmin || isSubadmin || isTeamLeader || isViceLeader) &&
+              (isAdmin || isSubadmin || hasTeamLeaderPrivileges) &&
               (isAssignAny ||
                 isAllRecordsAny ||
                 currentView === "other_records") &&

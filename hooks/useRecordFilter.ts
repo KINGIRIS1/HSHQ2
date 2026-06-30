@@ -205,7 +205,14 @@ export const useRecordFilter = (
             );
 
             // Nếu người đăng nhập là Nhân viên, chỉ hiển thị hồ sơ được phân công cho họ tại bàn làm việc
-            if (currentUser && currentUser.role === UserRole.EMPLOYEE) {
+            // TRỪ KHI họ được phân quyền TEAM_LEADER (Tổ trưởng, Tổ phó, hoặc được phân vai quản lý)
+            const isUserTeamLeaderOrDelegated = (() => {
+                if (!currentUser) return false;
+                if (currentUser.role === UserRole.ADMIN || currentUser.role === UserRole.SUBADMIN || currentUser.role === UserRole.TEAM_LEADER) return true;
+                return isDirectorOrLeader(currentUser.employeeId);
+            })();
+
+            if (currentUser && currentUser.role === UserRole.EMPLOYEE && !isUserTeamLeaderOrDelegated) {
                 result = result.filter(r => r.assignedTo === currentUser.employeeId);
             }
         } else if (isDirectorCompletedView) {

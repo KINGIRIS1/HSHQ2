@@ -3,7 +3,7 @@ import React from 'react';
 import { RecordFile, RecordStatus, Employee } from '../types';
 import { getNormalizedWard, getShortRecordType } from '../constants';
 import { isRecordOverdue, isRecordApproaching, toTitleCase, findArchiveStaffForWard } from '../utils/appHelpers';
-import { getEmployeeTeam } from './AssignModal';
+import { getEmployeeTeam, getRoleCategory } from './AssignModal';
 import StatusBadge from './StatusBadge';
 import { CheckSquare, Square, AlertCircle, Clock, Eye, ArrowRight, Pencil, Trash2, Bell, FileCheck, Phone, Map, UserPlus } from 'lucide-react';
 
@@ -91,8 +91,18 @@ const RecordRow: React.FC<RecordRowProps> = ({
   const isStepProgressionAllowed = React.useMemo(() => {
     if (!currentUser) return false;
     const r = currentUser.role;
-    return r === 'ADMIN' || r === 'SUBADMIN' || r === 'TEAM_LEADER';
-  }, [currentUser]);
+    if (r === 'ADMIN' || r === 'SUBADMIN' || r === 'TEAM_LEADER') return true;
+    if (currentUser.employeeId && employees) {
+      const emp = employees.find(e => e.id === currentUser.employeeId);
+      if (emp) {
+        const cat = getRoleCategory(emp.position);
+        if (cat.key === 'leader' || cat.key === 'vice_leader') {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, [currentUser, employees]);
 
   // Class chung cho các ô: Căn trên (align-top)
   const cellClass = "p-3 align-top";
