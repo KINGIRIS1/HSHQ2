@@ -26,6 +26,10 @@ body {
   color: #1e293b;
 }
 
+input, select, textarea, button {
+  font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
 /* --- CUSTOM SCROLLBAR (GIỐNG ELECTRON APP) --- */
 /* Áp dụng cho toàn bộ các thành phần có scroll */
 ::-webkit-scrollbar {
