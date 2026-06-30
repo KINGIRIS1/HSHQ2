@@ -163,49 +163,23 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
     };
 
     const mainRecords = records.filter(r => {
-        if (user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN) {
-            // Chỉ hiển thị những hồ sơ được giao đích danh cho tài khoản quản trị
-            return r.assignedTo === effectiveId || r.checkedBy === effectiveId || r.submittedTo === effectiveId;
-        }
-        if (isDirector) {
-            return r.submittedTo === effectiveId || r.assignedTo === effectiveId || !r.submittedTo;
-        }
-        // Nếu là người lãnh đạo/kiểm tra hoặc có vai trò TEAM_LEADER/Tổ trưởng/Tổ phó, họ có thể thấy hồ sơ liên quan đến họ hoặc thành viên trong tổ
-        if (isTeamLeaderOrChecker) {
-            return (
-                teamEmployeeIds.includes(r.assignedTo || '') ||
-                teamEmployeeIds.includes(r.checkedBy || '') ||
-                teamEmployeeIds.includes(r.submittedTo || '') ||
-                teamEmployeeIds.includes(r.receivedBy || '') ||
-                r.assignedTo === effectiveId ||
-                r.checkedBy === effectiveId ||
-                r.submittedTo === effectiveId ||
-                r.receivedBy === effectiveId
-            );
-        }
-        return r.assignedTo === effectiveId;
+        // Tài khoản cá nhân (bao gồm cả Admin, Subadmin, Team leader...) chỉ hiện hồ sơ được giao việc trực tiếp cho cá nhân mình
+        return (
+            r.assignedTo === effectiveId ||
+            r.checkedBy === effectiveId ||
+            r.submittedTo === effectiveId ||
+            r.receivedBy === effectiveId
+        );
     });
     
     const mappedArchives = archiveRecords
         .filter(r => {
-            if (user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN) {
-                // Chỉ hiển thị những hồ sơ lưu trữ được giao đích danh cho tài khoản quản trị
-                return r.data?.assigned_to === effectiveId || r.data?.checked_by === effectiveId || r.data?.submitted_to === effectiveId;
-            }
-            if (isDirector) {
-                return r.data?.submitted_to === effectiveId || r.data?.assigned_to === effectiveId || !r.data?.submitted_to; 
-            }
-            if (isTeamLeaderOrChecker) {
-                return (
-                    teamEmployeeIds.includes(r.data?.assigned_to || '') ||
-                    teamEmployeeIds.includes(r.data?.checked_by || '') ||
-                    teamEmployeeIds.includes(r.data?.submitted_to || '') ||
-                    r.data?.assigned_to === effectiveId ||
-                    r.data?.checked_by === effectiveId ||
-                    r.data?.submitted_to === effectiveId
-                );
-            }
-            return r.data?.assigned_to === effectiveId;
+            // Chỉ hiển thị các hồ sơ lưu trữ của cá nhân mình được giao
+            return (
+                r.data?.assigned_to === effectiveId ||
+                r.data?.checked_by === effectiveId ||
+                r.data?.submitted_to === effectiveId
+            );
         })
         .map(r => {
             // Map status
@@ -294,10 +268,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   const pendingRecords = useMemo(() => {
       let list = myRecords.filter(r => 
           (r.status === RecordStatus.ASSIGNED || r.status === RecordStatus.IN_PROGRESS || r.status === RecordStatus.COMPLETED_WORK || r.status === RecordStatus.REJECTED) &&
-          (r.assignedTo === effectiveId || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || '')))
+          r.assignedTo === effectiveId
       );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig, effectiveId, isTeamLeaderOrChecker, teamEmployeeIds]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
   // 2. Hồ sơ Đã thực hiện (Bỏ qua - Trống)
   const completedWorkRecords = useMemo(() => {
@@ -308,19 +282,19 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   const pendingCheckRecords = useMemo(() => {
       let list = myRecords.filter(r => 
           (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) &&
-          (r.checkedBy === effectiveId || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || '')))
+          r.checkedBy === effectiveId
       );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig, effectiveId, isTeamLeaderOrChecker, teamEmployeeIds]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
   // 4. Hồ sơ Chờ ký (PENDING_SIGN) - Chuyển thành Tab chính
   const reviewRecords = useMemo(() => {
       let list = myRecords.filter(r => 
           r.status === RecordStatus.PENDING_SIGN &&
-          (r.submittedTo === effectiveId || r.checkedBy === effectiveId || r.assignedTo === effectiveId || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || '')))
+          r.submittedTo === effectiveId
       );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig, effectiveId, isTeamLeaderOrChecker, teamEmployeeIds]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
   // 4. Hồ sơ Hoàn thành (SIGNED, HANDOVER, RETURNED, WITHDRAWN)
   const finishedRecords = useMemo(() => {
@@ -329,10 +303,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
            r.status === RecordStatus.HANDOVER || 
            r.status === RecordStatus.RETURNED ||
            r.status === RecordStatus.WITHDRAWN) &&
-          (r.assignedTo === effectiveId || r.checkedBy === effectiveId || r.submittedTo === effectiveId || r.receivedBy === effectiveId || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || '')))
+          (r.assignedTo === effectiveId || r.checkedBy === effectiveId || r.submittedTo === effectiveId || r.receivedBy === effectiveId)
       );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig, effectiveId, isTeamLeaderOrChecker, teamEmployeeIds]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
   // 5. Hồ sơ Có hẹn nhắc việc
   const reminderRecords = useMemo(() => {
@@ -1421,7 +1395,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                                     </button>
                                                 </>
                                             )}
-                                            {activeTab === 'pending_check' && (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) && (r.checkedBy === user.employeeId || r.checkedBy === effectiveId || user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || ''))) && (
+                                            {activeTab === 'pending_check' && (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) && (r.checkedBy === user.employeeId || r.checkedBy === effectiveId) && (
                                                 <>
                                                     <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
                                                         <Send size={14} /> Trình ký
@@ -1439,7 +1413,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                                     <RotateCcw size={14} /> Thu hồi
                                                 </button>
                                             )}
-                                            {activeTab === 'pending_sign' && (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || ''))) && (
+                                            {activeTab === 'pending_sign' && (r.submittedTo === user.employeeId || r.submittedTo === effectiveId) && (
                                                 <>
                                                     <button onClick={() => handleSignRecord(r)} title="Ký duyệt" className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
                                                         <FileSignature size={14} /> Ký duyệt
