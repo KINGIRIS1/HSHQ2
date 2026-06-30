@@ -16,12 +16,12 @@ export const saveGeminiKey = (key: string) => {
 };
 
 export const getGeminiKey = () => {
-    return localStorage.getItem(GEMINI_KEY_STORAGE) || '';
+    return localStorage.getItem(GEMINI_KEY_STORAGE) || 'AIzaSyCBBIFaokTfe0KLsVMY2VDEEgqRX8B_yvM';
 };
 
 const getAiClient = (): GoogleGenAI | null => {
-  // Ưu tiên lấy key người dùng nhập trong cài đặt, sau đó mới đến biến môi trường
-  const apiKey = localStorage.getItem(GEMINI_KEY_STORAGE) || process.env.API_KEY;
+  // Ưu tiên lấy key người dùng nhập trong cài đặt, sau đó mới đến biến môi trường, cuối cùng là key mặc định
+  const apiKey = localStorage.getItem(GEMINI_KEY_STORAGE) || process.env.API_KEY || 'AIzaSyCBBIFaokTfe0KLsVMY2VDEEgqRX8B_yvM';
   
   if (!apiKey) {
     console.warn("API Key not found in localStorage or environment variables.");
