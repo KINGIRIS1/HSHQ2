@@ -330,8 +330,12 @@ const AssignModal: React.FC<AssignModalProps> = ({
   const [selectedWorkflow, setSelectedWorkflow] = useState<string>('');
 
   const hasGcnRecords = useMemo(() => {
+    // Tắt quy trình cấp giấy nếu giao việc tại tab đo đạc, lưu trữ hoặc công văn
+    if (filterDepartment === 'Đo đạc' || filterDepartment === 'Lưu trữ' || filterDepartment === 'Công văn') {
+      return false;
+    }
     return (selectedRecords || []).some(r => isRegType(r.recordType));
-  }, [selectedRecords]);
+  }, [selectedRecords, filterDepartment]);
 
   // Tự động xác định địa bàn mục tiêu từ các hồ sơ được chọn để đề xuất cá nhân phụ trách đúng tuyến
   const targetWardName = useMemo(() => {
@@ -380,38 +384,58 @@ const AssignModal: React.FC<AssignModalProps> = ({
   // Khởi dựng Tổ mặc định khi mở Modal
   useEffect(() => {
     if (isOpen) {
-      setSelectedEmpId('');
       setSearchTerm('');
       
-      if (selectedRecords && selectedRecords.length > 0) {
+      const savedWorkflow = localStorage.getItem('assign_modal_last_workflow');
+      if (savedWorkflow) {
+        setSelectedWorkflow(savedWorkflow);
+      } else if (selectedRecords && selectedRecords.length > 0) {
         setSelectedWorkflow(selectedRecords[0].gcnWorkflowType || 'quy_trinh_1');
       } else {
         setSelectedWorkflow('quy_trinh_1');
       }
       
-      let defaultTeam = '';
-      if (currentUser && currentUser.employeeId) {
-        const empObj = employees.find(e => e.id === currentUser.employeeId);
+      const savedEmpId = localStorage.getItem('assign_modal_last_employee_id');
+      let foundSavedEmp = false;
+      let savedEmpTeam = '';
+      if (savedEmpId) {
+        const empObj = employees.find(e => e.id === savedEmpId);
         if (empObj) {
-          defaultTeam = getEmployeeTeam(empObj);
+          foundSavedEmp = true;
+          savedEmpTeam = getEmployeeTeam(empObj);
         }
       }
-      
-      // Nếu không có, thử suy đoán dựa trên filterDepartment truyền vào (đáp ứng tương thích ngược)
-      if (!defaultTeam && filterDepartment) {
-        const fdNorm = removeVietnameseTones(filterDepartment).toLowerCase();
-        if (fdNorm.includes('dang ky') || fdNorm.includes('cap giay')) defaultTeam = 'Tổ Cấp giấy';
-        else if (fdNorm.includes('luu tru')) defaultTeam = 'Tổ Lưu trữ';
-        else if (fdNorm.includes('do dac')) defaultTeam = 'Tổ Đo đạc';
-        else if (fdNorm.includes('hanh chinh') || fdNorm.includes('cong van')) defaultTeam = 'Tổ Hành chính';
+
+      if (foundSavedEmp) {
+        setSelectedEmpId(savedEmpId || '');
+        setSelectedTeam(savedEmpTeam);
+      } else {
+        setSelectedEmpId('');
+        
+        let defaultTeam = '';
+        if (currentUser && currentUser.employeeId) {
+          const empObj = employees.find(e => e.id === currentUser.employeeId);
+          if (empObj) {
+            defaultTeam = getEmployeeTeam(empObj);
+          }
+        }
+        
+        // Nếu không có, thử suy đoán dựa trên filterDepartment truyền vào (đáp ứng tương thích ngược)
+        if (!defaultTeam && filterDepartment) {
+          const fdNorm = removeVietnameseTones(filterDepartment).toLowerCase();
+          if (fdNorm.includes('dang ky') || fdNorm.includes('cap giay')) defaultTeam = 'Tổ Cấp giấy';
+          else if (fdNorm.includes('luu tru')) defaultTeam = 'Tổ Lưu trữ';
+          else if (fdNorm.includes('do dac')) defaultTeam = 'Tổ Đo đạc';
+          else if (fdNorm.includes('hanh chinh') || fdNorm.includes('cong van')) defaultTeam = 'Tổ Hành chính';
+        }
+        
+        // Nếu vẫn không tìm ra -> mặc định Tổ Cấp Giấy
+        if (!defaultTeam) {
+          defaultTeam = 'Tổ Cấp giấy';
+        }
+        
+        setSelectedTeam(defaultTeam);
       }
-      
-      // Nếu vẫn không tìm ra -> mặc định Tổ Cấp Giấy
-      if (!defaultTeam) {
-        defaultTeam = 'Tổ Cấp giấy';
-      }
-      
-      setSelectedTeam(defaultTeam);
     }
   }, [isOpen, currentUser, employees, filterDepartment, selectedRecords]);
 
@@ -460,6 +484,16 @@ const AssignModal: React.FC<AssignModalProps> = ({
   const isSurveyTeamMember = (emp: Employee) => {
       const dept = (emp.department || '').toLowerCase();
       return ['kỹ thuật', 'đo đạc', 'tổ đo', 'địa chính', 'nội nghiệp', 'ngoại nghiệp'].some(k => dept.includes(k));
+  };
+
+  const handleConfirm = () => {
+    if (selectedEmpId) {
+      localStorage.setItem('assign_modal_last_employee_id', selectedEmpId);
+      if (selectedWorkflow) {
+        localStorage.setItem('assign_modal_last_workflow', selectedWorkflow);
+      }
+      onConfirm(selectedEmpId, hasGcnRecords ? selectedWorkflow : undefined);
+    }
   };
 
   if (!isOpen) return null;
@@ -685,7 +719,7 @@ const AssignModal: React.FC<AssignModalProps> = ({
                     Hủy bỏ
                 </button>
                 <button 
-                    onClick={() => selectedEmpId && onConfirm(selectedEmpId, hasGcnRecords ? selectedWorkflow : undefined)}
+                    onClick={handleConfirm}
                     disabled={!selectedEmpId}
                     className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-black shadow-lg shadow-blue-600/20 hover:shadow-blue-600/30 transition-all active:scale-95 flex items-center gap-2"
                 >
