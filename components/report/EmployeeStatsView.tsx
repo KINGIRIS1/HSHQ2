@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { RecordFile, Employee, RecordStatus } from '../../types';
 import { generateEmployeeEvaluation } from '../../services/geminiService';
-import { User as UserIcon, AlertOctagon, Sparkles, Loader2, ListFilter, CheckCircle2, Clock, AlertTriangle, Briefcase, FileSpreadsheet } from 'lucide-react';
+import { User as UserIcon, AlertOctagon, Sparkles, Loader2, ListFilter, CheckCircle2, Clock, AlertTriangle, Briefcase, FileSpreadsheet, MapPin, ChevronLeft, ChevronRight } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { STATUS_LABELS } from '../../constants';
 
@@ -20,6 +20,18 @@ const EmployeeStatsView: React.FC<EmployeeStatsViewProps> = ({
     const [aiEvaluation, setAiEvaluation] = useState<string>('');
     const [isGenerating, setIsGenerating] = useState(false);
     const [empFilterType, setEmpFilterType] = useState<'all' | 'completed' | 'processing' | 'overdue'>('all');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(20);
+
+    const formatDate = (d?: string | null) => {
+        if (!d) return '-';
+        const date = new Date(d);
+        if (isNaN(date.getTime())) return '-';
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+    };
 
     // Filter records by date range first
     const recordsInTimeRange = useMemo(() => {
@@ -32,10 +44,15 @@ const EmployeeStatsView: React.FC<EmployeeStatsViewProps> = ({
         });
     }, [records, fromDate, toDate]);
 
-    // Reset card filter when date range or records change
+    // Reset card filter and page when date range, employee selection, or records change
     React.useEffect(() => {
         setEmpFilterType('all');
-    }, [fromDate, toDate, records]);
+        setCurrentPage(1);
+    }, [fromDate, toDate, records, selectedEmpId]);
+
+    React.useEffect(() => {
+        setCurrentPage(1);
+    }, [empFilterType]);
 
     // Calculate Stats (Used for AI and Lists, visual cards are handled by parent ReportSection)
     const stats = useMemo(() => {
@@ -237,6 +254,77 @@ const EmployeeStatsView: React.FC<EmployeeStatsViewProps> = ({
         });
     }, [employeeStatsList, empFilterType]);
 
+    // Computed filtered records list based on selected employee and metric card
+    const filteredRecordsList = useMemo(() => {
+        let list = recordsInTimeRange;
+
+        // Filter by selected employee
+        if (selectedEmpId) {
+            list = list.filter(r => r.assignedTo === selectedEmpId);
+        }
+
+        // Filter by metric card selection (empFilterType)
+        if (empFilterType === 'completed') {
+            list = list.filter(r => {
+                return [
+                    RecordStatus.HANDOVER, 
+                    RecordStatus.RETURNED, 
+                    RecordStatus.WITHDRAWN, 
+                    RecordStatus.SIGNED
+                ].includes(r.status as RecordStatus) || !!r.exportBatch || !!r.exportDate;
+            });
+        } else if (empFilterType === 'processing') {
+            list = list.filter(r => {
+                const isFinished = [
+                    RecordStatus.HANDOVER, 
+                    RecordStatus.RETURNED, 
+                    RecordStatus.WITHDRAWN, 
+                    RecordStatus.SIGNED
+                ].includes(r.status as RecordStatus) || !!r.exportBatch || !!r.exportDate;
+                return !isFinished;
+            });
+        } else if (empFilterType === 'overdue') {
+            list = list.filter(r => {
+                const isFinished = [
+                    RecordStatus.HANDOVER, 
+                    RecordStatus.RETURNED, 
+                    RecordStatus.WITHDRAWN, 
+                    RecordStatus.SIGNED
+                ].includes(r.status as RecordStatus) || !!r.exportBatch || !!r.exportDate;
+                if (isFinished) {
+                    if (r.deadline && (r.completedDate || r.exportDate || r.receivedDate)) {
+                        const d = new Date(r.deadline); d.setHours(0,0,0,0);
+                        const refDate = r.completedDate || r.exportDate || r.receivedDate;
+                        const c = new Date(refDate!); c.setHours(0,0,0,0);
+                        return c > d;
+                    }
+                    return false;
+                } else {
+                    if (r.deadline) {
+                        const d = new Date(r.deadline); d.setHours(0,0,0,0);
+                        const today = new Date(); today.setHours(0,0,0,0);
+                        return today > d;
+                    }
+                    return false;
+                }
+            });
+        }
+
+        // Sort by receivedDate descending
+        return [...list].sort((a, b) => {
+            if (!a.receivedDate) return 1;
+            if (!b.receivedDate) return -1;
+            return new Date(b.receivedDate).getTime() - new Date(a.receivedDate).getTime();
+        });
+    }, [recordsInTimeRange, selectedEmpId, empFilterType]);
+
+    const paginatedRecords = useMemo(() => {
+        const start = (currentPage - 1) * itemsPerPage;
+        return filteredRecordsList.slice(start, start + itemsPerPage);
+    }, [filteredRecordsList, currentPage, itemsPerPage]);
+
+    const totalPages = Math.ceil(filteredRecordsList.length / itemsPerPage);
+
     return (
         <div className="flex flex-col h-full bg-slate-100 p-4 gap-4 overflow-y-hidden">
             
@@ -303,77 +391,132 @@ const EmployeeStatsView: React.FC<EmployeeStatsViewProps> = ({
             {/* 2. DETAILED CONTENT & PERFORMANCE TABLE SIDE-BY-SIDE */}
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 flex-1 min-h-0 overflow-hidden">
                 
-                {/* LEFT COLUMN: PERFORMANCE TABLE */}
+                {/* LEFT COLUMN: LIST OF RECORDS BY EMPLOYEE */}
                 <div className="xl:col-span-7 flex flex-col h-full bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden min-h-[300px]">
-                    <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center shrink-0">
+                    <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center shrink-0">
                         <h3 className="font-bold text-gray-700 text-sm uppercase flex items-center gap-2">
-                            <UserIcon size={16} className="text-gray-500" /> Bảng thống kê hiệu suất cán bộ
+                            <UserIcon size={16} className="text-gray-500" /> Danh sách hồ sơ theo nhân viên
                         </h3>
-                        <span className="text-xs font-mono text-gray-500 bg-gray-200/60 px-2.5 py-0.5 rounded-full font-bold">
-                            {filteredEmployeeStatsList.length} Cán bộ
-                        </span>
+                        
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-gray-500 whitespace-nowrap">Cán bộ:</span>
+                            <div className="flex items-center bg-white px-2 py-1 border border-gray-300 rounded-lg h-[34px] w-48 focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500">
+                                <select 
+                                    value={selectedEmpId} 
+                                    onChange={(e) => {
+                                        setSelectedEmpId(e.target.value);
+                                        setAiEvaluation('');
+                                    }} 
+                                    className="text-xs outline-none bg-transparent text-gray-700 font-bold cursor-pointer border-none focus:ring-0 p-0 w-full"
+                                >
+                                    <option value="">Tất cả cán bộ</option>
+                                    {employees.map(emp => (
+                                        <option key={emp.id} value={emp.id}>{emp.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
                     </div>
                     
                     <div className="flex-1 overflow-auto custom-scrollbar">
-                        {filteredEmployeeStatsList.length > 0 ? (
-                            <table className="w-full text-sm text-left border-collapse">
-                                <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase sticky top-0 border-b border-slate-100 z-10 shadow-sm">
-                                    <tr>
-                                        <th className="p-3">STT</th>
-                                        <th className="p-3">Cán bộ xử lý</th>
-                                        <th className="p-3">Phòng ban / Tổ</th>
-                                        <th className="p-3 text-center">Tổng HS</th>
-                                        <th className="p-3 text-center">Đã xong</th>
-                                        <th className="p-3 text-center">Trễ-Chưa xong</th>
-                                        <th className="p-3 text-center">Trễ-Đã xong</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {filteredEmployeeStatsList.map((item, idx) => {
-                                        const isSelected = selectedEmpId === item.employee.id;
+                        <table className="w-full text-sm text-left border-collapse whitespace-nowrap">
+                            <thead className="bg-slate-50 text-slate-500 font-bold text-xs uppercase sticky top-0 border-b border-slate-100 z-10 shadow-sm">
+                                <tr>
+                                    <th className="p-3 text-center w-12">STT</th>
+                                    <th className="p-3">Mã hồ sơ</th>
+                                    <th className="p-3">Chủ sử dụng</th>
+                                    <th className="p-3">Loại hồ sơ</th>
+                                    <th className="p-3">Hạn trả</th>
+                                    <th className="p-3">Cán bộ xử lý</th>
+                                    <th className="p-3 text-center">Trạng thái</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {paginatedRecords.length > 0 ? (
+                                    paginatedRecords.map((r, idx) => {
+                                        const emp = employees.find(e => e.id === r.assignedTo);
+                                        const globalIdx = (currentPage - 1) * itemsPerPage + idx + 1;
+                                        
+                                        const isFinished = [
+                                            RecordStatus.HANDOVER, 
+                                            RecordStatus.RETURNED, 
+                                            RecordStatus.WITHDRAWN, 
+                                            RecordStatus.SIGNED
+                                        ].includes(r.status as RecordStatus) || !!r.exportBatch || !!r.exportDate;
+
+                                        let isOverdue = false;
+                                        if (isFinished) {
+                                            if (r.deadline && (r.completedDate || r.exportDate || r.receivedDate)) {
+                                                const d = new Date(r.deadline); d.setHours(0,0,0,0);
+                                                const refDate = r.completedDate || r.exportDate || r.receivedDate;
+                                                const c = new Date(refDate!); c.setHours(0,0,0,0);
+                                                isOverdue = c > d;
+                                            }
+                                        } else {
+                                            if (r.deadline) {
+                                                const d = new Date(r.deadline); d.setHours(0,0,0,0);
+                                                const today = new Date(); today.setHours(0,0,0,0);
+                                                isOverdue = today > d;
+                                            }
+                                        }
+
                                         return (
-                                            <tr 
-                                                key={item.employee.id} 
-                                                onClick={() => {
-                                                    setSelectedEmpId(item.employee.id);
-                                                    setAiEvaluation('');
-                                                }}
-                                                className={`hover:bg-slate-50 cursor-pointer transition-all ${isSelected ? 'bg-indigo-50 border-l-4 border-l-indigo-600 font-semibold' : ''}`}
-                                            >
-                                                <td className={`p-3 font-mono font-bold ${isSelected ? 'text-indigo-600' : 'text-gray-400'}`}>{idx + 1}</td>
-                                                <td className={`p-3 font-bold ${isSelected ? 'text-indigo-950' : 'text-gray-800'}`}>{item.employee.name}</td>
-                                                <td className="p-3 text-gray-500 font-medium text-xs truncate max-w-[120px]">{item.employee.department}</td>
-                                                <td className="p-3 text-center font-bold text-blue-600">
-                                                    <span className="bg-blue-50 px-2 py-0.5 rounded text-xs font-extrabold">{item.total}</span>
-                                                </td>
-                                                <td className="p-3 text-center font-bold text-emerald-600">
-                                                    <span className="bg-emerald-50 px-2 py-0.5 rounded text-xs font-extrabold">{item.completedCount}</span>
-                                                </td>
+                                            <tr key={r.id} className={`hover:bg-slate-50 text-xs transition-colors ${isOverdue ? 'bg-red-50/20' : ''}`}>
+                                                <td className="p-3 text-center text-gray-400 font-mono font-medium">{globalIdx}</td>
+                                                <td className={`p-3 font-bold ${isOverdue ? 'text-red-600' : 'text-blue-600'}`}>{r.code}</td>
+                                                <td className="p-3 font-medium text-gray-800 truncate max-w-[120px]" title={r.customerName || undefined}>{r.customerName}</td>
+                                                <td className="p-3 text-gray-500 truncate max-w-[140px]" title={r.recordType || undefined}>{r.recordType || '-'}</td>
+                                                <td className={`p-3 font-bold ${isOverdue ? 'text-red-600' : 'text-gray-700'}`}>{formatDate(r.deadline)}</td>
+                                                <td className="p-3 text-gray-600 font-medium truncate max-w-[100px]" title={emp?.name || undefined}>{emp ? emp.name : '-'}</td>
                                                 <td className="p-3 text-center">
-                                                    {item.overduePendingCount > 0 ? (
-                                                        <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs font-extrabold">{item.overduePendingCount}</span>
-                                                    ) : (
-                                                        <span className="bg-gray-100 text-gray-400 px-2 py-0.5 rounded text-xs font-semibold">0</span>
-                                                    )}
-                                                </td>
-                                                <td className="p-3 text-center">
-                                                    {item.overdueCompletedCount > 0 ? (
-                                                        <span className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded text-xs font-extrabold">{item.overdueCompletedCount}</span>
-                                                    ) : (
-                                                        <span className="bg-gray-100 text-gray-400 px-2 py-0.5 rounded text-xs font-semibold">0</span>
-                                                    )}
+                                                    <span className={`px-2 py-0.5 rounded text-[10px] border font-bold ${
+                                                        isOverdue 
+                                                            ? 'bg-red-50 text-red-700 border-red-200' 
+                                                            : isFinished 
+                                                                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                                                                : 'bg-blue-50 text-blue-700 border-blue-200'
+                                                    }`}>
+                                                        {STATUS_LABELS[r.status] || r.status}
+                                                    </span>
                                                 </td>
                                             </tr>
                                         );
-                                    })}
-                                </tbody>
-                            </table>
-                        ) : (
-                            <div className="h-48 flex flex-col items-center justify-center text-gray-400 text-sm italic">
-                                <p>Không tìm thấy cán bộ nào khớp bộ lọc.</p>
-                            </div>
-                        )}
+                                    })
+                                ) : (
+                                    <tr>
+                                        <td colSpan={7} className="p-8 text-center text-gray-400 italic">
+                                            Không có hồ sơ nào khớp bộ lọc trong khoảng thời gian này.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
                     </div>
+
+                    {filteredRecordsList.length > 0 && (
+                        <div className="border-t border-gray-200 p-3 bg-gray-50 flex justify-between items-center shrink-0">
+                            <span className="text-xs text-gray-500">
+                                Hiển thị <strong>{(currentPage - 1) * itemsPerPage + 1}</strong> - <strong>{Math.min(currentPage * itemsPerPage, filteredRecordsList.length)}</strong> trên tổng <strong>{filteredRecordsList.length}</strong>
+                            </span>
+                            <div className="flex items-center gap-1">
+                                <div className="flex items-center mr-4 gap-2">
+                                    <span className="text-xs text-gray-500">Số lượng:</span>
+                                    <select 
+                                        value={itemsPerPage} 
+                                        onChange={(e) => setItemsPerPage(Number(e.target.value))} 
+                                        className="border border-gray-300 rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-indigo-400"
+                                    >
+                                        <option value={20}>20</option>
+                                        <option value={50}>50</option>
+                                        <option value={100}>100</option>
+                                    </select>
+                                </div>
+                                <button onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1} className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"><ChevronLeft size={16} /></button>
+                                <span className="text-xs font-medium mx-2">Trang {currentPage} / {totalPages}</span>
+                                <button onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="p-1.5 rounded hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"><ChevronRight size={16} /></button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
                 {/* RIGHT COLUMN: DETAILED STATS & AI EVALUATION */}

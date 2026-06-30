@@ -129,7 +129,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
     if (currentView && [
         "registration_records", "registration_assign_tasks", "registration_completed_list", 
         "registration_pending_check_list", "registration_check_list", "registration_handover_list", 
-        "registration_director_completed"
+        "registration_director_completed", "registration_vao_so"
     ].includes(currentView)) {
         return REGISTRATION_PROCEDURES;
     }
@@ -223,7 +223,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
     const isRegView = currentView && [
       "registration_records", "registration_assign_tasks", "registration_completed_list", 
       "registration_pending_check_list", "registration_check_list", "registration_handover_list", 
-      "registration_director_completed"
+      "registration_director_completed", "registration_vao_so"
     ].includes(currentView);
 
     if (isRegView) return true;
@@ -453,7 +453,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
         
         {/* BODY - SCROLLABLE */}
         <div className="overflow-y-auto p-4 md:p-6 flex-1 bg-gray-100">
-            {isRegistrationRecord ? (
+            {true ? (
                 <RecordForm
                     initialData={initialData}
                     onSave={async (record) => {
@@ -472,6 +472,9 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                     isInModal={true}
                 />
             ) : (
+                <div id="record-form"></div>
+            )}
+            {false && (
                 <form id="record-form" onSubmit={handleSubmit} className="space-y-6">
                 {/* 1. THÔNG TIN CHUNG */}
                 <div className="bg-white p-4 md:p-5 rounded-lg border border-gray-200 shadow-sm">
@@ -534,14 +537,14 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                     </div>
                 </div>
 
-                {/* 2. CHỦ SỬ DỤNG */}
+                {/* 2. THÔNG TIN NGƯỜI NỘP HỒ SƠ */}
                 <div className="bg-white p-4 md:p-5 rounded-lg border border-gray-200 shadow-sm">
-                    <h3 className="text-sm font-bold text-blue-800 uppercase mb-4 flex items-center gap-2 border-b pb-2"><UserIcon size={16} /> Chủ sử dụng & Ủy quyền</h3>
+                    <h3 className="text-sm font-bold text-blue-800 uppercase mb-4 flex items-center gap-2 border-b pb-2"><UserIcon size={16} /> THÔNG TIN NGƯỜI NỘP HỒ SƠ</h3>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="md:col-span-2"><label className="block text-xs font-bold text-gray-700 mb-1">Tên chủ sử dụng <span className="text-red-500">*</span></label><input type="text" required className="w-full border border-gray-300 rounded-md px-3 py-2 font-medium" value={val(formData.customerName)} onChange={(e) => handleChange('customerName', e.target.value)} /></div>
-                        <div><label className="block text-xs font-bold text-gray-700 mb-1">Số điện thoại</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.phoneNumber)} onChange={(e) => handleChange('phoneNumber', e.target.value)} /></div>
+                        <div className="md:col-span-2"><label className="block text-xs font-bold text-gray-700 mb-1">Họ và tên người nộp <span className="text-red-500">*</span></label><input type="text" required className="w-full border border-gray-300 rounded-md px-3 py-2 font-medium" value={val(formData.customerName)} onChange={(e) => handleChange('customerName', e.target.value)} /></div>
+                        <div><label className="block text-xs font-bold text-gray-700 mb-1">SĐT người nộp</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.phoneNumber)} onChange={(e) => handleChange('phoneNumber', e.target.value)} /></div>
                         <div className="md:col-span-2"><label className="block text-xs font-bold text-gray-700 mb-1">Địa chỉ thường trú</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.customerAddress)} onChange={(e) => handleChange('customerAddress', e.target.value)} /></div>
-                        <div><label className="block text-xs font-bold text-gray-700 mb-1">CCCD</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.cccd)} onChange={(e) => handleChange('cccd', e.target.value)} /></div>
+                        <div><label className="block text-xs font-bold text-gray-700 mb-1">CCCD/Số Giấy</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.cccd)} onChange={(e) => handleChange('cccd', e.target.value)} /></div>
                         <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 gap-2 bg-gray-50 p-2 rounded border border-gray-200">
                             <div><label className="block text-[10px] font-bold text-gray-500 uppercase">Người được ủy quyền</label><input type="text" className="w-full border border-gray-300 rounded px-2 py-1 text-sm" value={val(formData.authorizedBy)} onChange={(e) => handleChange('authorizedBy', e.target.value)} placeholder="Họ tên..." /></div>
                             <div><label className="block text-[10px] font-bold text-gray-500 uppercase">Loại giấy tờ</label><select className="w-full border border-gray-300 rounded px-2 py-1 text-sm bg-white" value={val(formData.authDocType)} onChange={(e) => handleChange('authDocType', e.target.value)}><option value="">-- Chọn giấy tờ --</option><option value="Hợp đồng ủy quyền">Hợp đồng ủy quyền</option><option value="Giấy ủy quyền">Giấy ủy quyền</option><option value="Văn bản ủy quyền">Văn bản ủy quyền</option></select></div>
@@ -549,12 +552,12 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                     </div>
                 </div>
 
-                {/* 3. Vị Trí & Thửa Đất (Giữ nguyên) */}
+                {/* 3. THÔNG TIN THỬA ĐẤT */}
                 <div className="bg-white p-4 md:p-5 rounded-lg border border-gray-200 shadow-sm">
-                    <h3 className="text-sm font-bold text-blue-800 uppercase mb-4 flex items-center gap-2 border-b pb-2"><MapPin size={16} /> Vị trí & Thửa đất</h3>
+                    <h3 className="text-sm font-bold text-blue-800 uppercase mb-4 flex items-center gap-2 border-b pb-2"><MapPin size={16} /> THÔNG TIN THỬA ĐẤT</h3>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                         <div className="md:col-span-2">
-                            <label className="block text-xs font-bold text-gray-700 mb-1">Xã / Phường</label>
+                            <label className="block text-xs font-bold text-gray-700 mb-1">Phường/xã</label>
                             <select 
                                 className="w-full border border-gray-300 rounded-md px-3 py-2 bg-white" 
                                 value={val(formData.ward)} 
@@ -563,15 +566,15 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                                     handleChange('ward', w);
                                 }}
                             >
-                                <option value="">-- Chọn Xã/Phường --</option>
+                                <option value="">-- Chọn Phường/Xã --</option>
                                 {wards.map(w => <option key={w} value={w}>{w}</option>)}
                             </select>
                         </div>
                         <div className="md:col-span-2"><label className="block text-xs font-bold text-gray-700 mb-1">Địa chỉ chi tiết</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2" value={val(formData.address)} onChange={(e) => handleChange('address', e.target.value)} placeholder="Số nhà, đường, ấp..." /></div>
                         <div className="grid grid-cols-3 gap-2 md:col-span-4">
                             <div><label className="block text-xs font-bold text-gray-700 mb-1">Tờ bản đồ</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2 text-center font-mono" value={val(formData.mapSheet)} onChange={(e) => handleChange('mapSheet', e.target.value)} /></div>
-                            <div><label className="block text-xs font-bold text-gray-700 mb-1">Thửa đất</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2 text-center font-mono" value={val(formData.landPlot)} onChange={(e) => handleChange('landPlot', e.target.value)} /></div>
-                            <div><label className="block text-xs font-bold text-gray-700 mb-1">Diện tích (m2)</label><input type="number" className="w-full border border-gray-300 rounded-md px-3 py-2 text-right" value={formData.area || 0} onChange={(e) => handleChange('area', parseFloat(e.target.value))} /></div>
+                            <div><label className="block text-xs font-bold text-gray-700 mb-1">Số thứ tự thửa</label><input type="text" className="w-full border border-gray-300 rounded-md px-3 py-2 text-center font-mono" value={val(formData.landPlot)} onChange={(e) => handleChange('landPlot', e.target.value)} /></div>
+                            <div><label className="block text-xs font-bold text-gray-700 mb-1">Diện tích (m²)</label><input type="number" className="w-full border border-gray-300 rounded-md px-3 py-2 text-right" value={formData.area || 0} onChange={(e) => handleChange('area', parseFloat(e.target.value))} /></div>
                         </div>
                     </div>
                 </div>
@@ -615,7 +618,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                         {hasAdminRights && (
                             <div className="grid grid-cols-2 gap-4 bg-indigo-50 p-3 rounded border border-indigo-200">
                                 <div><label className="block text-[10px] font-bold text-indigo-500 uppercase mb-1">Đợt xuất (Batch)</label><input type="number" className="w-full border border-indigo-200 rounded-md px-2 py-1.5 text-sm" value={val(formData.exportBatch)} onChange={(e) => handleChange('exportBatch', parseInt(e.target.value))} /></div>
-                                <div><label className="block text-[10px] font-bold text-indigo-500 uppercase mb-1">Ngày xuất</label><input type="date" className="w-full border border-indigo-200 rounded-md px-2 py-1.5 text-sm" value={val(formData.exportDate ? formData.exportDate.split('T')[0] : '')} onChange={(e) => handleChange('exportDate', new Date(e.target.value).toISOString())} /></div>
+                                <div><label className="block text-[10px] font-bold text-indigo-500 uppercase mb-1">Ngày xuất</label><input type="date" className="w-full border border-indigo-200 rounded-md px-2 py-1.5 text-sm" value={formData.exportDate ? String(formData.exportDate).split('T')[0] : ''} onChange={(e) => handleChange('exportDate', new Date(e.target.value).toISOString())} /></div>
                             </div>
                         )}
                         
@@ -653,7 +656,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                                         <input 
                                             type="text" 
                                             className="w-full border border-emerald-300 rounded-md px-3 py-2 font-mono bg-white text-sm font-bold" 
-                                            value={formData.paymentAmount !== null && formData.paymentAmount !== undefined ? formData.paymentAmount : ''} 
+                                            value={formData.paymentAmount !== null && formData.paymentAmount !== undefined ? String(formData.paymentAmount) : ''} 
                                             onChange={(e) => {
                                                 const val = e.target.value.replace(/[^0-9]/g, '');
                                                 handleChange('paymentAmount', val ? parseInt(val, 10) : null);

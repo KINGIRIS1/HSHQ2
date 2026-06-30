@@ -128,7 +128,7 @@ const AppModals: React.FC<AppModalsProps> = (props) => {
                     if (['all_records', 'assign_tasks', 'completed_list', 'pending_check_list', 'check_list', 'handover_list', 'director_completed'].includes(view)) {
                         return 'Đo đạc';
                     }
-                    if (['registration_records', 'registration_assign_tasks', 'registration_completed_list', 'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 'registration_director_completed'].includes(view)) {
+                    if (['registration_records', 'registration_assign_tasks', 'registration_completed_list', 'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 'registration_director_completed', 'registration_vao_so'].includes(view)) {
                         return 'Cấp giấy';
                     }
                     if (['congvan_records', 'congvan_assign_tasks', 'congvan_completed_list', 'congvan_check_list', 'congvan_handover_list', 'congvan_director_completed'].includes(view)) {

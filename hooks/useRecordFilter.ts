@@ -246,7 +246,7 @@ export const useRecordFilter = (
         const isRegistrationView = [
             'registration_records', 'registration_assign_tasks', 'registration_completed_list', 
             'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 
-            'registration_director_completed'
+            'registration_director_completed', 'registration_vao_so'
         ].includes(currentView);
 
         const isArchiveView = [
@@ -276,16 +276,16 @@ export const useRecordFilter = (
         };
         
         if (isArchiveView) {
-            result = result.filter(r => r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục');
+            result = result.filter(r => r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn' || r.recordType === '1.1 Công văn');
         } else if (isCongVanView) {
-            result = result.filter(r => r.recordType === 'Công văn');
+            result = result.filter(r => r.recordType === 'Công văn' || r.recordType === '1.1 Công văn');
         } else if (isRegistrationView) {
             result = result.filter(r => isReg(r.recordType));
         } else if (isOtherView) {
             result = result.filter(r => ['CMD', 'Tòa án', 'Thi hành án'].includes(r.recordType || ''));
         } else if (isMeasurementView) {
             result = result.filter(r => 
-                !['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '') &&
+                !['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn', '1.1 Công văn'].includes(r.recordType || '') &&
                 !isReg(r.recordType)
             );
         }

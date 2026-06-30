@@ -1,6 +1,6 @@
 import React from 'react';
 import { RecordFile, Employee } from '../../types';
-import { User, MapPin, FileText, Trash2 } from 'lucide-react';
+import { User, MapPin, FileText, Trash2, XCircle } from 'lucide-react';
 
 interface SimpleRecordFormProps {
   formData: Partial<RecordFile>;
@@ -30,6 +30,16 @@ interface SimpleRecordFormProps {
   setShowAuthSection: (v: boolean) => void;
   authDocNumber: string;
   setAuthDocNumber: (v: string) => void;
+
+  // Modern layout and sync props
+  isMeasOrArch?: boolean;
+  isApplicantOwner?: boolean;
+  handleApplicantOwnerChange?: (checked: boolean) => void;
+  landAreaRows: Array<{ type: string; area: number | '' }>;
+  addLandAreaRow: () => void;
+  removeLandAreaRow: (index: number) => void;
+  handleLandRowAreaChange: (index: number, value: string) => void;
+  handleLandRowTypeChange: (index: number, type: string) => void;
 }
 
 const SimpleRecordForm: React.FC<SimpleRecordFormProps> = ({
@@ -56,114 +66,246 @@ const SimpleRecordForm: React.FC<SimpleRecordFormProps> = ({
   showAuthSection,
   setShowAuthSection,
   authDocNumber,
-  setAuthDocNumber
+  setAuthDocNumber,
+  isMeasOrArch = false,
+  isApplicantOwner = false,
+  handleApplicantOwnerChange,
+  landAreaRows = [],
+  addLandAreaRow,
+  removeLandAreaRow,
+  handleLandRowAreaChange,
+  handleLandRowTypeChange
 }) => {
   return (
     <div className="space-y-6">
-      {/* 1. CHỦ SỬ DỤNG & ỦY QUYỀN */}
+      {/* 1. THÔNG TIN NGƯỜI NỘP HỒ SƠ */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4 md:p-5">
-        <h3 className="text-sm font-bold text-blue-800 uppercase mb-4 flex items-center gap-2 border-b pb-2 w-full">
-          <User size={16} /> Chủ sử dụng & Ủy quyền
-        </h3>
+        <div className="border-b pb-2 mb-4 flex items-center justify-between w-full">
+          <h3 className="text-sm font-bold text-blue-800 uppercase flex items-center gap-2">
+            <User size={16} /> THÔNG TIN NGƯỜI NỘP HỒ SƠ
+          </h3>
+          {!isMeasOrArch && handleApplicantOwnerChange && (
+            <label className="flex items-center gap-2 text-xs font-bold text-[#007bff] cursor-pointer select-none normal-case hover:text-blue-700 transition-colors">
+              <input 
+                type="checkbox"
+                className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500 bg-white"
+                checked={isApplicantOwner}
+                onChange={(e) => handleApplicantOwnerChange(e.target.checked)}
+              />
+              Người nộp hồ sơ là chủ hồ sơ
+            </label>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="md:col-span-2">
-            <label className={labelClass}>Tên chủ sử dụng <span className="text-red-500">*</span></label>
+          <div>
+            <label className={labelClass}>Họ và tên người nộp <span className="text-red-500">*</span></label>
             <input 
               type="text" 
               required 
               className={plainInputClass} 
+              placeholder="Họ và tên..."
               value={applicantName} 
               onChange={(e) => setApplicantName(e.target.value)} 
             />
           </div>
           <div>
-            <label className={labelClass}>Số điện thoại</label>
+            <label className={labelClass}>CCCD/Số Giấy <span className="text-red-500">*</span></label>
             <input 
               type="text" 
+              required 
               className={plainInputClass} 
+              placeholder="CCCD..."
+              value={applicantCccd} 
+              onChange={(e) => setApplicantCccd(e.target.value)} 
+            />
+          </div>
+          <div>
+            <label className={labelClass}>SĐT người nộp <span className="text-red-500">*</span></label>
+            <input 
+              type="text" 
+              required 
+              className={plainInputClass} 
+              placeholder="Số điện thoại..."
               value={applicantPhone} 
               onChange={(e) => setApplicantPhone(e.target.value)} 
             />
           </div>
-          <div className="md:col-span-2">
-            <label className={labelClass}>Địa chỉ thường trú</label>
+          <div className="md:col-span-3 mt-2">
+            <label className={labelClass}>Địa chỉ thường trú <span className="text-red-500">*</span></label>
             <input 
               type="text" 
+              required 
               className={plainInputClass} 
+              placeholder="Nhập địa chỉ thường trú..."
               value={formData.customerAddress || ''} 
               onChange={(e) => handleChange('customerAddress', e.target.value)} 
-            />
-          </div>
-          <div>
-            <label className={labelClass}>CCCD</label>
-            <input 
-              type="text" 
-              className={plainInputClass} 
-              value={applicantCccd} 
-              onChange={(e) => setApplicantCccd(e.target.value)} 
             />
           </div>
         </div>
       </div>
 
-      {/* 2. VỊ TRÍ & THỬA ĐẤT */}
+      {/* 2. THÔNG TIN THỬA ĐẤT */}
       <div className="bg-white rounded-lg border border-slate-200 shadow-sm p-4 md:p-5">
         <h3 className="text-sm font-bold text-blue-800 uppercase mb-4 flex items-center gap-2 border-b pb-2 w-full">
-          <MapPin size={16} /> Vị trí & Thửa đất
+          <MapPin size={16} /> THÔNG TIN THỬA ĐẤT
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="md:col-span-2">
-            <label className={labelClass}>Xã / Phường</label>
-            <select 
-              className={selectClass} 
-              value={formData.ward || ''} 
-              onChange={(e) => {
-                const w = e.target.value;
-                handleChange('ward', w);
-              }}
-            >
-              <option value="">-- Chọn Xã/Phường --</option>
-              {wards.map(w => <option key={w} value={w}>{w}</option>)}
-            </select>
-          </div>
-          <div className="md:col-span-2">
-            <label className={labelClass}>Địa chỉ chi tiết</label>
-            <input 
-              type="text" 
-              className={plainInputClass} 
-              value={formData.address || ''} 
-              onChange={(e) => handleChange('address', e.target.value)} 
-              placeholder="Số nhà, đường, ấp..." 
-            />
-          </div>
-          <div className="grid grid-cols-3 gap-4 md:col-span-4">
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className={labelClass}>Tờ bản đồ</label>
-              <input 
-                type="text" 
-                className={`${plainInputClass} text-center font-mono`} 
-                value={formData.mapSheet || ''} 
-                onChange={(e) => handleChange('mapSheet', e.target.value)} 
-              />
+              <label className={labelClass}>Tỉnh/Thành phố <span className="text-red-500">*</span></label>
+              <select className={selectClass} disabled value="Thành Phố Đồng Nai">
+                <option value="Thành Phố Đồng Nai">Thành Phố Đồng Nai</option>
+              </select>
             </div>
             <div>
-              <label className={labelClass}>Thửa đất</label>
+              <label className={labelClass}>Phường/xã <span className="text-red-500">*</span></label>
+              <select 
+                required 
+                className={selectClass} 
+                value={formData.ward || ''} 
+                onChange={(e) => handleChange('ward', e.target.value)}
+              >
+                <option value="">-- Chọn phường/xã --</option>
+                {wards.map(w => <option key={w} value={w}>{w}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Địa chỉ chi tiết</label>
               <input 
                 type="text" 
-                className={`${plainInputClass} text-center font-mono`} 
+                className={plainInputClass} 
+                placeholder="Số nhà, tên đường, tổ/ấp..." 
+                value={formData.address || ''} 
+                onChange={(e) => handleChange('address', e.target.value)} 
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className={labelClass}>Số thứ tự thửa <span className="text-red-500">*</span></label>
+              <input 
+                type="text" 
+                required 
+                className={plainInputClass} 
+                placeholder="Số thửa..." 
                 value={formData.landPlot || ''} 
                 onChange={(e) => handleChange('landPlot', e.target.value)} 
               />
             </div>
             <div>
-              <label className={labelClass}>Diện tích (m2)</label>
+              <label className={labelClass}>Tờ bản đồ <span className="text-red-500">*</span></label>
               <input 
-                type="number" 
-                step="any" 
-                className={`${plainInputClass} text-right`} 
-                value={formData.area || 0} 
-                onChange={(e) => handleChange('area', parseFloat(e.target.value) || 0)} 
+                type="text" 
+                required 
+                className={plainInputClass} 
+                placeholder="Số tờ bản đồ..." 
+                value={formData.mapSheet || ''} 
+                onChange={(e) => handleChange('mapSheet', e.target.value)} 
               />
+            </div>
+            <div>
+              <label className={labelClass}>Ngày cấp GCN</label>
+              <input 
+                type="date" 
+                className={plainInputClass} 
+                value={dateVal(formData.issueDate)} 
+                onChange={(e) => handleChange('issueDate', e.target.value)} 
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className={labelClass}>Số vào sổ</label>
+              <input 
+                type="text" 
+                className={plainInputClass} 
+                placeholder="Số vào sổ cấp GCN..." 
+                value={formData.entryNumber || ''} 
+                onChange={(e) => handleChange('entryNumber', e.target.value)} 
+              />
+            </div>
+            <div>
+              <label className={labelClass}>Số GCN</label>
+              <input 
+                type="text" 
+                className={plainInputClass} 
+                placeholder="Số phát hành GCN (Số seri)..." 
+                value={formData.issueNumber || ''} 
+                onChange={(e) => handleChange('issueNumber', e.target.value)} 
+              />
+            </div>
+          </div>
+
+          {/* Shaded Area Grid */}
+          <div className="bg-emerald-50/40 border border-emerald-100 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-3">
+              <div className="flex items-center gap-4">
+                <div className="text-xs font-bold text-emerald-800 uppercase ml-0.5">
+                  Diện tích thửa đất (m²)
+                </div>
+                <div className="flex items-center bg-emerald-50 border border-emerald-300 rounded px-2 py-0.5 text-xs font-bold text-emerald-800 w-[320px] h-[26px]" title="Tổng diện tích">
+                  <span className="shrink-0 text-emerald-800 font-bold">Tổng diện tích :</span>
+                  <input 
+                    type="number" 
+                    step="any" 
+                    readOnly 
+                    className="w-full border-none bg-transparent outline-none text-right font-mono font-bold text-emerald-900 cursor-not-allowed px-1.5" 
+                    value={formData.area || 0} 
+                  />
+                  <span className="shrink-0 text-emerald-600 text-[10px] font-bold">m²</span>
+                </div>
+              </div>
+              {addLandAreaRow && (
+                <button 
+                  type="button" 
+                  onClick={addLandAreaRow}
+                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold flex items-center gap-0.5 active:scale-95 shadow-sm transition-all h-[24px]"
+                >
+                  <span>+ Thêm loại đất</span>
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              {landAreaRows.map((row, index) => (
+                <div key={index} className="flex items-center gap-1.5 bg-white border border-emerald-200 rounded-md p-1 shadow-sm animate-fade-in w-[280px] shrink-0 h-[34px]">
+                  <div className="w-[75px] shrink-0">
+                    <select 
+                      className="w-full px-1 py-0.5 border border-slate-200 rounded text-xs bg-white outline-none focus:border-emerald-500 font-bold text-slate-700 cursor-pointer h-[24px]"
+                      value={row.type}
+                      onChange={(e) => handleLandRowTypeChange(index, e.target.value)}
+                    >
+                      <option value="ONT/ODT">ONT/ODT</option>
+                      <option value="CLN">CLN</option>
+                      <option value="BHK">BHK</option>
+                      <option value="LUC">LUC</option>
+                      <option value="Khác">Khác</option>
+                    </select>
+                  </div>
+                  <div className="flex-1 flex items-center gap-1">
+                    <input 
+                      type="number" 
+                      step="any" 
+                      placeholder="Diện tích" 
+                      className="w-full border border-slate-200 rounded px-1.5 py-0.5 text-xs font-semibold text-slate-800 bg-white focus:border-emerald-500 outline-none text-right h-[24px]" 
+                      value={row.area === '' ? '' : row.area} 
+                      onChange={(e) => handleLandRowAreaChange(index, e.target.value)} 
+                    />
+                    <span className="text-[10px] font-bold text-slate-400 shrink-0">m²</span>
+                  </div>
+                  {removeLandAreaRow && (
+                    <button 
+                      type="button" 
+                      onClick={() => removeLandAreaRow(index)}
+                      className="text-red-500 hover:text-red-700 p-0.5 transition-colors shrink-0"
+                      title="Xóa loại đất này"
+                    >
+                      <XCircle size={15} />
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         </div>

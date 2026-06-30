@@ -99,6 +99,27 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   const [isAnnexModalOpen, setIsAnnexModalOpen] = useState(false);
   const [annexTargetRecord, setAnnexTargetRecord] = useState<RecordFile | null>(null);
 
+  const { isTeamLeaderOrChecker, userTeam, teamEmployeeIds } = useMemo(() => {
+    const emp = employees.find(e => e.id === effectiveId);
+    const empPosition = (emp?.position || '').toLowerCase();
+    const ut = emp ? getEmployeeTeam(emp) : '';
+    const isLeader = user.role === UserRole.TEAM_LEADER || 
+                     empPosition.includes('tổ trưởng') || 
+                     empPosition.includes('tổ phó') || 
+                     empPosition.includes('trưởng phòng') || 
+                     empPosition.includes('phó phòng') || 
+                     empPosition.includes('trưởng nhóm') || 
+                     empPosition.includes('nhóm trưởng');
+    const ids = employees
+        .filter(e => getEmployeeTeam(e) === ut)
+        .map(e => e.id);
+    return {
+      isTeamLeaderOrChecker: isLeader,
+      userTeam: ut,
+      teamEmployeeIds: ids
+    };
+  }, [effectiveId, employees, user.role]);
+
   useEffect(() => {
     const loadArchive = async () => {
         const saoluc = await fetchArchiveRecords('saoluc');
@@ -150,21 +171,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
             return r.submittedTo === effectiveId || r.assignedTo === effectiveId || !r.submittedTo;
         }
         // Nếu là người lãnh đạo/kiểm tra hoặc có vai trò TEAM_LEADER/Tổ trưởng/Tổ phó, họ có thể thấy hồ sơ liên quan đến họ hoặc thành viên trong tổ
-        const emp = employees.find(e => e.id === effectiveId);
-        const empPosition = (emp?.position || '').toLowerCase();
-        const userTeam = emp ? getEmployeeTeam(emp) : '';
-        const isTeamLeaderOrChecker = user.role === UserRole.TEAM_LEADER || 
-                                     empPosition.includes('tổ trưởng') || 
-                                     empPosition.includes('tổ phó') || 
-                                     empPosition.includes('trưởng phòng') || 
-                                     empPosition.includes('phó phòng') || 
-                                     empPosition.includes('trưởng nhóm') || 
-                                     empPosition.includes('nhóm trưởng');
         if (isTeamLeaderOrChecker) {
-            // Đưa toàn bộ thành viên trong tổ vào danh sách theo dõi
-            const teamEmployeeIds = employees
-                .filter(e => getEmployeeTeam(e) === userTeam)
-                .map(e => e.id);
             return (
                 teamEmployeeIds.includes(r.assignedTo || '') ||
                 teamEmployeeIds.includes(r.checkedBy || '') ||
@@ -188,20 +195,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
             if (isDirector) {
                 return r.data?.submitted_to === effectiveId || r.data?.assigned_to === effectiveId || !r.data?.submitted_to; 
             }
-            const emp = employees.find(e => e.id === effectiveId);
-            const empPosition = (emp?.position || '').toLowerCase();
-            const userTeam = emp ? getEmployeeTeam(emp) : '';
-            const isTeamLeaderOrChecker = user.role === UserRole.TEAM_LEADER || 
-                                         empPosition.includes('tổ trưởng') || 
-                                         empPosition.includes('tổ phó') || 
-                                         empPosition.includes('trưởng phòng') || 
-                                         empPosition.includes('phó phòng') || 
-                                         empPosition.includes('trưởng nhóm') || 
-                                         empPosition.includes('nhóm trưởng');
             if (isTeamLeaderOrChecker) {
-                const teamEmployeeIds = employees
-                    .filter(e => getEmployeeTeam(e) === userTeam)
-                    .map(e => e.id);
                 return (
                     teamEmployeeIds.includes(r.data?.assigned_to || '') ||
                     teamEmployeeIds.includes(r.data?.checked_by || '') ||
@@ -300,10 +294,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   const pendingRecords = useMemo(() => {
       let list = myRecords.filter(r => 
           (r.status === RecordStatus.ASSIGNED || r.status === RecordStatus.IN_PROGRESS || r.status === RecordStatus.COMPLETED_WORK || r.status === RecordStatus.REJECTED) &&
-          r.assignedTo === effectiveId
+          (r.assignedTo === effectiveId || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || '')))
       );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig, effectiveId]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId, isTeamLeaderOrChecker, teamEmployeeIds]);
 
   // 2. Hồ sơ Đã thực hiện (Bỏ qua - Trống)
   const completedWorkRecords = useMemo(() => {
@@ -314,19 +308,19 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   const pendingCheckRecords = useMemo(() => {
       let list = myRecords.filter(r => 
           (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) &&
-          r.checkedBy === effectiveId
+          (r.checkedBy === effectiveId || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || '')))
       );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig, effectiveId]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId, isTeamLeaderOrChecker, teamEmployeeIds]);
 
   // 4. Hồ sơ Chờ ký (PENDING_SIGN) - Chuyển thành Tab chính
   const reviewRecords = useMemo(() => {
       let list = myRecords.filter(r => 
           r.status === RecordStatus.PENDING_SIGN &&
-          (r.submittedTo === effectiveId || r.checkedBy === effectiveId || r.assignedTo === effectiveId)
+          (r.submittedTo === effectiveId || r.checkedBy === effectiveId || r.assignedTo === effectiveId || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || '')))
       );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig, effectiveId]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId, isTeamLeaderOrChecker, teamEmployeeIds]);
 
   // 4. Hồ sơ Hoàn thành (SIGNED, HANDOVER, RETURNED, WITHDRAWN)
   const finishedRecords = useMemo(() => {
@@ -335,10 +329,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
            r.status === RecordStatus.HANDOVER || 
            r.status === RecordStatus.RETURNED ||
            r.status === RecordStatus.WITHDRAWN) &&
-          (r.assignedTo === effectiveId || r.checkedBy === effectiveId || r.submittedTo === effectiveId || r.receivedBy === effectiveId)
+          (r.assignedTo === effectiveId || r.checkedBy === effectiveId || r.submittedTo === effectiveId || r.receivedBy === effectiveId || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || '')))
       );
       return filterAndSort(list, searchTerm, sortConfig);
-  }, [myRecords, searchTerm, sortConfig, effectiveId]);
+  }, [myRecords, searchTerm, sortConfig, effectiveId, isTeamLeaderOrChecker, teamEmployeeIds]);
 
   // 5. Hồ sơ Có hẹn nhắc việc
   const reminderRecords = useMemo(() => {
@@ -1382,7 +1376,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                                     </button>
                                                 </>
                                             )}
-                                            {activeTab === 'pending_check' && (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) && (r.checkedBy === user.employeeId || user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN) && (
+                                            {activeTab === 'pending_check' && (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) && (r.checkedBy === user.employeeId || r.checkedBy === effectiveId || user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || ''))) && (
                                                 <>
                                                     <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
                                                         <Send size={14} /> Trình ký
@@ -1400,7 +1394,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                                     <RotateCcw size={14} /> Thu hồi
                                                 </button>
                                             )}
-                                            {activeTab === 'pending_sign' && (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN) && (
+                                            {activeTab === 'pending_sign' && (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || ''))) && (
                                                 <>
                                                     <button onClick={() => handleOpenReturnStepModal(r)} title="Trả về bước trước" className="px-3 py-1.5 bg-amber-600 text-white rounded-md hover:bg-amber-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
                                                         <RotateCcw size={14} /> Trả về

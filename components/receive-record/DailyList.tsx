@@ -629,18 +629,6 @@ const DailyList: React.FC<DailyListProps> = ({
 
             <button 
                 disabled={selectedIds.size === 0} 
-                onClick={() => setIsAssignModalOpen(true)}
-                className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${
-                    selectedIds.size > 0 
-                        ? 'bg-emerald-50 text-emerald-600 border border-emerald-200 hover:bg-emerald-100 cursor-pointer' 
-                        : 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                }`}
-            >
-                <UserPlus size={14} /> Giao việc đồng loạt ({selectedIds.size})
-            </button>
-
-            <button 
-                disabled={selectedIds.size === 0} 
                 onClick={handleBulkDelete}
                 className={`flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${
                     selectedIds.size > 0 

@@ -15,10 +15,13 @@ interface AddToBatchModalProps {
   currentView?: string;
 }
 
-const getRecordGroup = (r: RecordFile): 'measurement' | 'registration' | 'archive_congvan' | 'other' => {
+const getRecordGroup = (r: RecordFile): 'measurement' | 'registration' | 'archive' | 'congvan' | 'other' => {
     const type = r.recordType || '';
-    if (type === 'Cung cấp tài liệu đất đai' || type === 'Sao lục' || type === 'Công văn') {
-        return 'archive_congvan';
+    if (type === 'Cung cấp tài liệu đất đai' || type === 'Sao lục') {
+        return 'archive';
+    }
+    if (type === 'Công văn') {
+        return 'congvan';
     }
     const isReg = (t: string | null | undefined): boolean => {
         if (!t) return false;
@@ -38,14 +41,14 @@ const getRecordGroup = (r: RecordFile): 'measurement' | 'registration' | 'archiv
     return 'measurement';
 };
 
-const getViewActiveGroup = (view: string): 'measurement' | 'registration' | 'archive_congvan' | 'other' => {
+const getViewActiveGroup = (view: string): 'measurement' | 'registration' | 'archive' | 'congvan' | 'other' => {
     if (['archive_records', 'archive_assign_tasks', 'archive_completed_list', 'archive_pending_check_list', 'archive_check_list', 'archive_handover_list', 'archive_director_completed'].includes(view)) {
-        return 'archive_congvan';
+        return 'archive';
     }
     if (['congvan_records', 'congvan_assign_tasks', 'congvan_completed_list', 'congvan_check_list', 'congvan_handover_list', 'congvan_director_completed'].includes(view)) {
-        return 'archive_congvan';
+        return 'congvan';
     }
-    if (['registration_records', 'registration_assign_tasks', 'registration_completed_list', 'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 'registration_director_completed'].includes(view)) {
+    if (['registration_records', 'registration_assign_tasks', 'registration_completed_list', 'registration_pending_check_list', 'registration_check_list', 'registration_handover_list', 'registration_director_completed', 'registration_vao_so'].includes(view)) {
         return 'registration';
     }
     if (['other_records', 'other_assign_tasks', 'other_check_list', 'other_handover_list', 'other_director_completed'].includes(view)) {

@@ -703,7 +703,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
 
       setPendingCompletionRecord(null);
       loadData();
-    } else if (selectedIds.size > 0 && subTab === "signed") {
+    } else if (selectedIds.size > 0 && (subTab === "signed" || (subTab === "result" && handoverTab === "today"))) {
       const historyEntry = {
         action: "Đã giao 1 cửa",
         status: "completed",
@@ -1364,7 +1364,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
               <PenTool size={18} /> Ký duyệt ({selectedIds.size})
             </button>
           )}
-          {subTab === "signed" && isManager && selectedIds.size > 0 && (
+          {(subTab === "signed" || (subTab === "result" && handoverTab === "today")) && isManager && selectedIds.size > 0 && (
             <button
               onClick={() => {
                 setPendingCompletionRecord(null); // Batch Completing

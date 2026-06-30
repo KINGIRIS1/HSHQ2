@@ -49,8 +49,8 @@ const Sidebar: React.FC<SidebarProps> = ({
     { id: 'internal_chat', label: 'Chat nội bộ', icon: MessageSquare, visible: true, badge: unreadMessagesCount, badgeColor: 'bg-blue-500' },
     { id: 'work_schedule', label: 'Lịch công tác', icon: CalendarDays, visible: true }, 
     { id: 'personal_profile', label: 'Hồ sơ cá nhân', icon: Briefcase, visible: true }, 
-    { id: 'receive_record', label: 'Tiếp nhận hồ sơ', icon: FolderInput, visible: !isTeamLeader && !isEmployee },
-    { id: 'receive_contract', label: 'Tiếp nhận hợp đồng', icon: FileSignature, visible: !isTeamLeader && !isEmployee },
+    { id: 'receive_record', label: 'Tiếp nhận hồ sơ', icon: FolderInput, visible: true },
+    { id: 'receive_contract', label: 'Tiếp nhận hợp đồng', icon: FileSignature, visible: true },
     // Đổi tên thành "Hồ sơ đo đạc"
     { id: 'all_records', label: 'Hồ sơ đo đạc', icon: FileText, visible: true, badge: !isOneDoor ? warningRecordsCount : 0, badgeColor: 'bg-red-600' },
     { id: 'registration_records', label: 'Hồ sơ cấp giấy', icon: FileSignature, visible: true },

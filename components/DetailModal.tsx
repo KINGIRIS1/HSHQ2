@@ -49,6 +49,75 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
   const activeRecord = localRecord || initialRecord;
   const record = activeRecord;
 
+  const isGCN = !!(record?.recordType && (
+      record.recordType.trim().toLowerCase().startsWith('3.') || 
+      record.recordType.trim().toLowerCase() === 'đăng ký' || 
+      record.recordType.trim().toLowerCase() === 'cấp giấy' || 
+      record.recordType.trim().toLowerCase() === 'cấp đổi' || 
+      record.recordType.trim().toLowerCase() === 'cấp lại' || 
+      REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === record.recordType?.trim().toLowerCase())
+  ));
+
+  const getStepAssigneeName = (stepLabel: string) => {
+      if (!record) return "";
+      const label = stepLabel.toLowerCase();
+      
+      const assignedEmp = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
+      const assignedName = assignedEmp ? assignedEmp.name : "";
+      
+      const checkerEmp = record.checkedBy ? employees.find(e => e.id === record.checkedBy) : null;
+      const checkerName = checkerEmp ? checkerEmp.name : "";
+      
+      const submittedToId = record.submittedTo;
+      const directorUser = submittedToId ? (users.find(u => u.employeeId === submittedToId) || employees.find(e => e.id === submittedToId)) : null;
+      const directorName = directorUser ? directorUser.name : "";
+
+      const receiverUser = record.receivedBy ? (users.find(u => u.employeeId === record.receivedBy) || employees.find(e => e.id === record.receivedBy)) : null;
+      const receiverName = receiverUser ? receiverUser.name : "";
+
+      if (label.includes("nhận hồ sơ")) {
+          return receiverName || "Bộ phận tiếp nhận";
+      }
+      if (label.includes("ranh") || label.includes("dnlis")) {
+          return assignedName || "Nhân viên xử lý";
+      }
+      if (label.includes("mộc kê") || label.includes("mộc")) {
+          return assignedName || "Nhân viên xử lý";
+      }
+      if (label.includes("thế chấp")) {
+          return assignedName || "Nhân viên xử lý";
+      }
+      if (label.includes("niêm yết") || label.includes("công văn")) {
+          return assignedName || "Nhân viên xử lý";
+      }
+      if (label.includes("phiếu chuyển thuế") || label.includes("phiếu chuyển")) {
+          return assignedName || "Nhân viên xử lý";
+      }
+      if (label.includes("trình ký thuế")) {
+          return assignedName || "Nhân viên xử lý";
+      }
+      if (label.includes("tbt")) {
+          return assignedName || "Nhân viên xử lý";
+      }
+      if (label.includes("in gcn") || label.includes("in giấy")) {
+          return assignedName || "Nhân viên xử lý";
+      }
+      if (label.includes("thẩm tra")) {
+          return checkerName || "Tổ trưởng kiểm tra";
+      }
+      if (label.includes("trình ký gcn") || label.includes("trình ký giấy")) {
+          return directorName ? `Trình: ${assignedName || "NV"} -> Duyệt: ${directorName}` : (assignedName || "Nhân viên trình");
+      }
+      if (label.includes("vô số")) {
+          return assignedName || "Cán bộ bộ phận Cấp giấy";
+      }
+      if (label.includes("giao 1 cửa") || label.includes("giao một cửa") || label.includes("trả kết quả")) {
+          return "Bộ phận một cửa";
+      }
+      
+      return assignedName || "Cán bộ xử lý";
+  };
+
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
   const [previewFileName, setPreviewFileName] = useState('');
@@ -81,15 +150,6 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
 
   const getWorkflowSteps = () => {
     if (!record) return null;
-
-    const isGCN = record.recordType && (
-        record.recordType.trim().toLowerCase().startsWith('3.') || 
-        record.recordType.trim().toLowerCase() === 'đăng ký' || 
-        record.recordType.trim().toLowerCase() === 'cấp giấy' || 
-        record.recordType.trim().toLowerCase() === 'cấp đổi' || 
-        record.recordType.trim().toLowerCase() === 'cấp lại' || 
-        REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === record.recordType?.trim().toLowerCase())
-    );
 
     const isReturned = record.hasDefect || record.status === RecordStatus.REJECTED;
 
@@ -747,145 +807,337 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                             {record.defectReason || "Chưa ghi cụ thể lý do."}
                         </p>
                         <p className="text-[11px] text-red-600 font-semibold mt-1">
-                            * Quy trình xử lý (kiểm tra, trình ký, chuyển 1 cửa) vẫn ti�                          <div className="relative flex items-center justify-between overflow-x-auto py-4 px-2 min-w-[700px] custom-scrollbar gap-2">
-                              {workflow.steps.map((step, idx) => { const s = step as any;
-                                  const isLast = idx === workflow.steps.length - 1;
-                                  let circleClass = "";
-                                  let lineClass = "";
-                                  let textClass = "";
-                                  let iconNode = null;
+                            * Quy trình xử lý (kiểm tra, trình ký, chuyển 1 cửa) vẫn tiếp tục được ghi nhận bình thường.
+                        </p>
+                    </div>
+                </div>
+            )}
 
-                                  if (s.status === 'completed') {
-                                      circleClass = "bg-emerald-50 border-emerald-500 text-emerald-600 shadow-[0_0_8px_rgba(16,185,129,0.2)]";
-                                      lineClass = "bg-emerald-500";
-                                      textClass = "text-emerald-700 font-bold";
-                                      iconNode = <CheckCircle2 size={16} />;
-                                  } else if (s.status === 'current') {
-                                      circleClass = "bg-blue-50 border-blue-600 text-blue-700 ring-4 ring-blue-100 shadow-[0_0_12px_rgba(37,99,235,0.4)] animate-pulse";
-                                      lineClass = "bg-gray-200";
-                                      textClass = "text-blue-700 font-extrabold scale-105 transform origin-left";
-                                      iconNode = <Loader2 size={16} className="animate-spin" />;
-                                  } else {
-                                      circleClass = "bg-gray-50 border-gray-200 text-gray-400";
-                                      lineClass = "bg-gray-100";
-                                      textClass = "text-gray-400 font-medium";
-                                      iconNode = <Circle size={14} className="opacity-40" />;
-                                  }
+            {(() => {
+                const workflow = getWorkflowSteps();
+                if (!workflow) return null;
 
-                                  const getExecutionDate = (stepLabel: string, stepStatus: RecordStatus) => {
-                                      if (!record) return null;
-                                      const label = stepLabel.toLowerCase();
-                                      if (label.includes("ranh") || label.includes("dnlis")) {
-                                          return record.assignedDate;
-                                      }
-                                      if (label.includes("mộc kê")) {
-                                          return record.assignedDate;
-                                      }
-                                      if (label.includes("kiểm tra thế chấp")) {
-                                          return record.assignedDate;
-                                      }
-                                      if (label.includes("niêm yết") || label.includes("công văn")) {
-                                          return record.assignedDate;
-                                      }
-                                      if (label.includes("phiếu chuyển thuế") || label.includes("phiếu chuyển")) {
-                                          return record.completedWorkDate;
-                                      }
-                                      if (label.includes("trình ký thuế")) {
-                                          return record.completedWorkDate;
-                                      }
-                                      if (label.includes("tbt")) {
-                                          return record.taxPaymentDate;
-                                      }
-                                      if (label.includes("in gcn") || label.includes("in giấy")) {
-                                          return record.pendingCheckDate;
-                                      }
-                                      if (label.includes("thẩm tra")) {
-                                          return record.checkedDate;
-                                      }
-                                      if (label.includes("trình ký gcn") || label.includes("trình ký giấy")) {
-                                          return record.submissionDate;
-                                      }
-                                      if (label.includes("vô số")) {
-                                          return record.approvalDate;
-                                      }
-                                      if (label.includes("giao 1 cửa") || label.includes("giao một cửa")) {
-                                          return record.completedDate;
-                                      }
-                                      
-                                      if (stepStatus === RecordStatus.IN_PROGRESS) return record.assignedDate;
-                                      if (stepStatus === RecordStatus.COMPLETED_WORK) return record.completedWorkDate;
-                                      if (stepStatus === RecordStatus.PENDING_CHECK) return record.pendingCheckDate;
-                                      if (stepStatus === RecordStatus.CHECKED) return record.checkedDate;
-                                      if (stepStatus === RecordStatus.PENDING_SIGN) return record.submissionDate;
-                                      if (stepStatus === RecordStatus.SIGNED) return record.approvalDate;
-                                      if (stepStatus === RecordStatus.HANDOVER) return record.completedDate;
-                                      return null;
-                                  };
+                const getExecutionDate = (stepLabel: string, stepStatus: RecordStatus) => {
+                    if (!record) return null;
+                    const label = stepLabel.toLowerCase();
+                    if (label.includes("ranh") || label.includes("dnlis")) {
+                        return record.assignedDate;
+                    }
+                    if (label.includes("mộc kê")) {
+                        return record.assignedDate;
+                    }
+                    if (label.includes("kiểm tra thế chấp")) {
+                        return record.assignedDate;
+                    }
+                    if (label.includes("niêm yết") || label.includes("công văn")) {
+                        return record.assignedDate;
+                    }
+                    if (label.includes("phiếu chuyển thuế") || label.includes("phiếu chuyển")) {
+                        return record.completedWorkDate;
+                    }
+                    if (label.includes("trình ký thuế")) {
+                        return record.completedWorkDate;
+                    }
+                    if (label.includes("tbt")) {
+                        return record.taxPaymentDate;
+                    }
+                    if (label.includes("in gcn") || label.includes("in giấy")) {
+                        return record.pendingCheckDate;
+                    }
+                    if (label.includes("thẩm tra")) {
+                        return record.checkedDate;
+                    }
+                    if (label.includes("trình ký gcn") || label.includes("trình ký giấy")) {
+                        return record.submissionDate;
+                    }
+                    if (label.includes("vô số")) {
+                        return record.approvalDate;
+                    }
+                    if (label.includes("giao 1 cửa") || label.includes("giao một cửa")) {
+                        return record.completedDate;
+                    }
+                    
+                    if (stepStatus === RecordStatus.IN_PROGRESS) return record.assignedDate;
+                    if (stepStatus === RecordStatus.COMPLETED_WORK) return record.completedWorkDate;
+                    if (stepStatus === RecordStatus.PENDING_CHECK) return record.pendingCheckDate;
+                    if (stepStatus === RecordStatus.CHECKED) return record.checkedDate;
+                    if (stepStatus === RecordStatus.PENDING_SIGN) return record.submissionDate;
+                    if (stepStatus === RecordStatus.SIGNED) return record.approvalDate;
+                    if (stepStatus === RecordStatus.HANDOVER) return record.completedDate;
+                    return null;
+                };
 
-                                  const execDate = getExecutionDate(s.label, s.overallStatus);
+                if (isGCN) {
+                    const groupGcnSteps = (rawSteps: any[]): any[] => {
+                        const groups: {
+                            label: string;
+                            matchKeywords: string[];
+                            subSteps: any[];
+                        }[] = [
+                            {
+                                label: "Xử lý bản vẽ / mộc kê",
+                                matchKeywords: ["ranh", "dnlis", "mộc kê", "thế chấp", "niêm yết", "công văn"],
+                                subSteps: []
+                            },
+                            {
+                                label: "Thuế",
+                                matchKeywords: ["phiếu chuyển", "trình ký thuế", "tbt"],
+                                subSteps: []
+                            },
+                            {
+                                label: "In GCN",
+                                matchKeywords: ["in gcn", "in giấy", "thẩm tra", "trình ký gcn", "trình ký giấy"],
+                                subSteps: []
+                            },
+                            {
+                                label: "Vào số GCN",
+                                matchKeywords: ["vô số"],
+                                subSteps: []
+                            },
+                            {
+                                label: "Giao 1 cửa",
+                                matchKeywords: ["giao 1 cửa", "giao một cửa"],
+                                subSteps: []
+                            }
+                        ];
 
-                                  return (
-                                      <div key={idx} className="flex-1 flex items-center relative">
-                                          {/* Step body */}
-                                          <div className="flex flex-col items-center flex-1 z-10">
-                                              <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${circleClass}`}>
-                                                  {iconNode}
-                                              </div>
-                                              <div className="text-center mt-2.5 max-w-[120px]">
-                                                  <p className={`text-xs truncate transition-all leading-tight ${textClass}`} title={s.label}>
-                                                      {s.label}
-                                                  </p>
-                                                  <span className={`text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded-full font-bold ${
-                                                      s.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
-                                                      s.status === 'current' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'
-                                                  }`}>
-                                                      {s.duration}
-                                                  </span>
-                                                  {s.status === 'completed' && execDate ? (
-                                                      <p className="text-[9px] text-emerald-600 font-extrabold mt-1 leading-none" title={`Thực hiện lúc: ${formatDate(execDate)}`}>
-                                                          {formatDate(execDate)}
-                                                      </p>
-                                                  ) : s.deadlineDate ? (
-                                                      <p className={`text-[9px] font-bold mt-1 leading-none ${s.status === 'current' ? 'text-blue-600 animate-pulse' : 'text-gray-400'}`} title={`Hạn chót bước: ${formatDate(s.deadlineDate.toISOString())}`}>
-                                                          Hạn: {formatDate(s.deadlineDate.toISOString())}
-                                                      </p>
-                                                  ) : (
-                                                      <p className="text-[9px] text-gray-400 mt-1 leading-none">---</p>
-                                                  )}
-                                                  {s.desc && (
-                                                      <p className="text-[9px] text-gray-400 italic mt-1 leading-none max-w-[100px] mx-auto truncate" title={s.desc}>
-                                                          {s.desc}
-                                                      </p>
-                                                  )}
-                                              </div>
-                                          </div>
+                        rawSteps.forEach(step => {
+                            const lowerLabel = step.label.toLowerCase();
+                            let matched = false;
+                            for (const g of groups) {
+                                if (g.matchKeywords.some(kw => lowerLabel.includes(kw))) {
+                                    g.subSteps.push(step);
+                                    matched = true;
+                                    break;
+                                }
+                            }
+                            if (!matched) {
+                                groups[0].subSteps.push(step);
+                            }
+                        });
 
-                                          {/* Connector line to next step */}
-                                          {!isLast && (
-                                              <div className="absolute top-[18px] left-1/2 right-[-50%] h-[2px] z-0 pointer-events-none pr-4">
-                                                  <div className={`h-full w-full transition-all duration-300 ${lineClass}`} />
-                                              </div>
-                                          )}
-                                      </div>
-                                  );
-                              })}
-                          </div>ame="text-[9px] text-gray-400 italic mt-1 leading-none max-w-[100px] mx-auto truncate" title={s.desc}>
-                                                         {s.desc}
-                                                     </p>
-                                                 )}
-                                             </div>
-                                         </div>
+                        const activeGroups = groups.filter(g => g.subSteps.length > 0);
 
-                                         {/* Connector line to next step */}
-                                         {!isLast && (
-                                             <div className="absolute top-[18px] left-1/2 right-[-50%] h-[2px] z-0 pointer-events-none pr-4">
-                                                 <div className={`h-full w-full transition-all duration-300 ${lineClass}`} />
-                                             </div>
-                                         )}
-                                     </div>
-                                 );
-                             })}
-                         </div>
+                        return activeGroups.map(g => {
+                            const subSteps = g.subSteps;
+                            
+                            let status: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                            const allCompleted = subSteps.every(s => s.status === 'completed');
+                            const allUpcoming = subSteps.every(s => s.status === 'upcoming');
+                            if (allCompleted) {
+                                status = 'completed';
+                            } else if (allUpcoming) {
+                                status = 'upcoming';
+                            } else {
+                                status = 'current';
+                            }
+
+                            const currentSub = subSteps.find(s => s.status === 'current') || 
+                                               subSteps.find(s => s.status === 'completed' && s.deadlineDate) ||
+                                               subSteps[0];
+                            
+                            const deadlineDate = currentSub?.deadlineDate || null;
+                            const isOverdue = subSteps.some(s => s.isOverdue);
+                            const isUrgent = subSteps.some(s => s.isUrgent);
+
+                            return {
+                                label: g.label,
+                                status,
+                                deadlineDate,
+                                isOverdue,
+                                isUrgent,
+                                subSteps
+                            };
+                        });
+                    };
+
+                    const grouped = groupGcnSteps(workflow.steps);
+
+                    return (
+                        <div className="mb-8 bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm">
+                            <h3 className="text-xs font-bold text-slate-500 uppercase mb-4 tracking-wider flex items-center gap-2">
+                                <Activity size={14} className="text-slate-400" />
+                                {workflow.title}
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                                {grouped.map((group, idx) => {
+                                    let cardBorderClass = "border-slate-200 bg-white";
+                                    let badgeColorClass = "bg-slate-100 text-slate-500";
+                                    let badgeText = "Chờ thực hiện";
+                                    
+                                    if (group.status === 'completed') {
+                                        cardBorderClass = "border-emerald-200 bg-emerald-50/10 hover:bg-emerald-50/20";
+                                        badgeColorClass = "bg-emerald-100 text-emerald-700";
+                                        badgeText = "Hoàn thành";
+                                    } else if (group.status === 'current') {
+                                        cardBorderClass = "border-blue-300 bg-blue-50/10 ring-2 ring-blue-100 shadow-md";
+                                        badgeColorClass = "bg-blue-600 text-white animate-pulse";
+                                        badgeText = "Đang xử lý";
+                                    }
+
+                                    return (
+                                        <div key={idx} className={`rounded-xl border p-4 flex flex-col justify-between transition-all duration-300 ${cardBorderClass}`}>
+                                            <div>
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <h4 className="text-sm font-black text-slate-800 tracking-tight leading-tight">
+                                                        {group.label}
+                                                    </h4>
+                                                    <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${badgeColorClass}`}>
+                                                        {badgeText}
+                                                    </span>
+                                                </div>
+                                                
+                                                {/* Danh sách tiến độ chi tiết (Sub-steps) */}
+                                                <div className="space-y-1.5 bg-slate-50/50 p-2 rounded-lg border border-slate-100 mb-3">
+                                                    <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wide mb-1">
+                                                        Tiến độ bước:
+                                                    </p>
+                                                    {group.subSteps.map((s: any, sIdx: number) => {
+                                                        const execDate = getExecutionDate(s.label, s.overallStatus);
+                                                        let iconNode = <Circle size={10} className="text-slate-300 mt-0.5" />;
+                                                        let sLabelClass = "text-slate-400 font-medium";
+                                                        
+                                                        if (s.status === 'completed') {
+                                                            iconNode = <CheckCircle2 size={10} className="text-emerald-500 mt-0.5" />;
+                                                            sLabelClass = "text-emerald-800 font-semibold line-through decoration-emerald-200";
+                                                        } else if (s.status === 'current') {
+                                                            iconNode = <Loader2 size={10} className="text-blue-500 animate-spin mt-0.5" />;
+                                                            sLabelClass = "text-blue-800 font-bold";
+                                                        }
+
+                                                        return (
+                                                            <div key={sIdx} className="text-[11px] leading-tight flex items-start gap-1.5">
+                                                                {iconNode}
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className={`truncate ${sLabelClass}`} title={s.label}>
+                                                                        {s.label}
+                                                                    </p>
+                                                                    {/* Hiển thị cán bộ thực hiện dưới mỗi bước quy trình */}
+                                                                    <p className="text-[9px] text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
+                                                                        👤 {getStepAssigneeName(s.label) || "Chưa giao"}
+                                                                    </p>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                            
+                                            {/* Deadline / Time block */}
+                                            <div className="border-t border-slate-100 pt-2 mt-auto">
+                                                {group.status === 'completed' ? (
+                                                    <p className="text-[10px] text-emerald-600 font-bold">
+                                                        ✓ Đã hoàn thành
+                                                    </p>
+                                                ) : group.deadlineDate ? (
+                                                    <div className="space-y-0.5">
+                                                        <p className={`text-[10px] font-bold ${group.isOverdue ? "text-red-600 animate-pulse" : "text-blue-600"}`}>
+                                                            Hạn: {formatDate(group.deadlineDate.toISOString())}
+                                                        </p>
+                                                        {group.isOverdue && (
+                                                            <span className="text-[8px] font-extrabold text-red-600 uppercase tracking-widest bg-red-50 border border-red-100 px-1 py-0.2 rounded block text-center">
+                                                                ⚠️ TRỄ HẠN
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <p className="text-[10px] text-slate-400">---</p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    );
+                }
+
+                return (
+                    <div className="mb-8 bg-slate-50 border border-slate-200 rounded-xl p-5 shadow-sm">
+                        <h3 className="text-xs font-bold text-slate-500 uppercase mb-4 tracking-wider flex items-center gap-2">
+                            <Activity size={14} className="text-slate-400" />
+                            {workflow.title}
+                        </h3>
+                        <div className="relative flex items-center justify-between overflow-x-auto py-4 px-2 min-w-[700px] custom-scrollbar gap-2">
+                            {workflow.steps.map((step, idx) => { const s = step as any;
+                                const isLast = idx === workflow.steps.length - 1;
+                                let circleClass = "";
+                                let lineClass = "";
+                                let textClass = "";
+                                let iconNode = null;
+
+                                if (s.status === 'completed') {
+                                    circleClass = "bg-emerald-50 border-emerald-500 text-emerald-600 shadow-[0_0_8px_rgba(16,185,129,0.2)]";
+                                    lineClass = "bg-emerald-500";
+                                    textClass = "text-emerald-700 font-bold";
+                                    iconNode = <CheckCircle2 size={16} />;
+                                } else if (s.status === 'current') {
+                                    circleClass = "bg-blue-50 border-blue-600 text-blue-700 ring-4 ring-blue-100 shadow-[0_0_12px_rgba(37,99,235,0.4)] animate-pulse";
+                                    lineClass = "bg-gray-200";
+                                    textClass = "text-blue-700 font-extrabold scale-105 transform origin-left";
+                                    iconNode = <Loader2 size={16} className="animate-spin" />;
+                                } else {
+                                    circleClass = "bg-gray-50 border-gray-200 text-gray-400";
+                                    lineClass = "bg-gray-100";
+                                    textClass = "text-gray-400 font-medium";
+                                    iconNode = <Circle size={14} className="opacity-40" />;
+                                }
+
+                                const execDate = getExecutionDate(s.label, s.overallStatus);
+
+                                return (
+                                    <div key={idx} className="flex-1 flex items-center relative">
+                                        {/* Step body */}
+                                        <div className="flex flex-col items-center flex-1 z-10">
+                                            <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all ${circleClass}`}>
+                                                {iconNode}
+                                            </div>
+                                            <div className="text-center mt-2.5 max-w-[120px]">
+                                                <p className={`text-xs truncate transition-all leading-tight ${textClass}`} title={s.label}>
+                                                    {s.label}
+                                                </p>
+                                                <span className={`text-[10px] mt-0.5 inline-block px-1.5 py-0.5 rounded-full font-bold ${
+                                                    s.status === 'completed' ? 'bg-emerald-50 text-emerald-600' :
+                                                    s.status === 'current' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-400'
+                                                }`}>
+                                                    {s.duration}
+                                                </span>
+                                                {s.status === 'completed' && execDate ? (
+                                                    <p className="text-[9px] text-emerald-600 font-extrabold mt-1 leading-none" title={`Thực hiện lúc: ${formatDate(execDate)}`}>
+                                                        {formatDate(execDate)}
+                                                    </p>
+                                                ) : s.deadlineDate ? (
+                                                    <p className={`text-[9px] font-bold mt-1 leading-none ${s.status === 'current' ? 'text-blue-600 animate-pulse' : 'text-gray-400'}`} title={`Hạn chót bước: ${formatDate(s.deadlineDate.toISOString())}`}>
+                                                        Hạn: {formatDate(s.deadlineDate.toISOString())}
+                                                    </p>
+                                                ) : (
+                                                    <p className="text-[9px] text-gray-400 mt-1 leading-none">---</p>
+                                                )}
+                                                {s.desc && (
+                                                    <p className="text-[9px] text-gray-400 italic mt-1 leading-none max-w-[100px] mx-auto truncate" title={s.desc}>
+                                                        {s.desc}
+                                                    </p>
+                                                )}
+
+                                                {/* Hiển thị cán bộ thực hiện/được giao */}
+                                                <div className="mt-1.5 px-1 py-0.5 bg-slate-100 rounded border border-slate-200/50 max-w-[110px] mx-auto">
+                                                    <p className="text-[9px] text-slate-600 font-bold truncate" title={`Cán bộ được giao: ${getStepAssigneeName(s.label)}`}>
+                                                        👤 {getStepAssigneeName(s.label) || "Chưa giao"}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Connector line to next step */}
+                                        {!isLast && (
+                                            <div className="absolute top-[18px] left-1/2 right-[-50%] h-[2px] z-0 pointer-events-none pr-4">
+                                                <div className={`h-full w-full transition-all duration-300 ${lineClass}`} />
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </div>
                 );
             })()}
@@ -1188,7 +1440,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                     <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
                         <div className="bg-indigo-600 px-5 py-3 flex items-center gap-2">
                             <CalendarClock size={16} className="text-white"/>
-                            <span className="text-xs font-bold text-white uppercase">Tiến độ & Thời gian</span>
+                            <span className="text-xs font-bold text-white uppercase">{isGCN ? "Quy trình" : "Tiến độ & Thời gian"}</span>
                         </div>
                         
                         <div className="p-6 text-center border-b border-gray-100">

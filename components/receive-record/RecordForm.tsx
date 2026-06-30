@@ -213,31 +213,33 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
 
   // Lọc danh sách loại hồ sơ hiển thị (tất cả các thủ tục) theo phân hệ đang làm việc
   const allowedRecordTypes = React.useMemo(() => {
+    let types: string[] = [];
+    
     // 1. Phân hệ Lưu trữ
     if (currentView && [
         "archive_records", "archive_assign_tasks", "archive_completed_list", 
         "archive_pending_check_list", "archive_check_list", "archive_handover_list", 
         "archive_director_completed"
     ].includes(currentView)) {
-        return ['1. Cung cấp dữ liệu đất đai'];
+        types = ['1. Cung cấp dữ liệu đất đai', '1.1 Công văn'];
     }
 
     // 2. Phân hệ Cấp Giấy
-    if (currentView && [
+    else if (currentView && [
         "registration_records", "registration_assign_tasks", "registration_completed_list", 
         "registration_pending_check_list", "registration_check_list", "registration_handover_list", 
-        "registration_director_completed"
+        "registration_director_completed", "registration_vao_so"
     ].includes(currentView)) {
-        return REGISTRATION_PROCEDURES;
+        types = REGISTRATION_PROCEDURES;
     }
 
     // 3. Phân hệ Đo đạc
-    if (currentView && [
+    else if (currentView && [
         "all_records", "assign_tasks", "completed_list", 
         "pending_check_list", "check_list", "handover_list", 
         "director_completed"
     ].includes(currentView)) {
-        return [
+        types = [
           '2.1 Trích lục',
           '2.2 Trích lục Quy hoạch',
           '2.3 Trích đo',
@@ -248,25 +250,32 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
     }
 
     // 4. Phân hệ Khác
-    if (currentView && [
+    else if (currentView && [
         "other_records", "other_assign_tasks", "other_check_list", 
         "other_handover_list", "other_director_completed"
     ].includes(currentView)) {
-        return ['CMD', 'Tòa án', 'Thi hành án'];
+        types = ['CMD', 'Tòa án', 'Thi hành án'];
     }
 
     // 5. Mặc định (cho Một cửa hoặc không xác định): Hiển thị tất cả ngoại trừ 'Cung cấp thông tin'
-    return [
-      ...REGISTRATION_PROCEDURES,
-      '1. Cung cấp dữ liệu đất đai',
-      '2.1 Trích lục',
-      '2.2 Trích lục Quy hoạch',
-      '2.3 Trích đo',
-      '2.4 Trích đo Cắm mốc',
-      '2.5 Trích đo Tách - Hợp thửa',
-      '2.6 Cung cấp số thửa'
-    ];
-  }, [currentView]);
+    else {
+        types = [
+          ...REGISTRATION_PROCEDURES,
+          '1. Cung cấp dữ liệu đất đai',
+          '2.1 Trích lục',
+          '2.2 Trích lục Quy hoạch',
+          '2.3 Trích đo',
+          '2.4 Trích đo Cắm mốc',
+          '2.5 Trích đo Tách - Hợp thửa',
+          '2.6 Cung cấp số thửa'
+        ];
+    }
+
+    if (formData.recordType && !types.includes(formData.recordType)) {
+        types = [...types, formData.recordType];
+    }
+    return types;
+  }, [currentView, formData.recordType]);
 
   const filteredProcedures = allowedRecordTypes.filter(t => {
       const label = t === 'Đăng ký' ? 'Cấp Giấy' : t;
@@ -706,7 +715,11 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
         if (!(initialData && initialData.id) && onPrint && currentView === 'receive_record') {
             onPrint(savedRecord);
         }
-        if (onCancelEdit) onCancelEdit(); else handleReset(true);
+        if (initialData && initialData.id && onCancelEdit) {
+            onCancelEdit();
+        } else {
+            handleReset(true);
+        }
     } else {
         setNotification({ type: 'error', message: "Lỗi khi lưu hồ sơ." });
     }
@@ -750,7 +763,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
       setOtherDocRows([]);
       setLandAreaRows([{ type: 'ONT/ODT', area: '' }]);
       if (!keepNotification) setNotification(null);
-      if (onCancelEdit) onCancelEdit();
+      if (initialData && initialData.id && onCancelEdit) onCancelEdit();
   };
 
   useEffect(() => {
@@ -983,53 +996,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                             )}
                         </div>
 
-                        {isRegistration(formData.recordType) && (
-                            <div className="bg-blue-50/30 border border-blue-100/80 rounded-lg p-3 grid grid-cols-1 md:grid-cols-2 gap-4 mt-1">
-                                <div>
-                                    <label className="block text-xs font-bold text-blue-800 mb-1">Cấu hình Quy trình Cấp giấy</label>
-                                    <select
-                                        className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs bg-white font-medium text-gray-700"
-                                        value={formData.gcnWorkflowType || ''}
-                                        onChange={(e) => {
-                                            const val = e.target.value || null;
-                                            handleChange('gcnWorkflowType', val);
-                                            if (val === 'quy_trinh_4') {
-                                                handleChange('hasConcurrentTransfer', false);
-                                                handleChange('hasTax', false);
-                                            } else if (val === 'quy_trinh_5') {
-                                                handleChange('hasConcurrentTransfer', true);
-                                                handleChange('hasTax', true);
-                                            }
-                                        }}
-                                    >
-                                        <option value="">-- Tự động nhận diện quy trình --</option>
-                                        <option value="quy_trinh_1">Quy trình 1: DNLIS</option>
-                                        <option value="quy_trinh_2">Quy trình 2: Phiếu chuyển thuế</option>
-                                        <option value="quy_trinh_3">Quy trình 3: In GCN</option>
-                                        <option value="quy_trinh_4">Quy trình 4: Cấp Lại In GCN</option>
-                                        <option value="quy_trinh_5">Quy trình 5: Cấp Lại Có thuế</option>
-                                    </select>
-                                </div>
-                                
-                                {((formData.gcnWorkflowType === 'quy_trinh_4' || formData.gcnWorkflowType === 'quy_trinh_5') || (!formData.gcnWorkflowType && (formData.recordType || '').toLowerCase().includes('cấp lại'))) && (
-                                    <div className="animate-fade-in">
-                                        <label className="block text-xs font-bold text-teal-800 mb-1">Có chuyển nhượng đồng thời?</label>
-                                        <select
-                                            className="w-full border border-teal-200 rounded-md px-3 py-2 text-xs bg-teal-50 font-bold text-teal-800"
-                                            value={formData.hasConcurrentTransfer === true ? 'true' : formData.hasConcurrentTransfer === false ? 'false' : ''}
-                                            onChange={(e) => {
-                                                const val = e.target.value;
-                                                handleChange('hasConcurrentTransfer', val === 'true' ? true : val === 'false' ? false : null);
-                                            }}
-                                        >
-                                            <option value="">-- Chọn trạng thái chuyển nhượng --</option>
-                                            <option value="false">Không chuyển nhượng đồng thời</option>
-                                            <option value="true">Có chuyển nhượng đồng thời (Có thuế)</option>
-                                        </select>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+
 
                         {/* Row 2: Mã hồ sơ, Ngày nhận, Hẹn trả */}
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1711,6 +1678,14 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                     setShowAuthSection={setShowAuthSection}
                     authDocNumber={authDocNumber}
                     setAuthDocNumber={setAuthDocNumber}
+                    isMeasOrArch={isMeasOrArch}
+                    isApplicantOwner={isApplicantOwner}
+                    handleApplicantOwnerChange={handleApplicantOwnerChange}
+                    landAreaRows={landAreaRows}
+                    addLandAreaRow={addLandAreaRow}
+                    removeLandAreaRow={removeLandAreaRow}
+                    handleLandRowAreaChange={handleLandRowAreaChange}
+                    handleLandRowTypeChange={handleLandRowTypeChange}
                 />
             )}
 

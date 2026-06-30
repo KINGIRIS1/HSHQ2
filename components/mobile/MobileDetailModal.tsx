@@ -8,12 +8,12 @@ import {
   CheckCircle2, Circle, Send, FileSignature, CheckSquare, 
   CalendarClock, FileCheck, Calculator, Loader2, StickyNote, 
   Save, Bell, Printer, Pencil, Trash2, Info, ChevronLeft,
-  Phone, Calendar, Hash, FileDown, AlertTriangle
+  Phone, Calendar, Hash, FileDown, AlertTriangle, Activity
 } from 'lucide-react';
 import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../../services/docxService';
 import DocxPreviewModal from '../DocxPreviewModal';
 import { updateRecordApi, fetchContracts } from '../../services/api';
-import { calculateDeadline, isRegType } from '../../utils/appHelpers';
+import { calculateDeadline, isRegType, getGcnWorkflowStepsHelper } from '../../utils/appHelpers';
 import SystemReceiptTemplate from '../receive-record/SystemReceiptTemplate';
 import SystemAnnexTemplate from '../receive-record/SystemAnnexTemplate';
 
@@ -48,6 +48,14 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
 
   const activeRecord = localRecord || initialRecord;
   const record = activeRecord;
+
+  const isGCN = !!(record?.recordType && (
+      record.recordType.trim().toLowerCase().startsWith('3.') || 
+      record.recordType.trim().toLowerCase().includes('đăng ký') || 
+      record.recordType.trim().toLowerCase().includes('cấp giấy') || 
+      record.recordType.trim().toLowerCase().includes('cấp đổi') || 
+      record.recordType.trim().toLowerCase().includes('cấp lại')
+  ));
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewBlob, setPreviewBlob] = useState<Blob | null>(null);
@@ -489,7 +497,7 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
           onClick={() => setActiveTab('timeline')}
           className={`flex-1 py-3 text-xs font-bold transition-all border-b-2 ${activeTab === 'timeline' ? 'text-blue-600 border-blue-600' : 'text-slate-400 border-transparent'}`}
         >
-          Tiến độ
+          {isGCN ? 'Quy trình' : 'Tiến độ'}
         </button>
         <button 
           onClick={() => setActiveTab('notes')}
@@ -651,138 +659,438 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
 
         {activeTab === 'timeline' && (
           <div className="p-4 space-y-4">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-              <div className="flex flex-col items-center text-center mb-8 pb-6 border-b border-slate-50">
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Hạn trả kết quả</p>
-                <p className="text-3xl font-black text-slate-800">{formatDate(record.deadline)}</p>
-                <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-slate-500 bg-slate-50 px-3 py-1 rounded-full">
-                  <Calendar size={12} /> Ngày nhận: {formatDate(record.receivedDate)}
+            {isGCN ? (() => {
+              const workflow = getGcnWorkflowStepsHelper(record, holidays || []);
+              
+              const groupGcnSteps = (rawSteps: any[]): any[] => {
+                  const groups: {
+                      label: string;
+                      matchKeywords: string[];
+                      subSteps: any[];
+                  }[] = [
+                      {
+                          label: "Xử lý bản vẽ / mộc kê",
+                          matchKeywords: ["ranh", "dnlis", "mộc kê", "thế chấp", "niêm yết", "công văn"],
+                          subSteps: []
+                      },
+                      {
+                          label: "Thuế",
+                          matchKeywords: ["phiếu chuyển", "trình ký thuế", "tbt"],
+                          subSteps: []
+                      },
+                      {
+                          label: "In GCN",
+                          matchKeywords: ["in gcn", "in giấy", "thẩm tra", "trình ký gcn", "trình ký giấy"],
+                          subSteps: []
+                      },
+                      {
+                          label: "Vào số GCN",
+                          matchKeywords: ["vô số"],
+                          subSteps: []
+                      },
+                      {
+                          label: "Giao 1 cửa",
+                          matchKeywords: ["giao 1 cửa", "giao một cửa"],
+                          subSteps: []
+                      }
+                  ];
+
+                  rawSteps.forEach(step => {
+                      const lowerLabel = step.label.toLowerCase();
+                      let matched = false;
+                      for (const g of groups) {
+                          if (g.matchKeywords.some(kw => lowerLabel.includes(kw))) {
+                              g.subSteps.push(step);
+                              matched = true;
+                              break;
+                          }
+                      }
+                      if (!matched) {
+                          groups[0].subSteps.push(step);
+                      }
+                  });
+
+                  const activeGroups = groups.filter(g => g.subSteps.length > 0);
+
+                  return activeGroups.map(g => {
+                      const subSteps = g.subSteps;
+                      
+                      let status: 'completed' | 'current' | 'upcoming' = 'upcoming';
+                      const allCompleted = subSteps.every(s => s.status === 'completed');
+                      const allUpcoming = subSteps.every(s => s.status === 'upcoming');
+                      if (allCompleted) {
+                          status = 'completed';
+                      } else if (allUpcoming) {
+                          status = 'upcoming';
+                      } else {
+                          status = 'current';
+                      }
+
+                      const currentSub = subSteps.find(s => s.status === 'current') || 
+                                         subSteps.find(s => s.status === 'completed' && s.deadlineDate) ||
+                                         subSteps[0];
+                      
+                      const deadlineDate = currentSub?.deadlineDate || null;
+                      const isOverdue = subSteps.some(s => s.isOverdue);
+                      const isUrgent = subSteps.some(s => s.isUrgent);
+
+                      return {
+                          label: g.label,
+                          status,
+                          deadlineDate,
+                          isOverdue,
+                          isUrgent,
+                          subSteps
+                      };
+                  });
+              };
+
+              const getStepAssigneeName = (stepLabel: string) => {
+                  if (!record) return "";
+                  const label = stepLabel.toLowerCase();
+                  
+                  const assignedEmp = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
+                  const assignedName = assignedEmp ? assignedEmp.name : "";
+                  
+                  const checkerEmp = record.checkedBy ? employees.find(e => e.id === record.checkedBy) : null;
+                  const checkerName = checkerEmp ? checkerEmp.name : "";
+                  
+                  const submittedToId = record.submittedTo;
+                  const directorUser = submittedToId ? (users.find(u => u.employeeId === submittedToId) || employees.find(e => e.id === submittedToId)) : null;
+                  const directorName = directorUser ? directorUser.name : "";
+
+                  const receiverUser = record.receivedBy ? (users.find(u => u.employeeId === record.receivedBy) || employees.find(e => e.id === record.receivedBy)) : null;
+                  const receiverName = receiverUser ? receiverUser.name : "";
+
+                  if (label.includes("nhận hồ sơ")) {
+                      return receiverName || "Bộ phận tiếp nhận";
+                  }
+                  if (label.includes("ranh") || label.includes("dnlis")) {
+                      return assignedName || "Nhân viên xử lý";
+                  }
+                  if (label.includes("mộc kê") || label.includes("mộc")) {
+                      return assignedName || "Nhân viên xử lý";
+                  }
+                  if (label.includes("thế chấp")) {
+                      return assignedName || "Nhân viên xử lý";
+                  }
+                  if (label.includes("niêm yết") || label.includes("công văn")) {
+                      return assignedName || "Nhân viên xử lý";
+                  }
+                  if (label.includes("phiếu chuyển thuế") || label.includes("phiếu chuyển")) {
+                      return assignedName || "Nhân viên xử lý";
+                  }
+                  if (label.includes("trình ký thuế")) {
+                      return assignedName || "Nhân viên xử lý";
+                  }
+                  if (label.includes("tbt")) {
+                      return assignedName || "Nhân viên xử lý";
+                  }
+                  if (label.includes("in gcn") || label.includes("in giấy")) {
+                      return assignedName || "Nhân viên xử lý";
+                  }
+                  if (label.includes("thẩm tra")) {
+                      return checkerName || "Tổ trưởng kiểm tra";
+                  }
+                  if (label.includes("trình ký gcn") || label.includes("trình ký giấy")) {
+                      return directorName ? `Trình: ${assignedName || "NV"} -> Duyệt: ${directorName}` : (assignedName || "Nhân viên trình");
+                  }
+                  if (label.includes("vô số")) {
+                      return assignedName || "Cán bộ bộ phận Cấp giấy";
+                  }
+                  if (label.includes("giao 1 cửa") || label.includes("giao một cửa") || label.includes("trả kết quả")) {
+                      return "Bộ phận một cửa";
+                  }
+                  
+                  return assignedName || "Cán bộ xử lý";
+              };
+
+              const getExecutionDate = (stepLabel: string, stepStatus: RecordStatus) => {
+                  if (!record) return null;
+                  const label = stepLabel.toLowerCase();
+                  if (label.includes("ranh") || label.includes("dnlis")) {
+                      return record.assignedDate;
+                  }
+                  if (label.includes("mộc kê")) {
+                      return record.assignedDate;
+                  }
+                  if (label.includes("kiểm tra thế chấp")) {
+                      return record.assignedDate;
+                  }
+                  if (label.includes("niêm yết") || label.includes("công văn")) {
+                      return record.assignedDate;
+                  }
+                  if (label.includes("phiếu chuyển thuế") || label.includes("phiếu chuyển")) {
+                      return record.completedWorkDate;
+                  }
+                  if (label.includes("trình ký thuế")) {
+                      return record.completedWorkDate;
+                  }
+                  if (label.includes("tbt")) {
+                      return record.taxPaymentDate;
+                  }
+                  if (label.includes("in gcn") || label.includes("in giấy")) {
+                      return record.pendingCheckDate;
+                  }
+                  if (label.includes("thẩm tra")) {
+                      return record.checkedDate;
+                  }
+                  if (label.includes("trình ký gcn") || label.includes("trình ký giấy")) {
+                      return record.submissionDate;
+                  }
+                  if (label.includes("vô số")) {
+                      return record.approvalDate;
+                  }
+                  if (label.includes("giao 1 cửa") || label.includes("giao một cửa")) {
+                      return record.completedDate;
+                  }
+                  
+                  if (stepStatus === RecordStatus.IN_PROGRESS) return record.assignedDate;
+                  if (stepStatus === RecordStatus.COMPLETED_WORK) return record.completedWorkDate;
+                  if (stepStatus === RecordStatus.PENDING_CHECK) return record.pendingCheckDate;
+                  if (stepStatus === RecordStatus.CHECKED) return record.checkedDate;
+                  if (stepStatus === RecordStatus.PENDING_SIGN) return record.submissionDate;
+                  if (stepStatus === RecordStatus.SIGNED) return record.approvalDate;
+                  if (stepStatus === RecordStatus.HANDOVER) return record.completedDate;
+                  return null;
+              };
+
+              const grouped = groupGcnSteps(workflow.steps);
+
+              return (
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-col items-center text-center">
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Hạn trả kết quả</p>
+                    <p className="text-3xl font-black text-slate-800">{formatDate(record.deadline)}</p>
+                    <div className="mt-2 flex items-center gap-2 text-[10px] font-bold text-slate-500 bg-slate-50 px-3 py-1 rounded-full">
+                      <Calendar size={12} /> Ngày nhận: {formatDate(record.receivedDate)}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-4">
+                    <p className="text-xs font-black text-slate-500 uppercase flex items-center gap-2">
+                      <Activity size={14} className="text-slate-400" />
+                      {workflow.title} (Quy trình thu gọn)
+                    </p>
+
+                    <div className="space-y-3">
+                      {grouped.map((group, idx) => {
+                        let cardBorderClass = "border-slate-200 bg-white";
+                        let badgeColorClass = "bg-slate-100 text-slate-500";
+                        let badgeText = "Chờ thực hiện";
+                        
+                        if (group.status === 'completed') {
+                            cardBorderClass = "border-emerald-200 bg-emerald-50/10";
+                            badgeColorClass = "bg-emerald-100 text-emerald-700";
+                            badgeText = "Hoàn thành";
+                        } else if (group.status === 'current') {
+                            cardBorderClass = "border-blue-300 bg-blue-50/10 ring-2 ring-blue-50 shadow-sm";
+                            badgeColorClass = "bg-blue-600 text-white animate-pulse";
+                            badgeText = "Đang xử lý";
+                        }
+
+                        return (
+                          <div key={idx} className={`rounded-xl border p-4 flex flex-col justify-between transition-all duration-300 ${cardBorderClass}`}>
+                            <div className="flex justify-between items-start mb-3">
+                              <h4 className="text-sm font-black text-slate-800 tracking-tight leading-tight">
+                                  {group.label}
+                              </h4>
+                              <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${badgeColorClass}`}>
+                                  {badgeText}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2 bg-slate-50/50 p-2.5 rounded-lg border border-slate-100 mb-3">
+                              {group.subSteps.map((s: any, sIdx: number) => {
+                                  const execDate = getExecutionDate(s.label, s.overallStatus);
+                                  let iconNode = <Circle size={10} className="text-slate-300 mt-0.5" />;
+                                  let sLabelClass = "text-slate-400 font-medium";
+                                  
+                                  if (s.status === 'completed') {
+                                      iconNode = <CheckCircle2 size={10} className="text-emerald-500 mt-0.5" />;
+                                      sLabelClass = "text-emerald-800 font-semibold line-through decoration-emerald-200";
+                                  } else if (s.status === 'current') {
+                                      iconNode = <Loader2 size={10} className="text-blue-500 animate-spin mt-0.5" />;
+                                      sLabelClass = "text-blue-800 font-bold";
+                                  }
+
+                                  return (
+                                      <div key={sIdx} className="text-xs leading-tight flex items-start gap-2">
+                                          {iconNode}
+                                          <div className="flex-1 min-w-0">
+                                              <p className={`truncate ${sLabelClass}`} title={s.label}>
+                                                  {s.label}
+                                              </p>
+                                              <p className="text-[10px] text-slate-500 font-semibold flex items-center gap-1 mt-0.5">
+                                                  👤 {getStepAssigneeName(s.label) || "Chưa giao"}
+                                              </p>
+                                          </div>
+                                      </div>
+                                  );
+                              })}
+                            </div>
+
+                            <div className="border-t border-slate-100 pt-2 mt-auto text-right">
+                                {group.status === 'completed' ? (
+                                    <p className="text-[10px] text-emerald-600 font-bold">
+                                        ✓ Đã hoàn thành
+                                    </p>
+                                ) : group.deadlineDate ? (
+                                    <div className="flex items-center justify-between">
+                                        {group.isOverdue && (
+                                            <span className="text-[8px] font-extrabold text-red-600 uppercase tracking-widest bg-red-50 border border-red-100 px-1 py-0.2 rounded">
+                                                ⚠️ TRỄ HẠN
+                                            </span>
+                                        )}
+                                        <p className={`text-[10px] font-bold ${group.isOverdue ? "text-red-600 animate-pulse" : "text-blue-600"} ml-auto`}>
+                                            Hạn: {formatDate(group.deadlineDate.toISOString())}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <p className="text-[10px] text-slate-400">---</p>
+                                )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })() : (
+              <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                <div className="flex flex-col items-center text-center mb-8 pb-6 border-b border-slate-50">
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">Hạn trả kết quả</p>
+                  <p className="text-3xl font-black text-slate-800">{formatDate(record.deadline)}</p>
+                  <div className="mt-3 flex items-center gap-2 text-[10px] font-bold text-slate-500 bg-slate-50 px-3 py-1 rounded-full">
+                    <Calendar size={12} /> Ngày nhận: {formatDate(record.receivedDate)}
+                  </div>
+                </div>
+
+                <div className="space-y-0">
+                  <TimelineItem 
+                    date={record.receivedDate} 
+                    label="NHẬN HỒ SƠ" 
+                    icon={UserIcon}
+                    colorClass={{text: 'text-emerald-600', border: 'border-emerald-600', bg: 'bg-emerald-600'}}
+                    subText={record.receivedBy ? (() => {
+                        const receiver = users.find(u => u.employeeId === record.receivedBy);
+                        if (!receiver) return undefined;
+                        const emp = employees.find(e => e.id === receiver.employeeId);
+                        return `Người nhận: ${receiver.name} (${emp?.position || 'Nhân viên'})`;
+                    })() : undefined}
+                  />
+                  <TimelineItem 
+                    date={record.assignedDate} 
+                    label="GIAO NHÂN VIÊN" 
+                    icon={UserIcon}
+                    colorClass={{text: 'text-blue-600', border: 'border-blue-600', bg: 'bg-blue-600'}}
+                    subText={record.assignedTo ? (() => {
+                        const assigned = employees.find(e => e.id === record.assignedTo);
+                        if (!assigned) return undefined;
+                        return `Nhân viên thực hiện: ${assigned.name} (${assigned.position || 'Nhân viên'})`;
+                    })() : undefined}
+                  />
+                  <TimelineItem 
+                    date={record.completedWorkDate} 
+                    forceActive={isWorkDone}
+                    label="ĐÃ THỰC HIỆN" 
+                    icon={CheckSquare}
+                    colorClass={{text: 'text-cyan-600', border: 'border-cyan-600', bg: 'bg-cyan-600'}}
+                    subText={record.completedWorkDate && record.assignedTo ? (() => {
+                        const assigned = employees.find(e => e.id === record.assignedTo);
+                        if (!assigned) return undefined;
+                        return `Nhân viên hoàn thành: ${assigned.name} (${assigned.position || 'Nhân viên'})`;
+                    })() : undefined}
+                  />
+
+                  {/* Ẩn mốc kiểm tra cho một số loại hồ sơ */}
+                  {!(record.recordType === 'Cung cấp tài liệu đất đai' || record.recordType === 'Sao lục' || record.recordType === 'Công văn') && (
+                    <>
+                      <TimelineItem 
+                        date={record.pendingCheckDate} 
+                        forceActive={isPendingCheckActive}
+                        label="TRÌNH KIỂM TRA" 
+                        icon={Send}
+                        colorClass={{text: 'text-orange-600', border: 'border-orange-600', bg: 'bg-orange-600'}}
+                        subText={record.pendingCheckDate ? (() => {
+                            const assigned = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
+                            const checker = record.checkedBy ? employees.find(e => e.id === record.checkedBy) : null;
+                            let text = '';
+                            if (assigned) text += `Người trình: ${assigned.name}`;
+                            if (checker) text += (text ? ` \n` : '') + `Người kiểm tra: ${checker.name} (${checker.position || 'Tổ trưởng'})`;
+                            return text || undefined;
+                        })() : undefined}
+                      />
+                      <TimelineItem 
+                        date={record.checkedDate} 
+                        forceActive={isCheckedActive}
+                        label="ĐÃ KIỂM TRA" 
+                        icon={CheckSquare}
+                        colorClass={{text: 'text-orange-600', border: 'border-orange-600', bg: 'bg-orange-600'}}
+                        subText={record.checkedDate && record.checkedBy ? (() => {
+                            const checker = employees.find(e => e.id === record.checkedBy);
+                            if (!checker) return undefined;
+                            return `Người kiểm tra: ${checker.name} (${checker.position || 'Tổ trưởng'})`;
+                        })() : undefined}
+                      />
+                    </>
+                  )}
+
+                  <TimelineItem 
+                    date={record.submissionDate} 
+                    forceActive={isPendingSignActive}
+                    label="TRÌNH KÝ" 
+                    icon={Send}
+                    colorClass={{text: 'text-purple-600', border: 'border-purple-600', bg: 'bg-purple-600'}}
+                    subText={record.submissionDate ? (() => {
+                        const assigned = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
+                        const director = record.submittedTo ? (users.find(u => u.employeeId === record.submittedTo) || employees.find(e => e.id === record.submittedTo)) : null;
+                        let text = '';
+                        if (assigned) text += `Người trình: ${assigned.name}`;
+                        if (director) text += (text ? ` \n` : '') + `Người nhận trình: ${director.name} (${(director as any).position || 'Lãnh đạo'})`;
+                        return text || undefined;
+                    })() : undefined}
+                  />
+                  
+                  <TimelineItem 
+                    date={record.approvalDate} 
+                    forceActive={isSignedActive}
+                    label="KÝ DUYỆT" 
+                    icon={FileSignature}
+                    colorClass={{text: 'text-indigo-600', border: 'border-indigo-600', bg: 'bg-indigo-600'}}
+                    subText={record.approvalDate && record.submittedTo ? (() => {
+                        const director = users.find(u => u.employeeId === record.submittedTo) || employees.find(e => e.id === record.submittedTo);
+                        if (!director) return undefined;
+                        return `Người ký duyệt: ${director.name} (${(director as any).position || 'Lãnh đạo'})`;
+                    })() : undefined}
+                  />
+
+                  <TimelineItem 
+                    date={record.completedDate} 
+                    label={record.status === RecordStatus.REJECTED ? "HỒ SƠ TRẢ" : record.status === RecordStatus.WITHDRAWN ? "RÚT HỒ SƠ" : "HOÀN THÀNH"} 
+                    icon={CheckSquare}
+                    isLast={false}
+                    colorClass={{text: record.status === RecordStatus.REJECTED ? 'text-red-700' : 'text-green-700', border: record.status === RecordStatus.REJECTED ? 'border-red-600' : 'border-green-600', bg: record.status === RecordStatus.REJECTED ? 'bg-red-600' : 'bg-green-600'}}
+                    subText={record.completedDate && record.exportBatch ? `Chốt danh sách đợt: ĐỢT ${record.exportBatch}` : undefined}
+                  />
+
+                  <TimelineItem 
+                    date={record.resultReturnedDate} 
+                    label="TRẢ KẾT QUẢ" 
+                    icon={FileCheck}
+                    isLast={true}
+                    colorClass={{text: 'text-emerald-600', border: 'border-emerald-600', bg: 'bg-emerald-600'}}
+                    subText={record.resultReturnedDate ? (() => {
+                        let details = '';
+                        if (record.receiverName) details += `Người nhận: ${record.receiverName}`;
+                        if (record.paymentAmount) details += (details ? `, ` : '') + `Lệ phí: ${record.paymentAmount.toLocaleString('vi-VN')}đ`;
+                        return details || undefined;
+                    })() : undefined}
+                  />
                 </div>
               </div>
-
-              <div className="space-y-0">
-                <TimelineItem 
-                  date={record.receivedDate} 
-                  label="NHẬN HỒ SƠ" 
-                  icon={UserIcon}
-                  colorClass={{text: 'text-emerald-600', border: 'border-emerald-600', bg: 'bg-emerald-600'}}
-                  subText={record.receivedBy ? (() => {
-                      const receiver = users.find(u => u.employeeId === record.receivedBy);
-                      if (!receiver) return undefined;
-                      const emp = employees.find(e => e.id === receiver.employeeId);
-                      return `Người nhận: ${receiver.name} (${emp?.position || 'Nhân viên'})`;
-                  })() : undefined}
-                />
-                <TimelineItem 
-                  date={record.assignedDate} 
-                  label="GIAO NHÂN VIÊN" 
-                  icon={UserIcon}
-                  colorClass={{text: 'text-blue-600', border: 'border-blue-600', bg: 'bg-blue-600'}}
-                  subText={record.assignedTo ? (() => {
-                      const assigned = employees.find(e => e.id === record.assignedTo);
-                      if (!assigned) return undefined;
-                      return `Nhân viên thực hiện: ${assigned.name} (${assigned.position || 'Nhân viên'})`;
-                  })() : undefined}
-                />
-                <TimelineItem 
-                  date={record.completedWorkDate} 
-                  forceActive={isWorkDone}
-                  label="ĐÃ THỰC HIỆN" 
-                  icon={CheckSquare}
-                  colorClass={{text: 'text-cyan-600', border: 'border-cyan-600', bg: 'bg-cyan-600'}}
-                  subText={record.completedWorkDate && record.assignedTo ? (() => {
-                      const assigned = employees.find(e => e.id === record.assignedTo);
-                      if (!assigned) return undefined;
-                      return `Nhân viên hoàn thành: ${assigned.name} (${assigned.position || 'Nhân viên'})`;
-                  })() : undefined}
-                />
-
-                {/* Ẩn mốc kiểm tra cho một số loại hồ sơ */}
-                {!(record.recordType === 'Cung cấp tài liệu đất đai' || record.recordType === 'Sao lục' || record.recordType === 'Công văn') && (
-                  <>
-                    <TimelineItem 
-                      date={record.pendingCheckDate} 
-                      forceActive={isPendingCheckActive}
-                      label="TRÌNH KIỂM TRA" 
-                      icon={Send}
-                      colorClass={{text: 'text-orange-600', border: 'border-orange-600', bg: 'bg-orange-600'}}
-                      subText={record.pendingCheckDate ? (() => {
-                          const assigned = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
-                          const checker = record.checkedBy ? employees.find(e => e.id === record.checkedBy) : null;
-                          let text = '';
-                          if (assigned) text += `Người trình: ${assigned.name}`;
-                          if (checker) text += (text ? ` \n` : '') + `Người kiểm tra: ${checker.name} (${checker.position || 'Tổ trưởng'})`;
-                          return text || undefined;
-                      })() : undefined}
-                    />
-                    <TimelineItem 
-                      date={record.checkedDate} 
-                      forceActive={isCheckedActive}
-                      label="ĐÃ KIỂM TRA" 
-                      icon={CheckSquare}
-                      colorClass={{text: 'text-orange-600', border: 'border-orange-600', bg: 'bg-orange-600'}}
-                      subText={record.checkedDate && record.checkedBy ? (() => {
-                          const checker = employees.find(e => e.id === record.checkedBy);
-                          if (!checker) return undefined;
-                          return `Người kiểm tra: ${checker.name} (${checker.position || 'Tổ trưởng'})`;
-                      })() : undefined}
-                    />
-                  </>
-                )}
-
-                <TimelineItem 
-                  date={record.submissionDate} 
-                  forceActive={isPendingSignActive}
-                  label="TRÌNH KÝ" 
-                  icon={Send}
-                  colorClass={{text: 'text-purple-600', border: 'border-purple-600', bg: 'bg-purple-600'}}
-                  subText={record.submissionDate ? (() => {
-                      const assigned = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
-                      const director = record.submittedTo ? (users.find(u => u.employeeId === record.submittedTo) || employees.find(e => e.id === record.submittedTo)) : null;
-                      let text = '';
-                      if (assigned) text += `Người trình: ${assigned.name}`;
-                      if (director) text += (text ? ` \n` : '') + `Người nhận trình: ${director.name} (${(director as any).position || 'Lãnh đạo'})`;
-                      return text || undefined;
-                  })() : undefined}
-                />
-                
-                <TimelineItem 
-                  date={record.approvalDate} 
-                  forceActive={isSignedActive}
-                  label="KÝ DUYỆT" 
-                  icon={FileSignature}
-                  colorClass={{text: 'text-indigo-600', border: 'border-indigo-600', bg: 'bg-indigo-600'}}
-                  subText={record.approvalDate && record.submittedTo ? (() => {
-                      const director = users.find(u => u.employeeId === record.submittedTo) || employees.find(e => e.id === record.submittedTo);
-                      if (!director) return undefined;
-                      return `Người ký duyệt: ${director.name} (${(director as any).position || 'Lãnh đạo'})`;
-                  })() : undefined}
-                />
-
-                <TimelineItem 
-                  date={record.completedDate} 
-                  label={record.status === RecordStatus.REJECTED ? "HỒ SƠ TRẢ" : record.status === RecordStatus.WITHDRAWN ? "RÚT HỒ SƠ" : "HOÀN THÀNH"} 
-                  icon={CheckSquare}
-                  isLast={false}
-                  colorClass={{text: record.status === RecordStatus.REJECTED ? 'text-red-700' : 'text-green-700', border: record.status === RecordStatus.REJECTED ? 'border-red-600' : 'border-green-600', bg: record.status === RecordStatus.REJECTED ? 'bg-red-600' : 'bg-green-600'}}
-                  subText={record.completedDate && record.exportBatch ? `Chốt danh sách đợt: ĐỢT ${record.exportBatch}` : undefined}
-                />
-
-                <TimelineItem 
-                  date={record.resultReturnedDate} 
-                  label="TRẢ KẾT QUẢ" 
-                  icon={FileCheck}
-                  isLast={true}
-                  colorClass={{text: 'text-emerald-600', border: 'border-emerald-600', bg: 'bg-emerald-600'}}
-                  subText={record.resultReturnedDate ? (() => {
-                      let details = '';
-                      if (record.receiverName) details += `Người nhận: ${record.receiverName}`;
-                      if (record.paymentAmount) details += (details ? `, ` : '') + `Lệ phí: ${record.paymentAmount.toLocaleString('vi-VN')}đ`;
-                      return details || undefined;
-                  })() : undefined}
-                />
-              </div>
-            </div>
+            )}
 
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400">

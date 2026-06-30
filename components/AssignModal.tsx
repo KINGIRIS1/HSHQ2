@@ -190,48 +190,129 @@ export const getRoleCategory = (position?: string): { key: string; label: string
 export const isViewAllowedForUser = (currentUser: User | null, viewId: string, employees: Employee[]): boolean => {
   if (!currentUser) return true;
   
-  // ADMIN, SUBADMIN, and TEAM_LEADER have full access to all views/tabs
+  // 1. ADMIN and SUBADMIN always have full access to everything
   if (
     currentUser.role === UserRole.ADMIN || 
-    currentUser.role === UserRole.SUBADMIN || 
-    currentUser.role === UserRole.TEAM_LEADER
+    currentUser.role === UserRole.SUBADMIN
   ) {
     return true;
   }
 
-  // ONEDOOR has full access to all views/tabs
-  if (currentUser.role === UserRole.ONEDOOR) {
-    return true;
-  }
+  // 2. Identify user's team/Tổ and position
+  let teamName = '';
+  let positionKey = 'staff';
 
-  // Get employee and their details
   const emp = employees?.find(e => e.id === currentUser.employeeId);
-  const teamName = emp ? getEmployeeTeam(emp) : '';
-  const cat = emp ? getRoleCategory(emp.position) : { key: 'staff' };
+  if (emp) {
+    teamName = getEmployeeTeam(emp);
+    const cat = getRoleCategory(emp.position);
+    positionKey = cat.key;
+  } else {
+    // Fallback based on Role
+    if (currentUser.role === UserRole.ONEDOOR) {
+      teamName = 'Tổ Hành chính';
+    } else if (currentUser.role === UserRole.TEAM_LEADER) {
+      teamName = 'Tổ Đo đạc'; // Safe fallback
+    }
+  }
 
-  // If they are leader or vice leader, they also have full access
-  const isLeaderOrVice = cat.key === 'leader' || cat.key === 'vice_leader';
-  if (isLeaderOrVice) {
+  // 3. Exception teams: "Ban Giám đốc" and "Tổ Hành chính" (including ONEDOOR role) have access to ALL tabs/views
+  const isExceptedTeam = 
+    teamName === 'Ban Giám đốc' || 
+    teamName === 'Tổ Hành chính' || 
+    currentUser.role === UserRole.ONEDOOR;
+
+  if (isExceptedTeam) {
     return true;
   }
 
-  // Standard employee/staff views
+  // 4. Define tab/view groups
+  const measurementViews = [
+    "all_records",
+    "assign_tasks",
+    "completed_list",
+    "pending_check_list",
+    "check_list",
+    "handover_list",
+    "director_completed"
+  ];
+
+  const registrationViews = [
+    "registration_records",
+    "registration_assign_tasks",
+    "registration_completed_list",
+    "registration_pending_check_list",
+    "registration_check_list",
+    "registration_handover_list",
+    "registration_director_completed",
+    "registration_vao_so"
+  ];
+
+  const archiveViews = [
+    "archive_records",
+    "archive_assign_tasks",
+    "archive_completed_list",
+    "archive_pending_check_list",
+    "archive_check_list",
+    "archive_handover_list",
+    "archive_director_completed"
+  ];
+
+  const congvanViews = [
+    "congvan_records",
+    "congvan_assign_tasks",
+    "congvan_completed_list",
+    "congvan_pending_check_list",
+    "congvan_check_list",
+    "congvan_handover_list",
+    "congvan_director_completed"
+  ];
+
+  const otherViews = [
+    "other_records",
+    "other_assign_tasks",
+    "other_check_list",
+    "other_handover_list",
+    "other_director_completed"
+  ];
+
+  // 5. Restrict views based on the user's specific team
+  if (measurementViews.includes(viewId)) {
+    return teamName === 'Tổ Đo đạc';
+  }
+
+  if (registrationViews.includes(viewId)) {
+    return teamName === 'Tổ Cấp giấy';
+  }
+
+  if (archiveViews.includes(viewId) || congvanViews.includes(viewId) || otherViews.includes(viewId)) {
+    return teamName === 'Tổ Lưu trữ';
+  }
+
+  // 6. General/Standard tabs: allowed for everyone
   const allowedStaffViews = [
     'personal_profile',
     'utilities',
     'work_schedule',
     'dashboard',
     'internal_chat',
-    'account_settings'
+    'account_settings',
+    'reports',
+    'excerpt_management'
   ];
-  
-  const congvanViews = ['congvan_records', 'congvan_assign_tasks', 'congvan_completed_list', 'congvan_pending_check_list', 'congvan_check_list', 'congvan_handover_list', 'congvan_director_completed'];
-  
-  if (teamName === 'Tổ Lưu trữ' && congvanViews.includes(viewId)) {
+
+  if (allowedStaffViews.includes(viewId)) {
     return true;
   }
-  
-  return allowedStaffViews.includes(viewId);
+
+  // Default fallback: "receive_record", "receive_contract", and "receive_group"
+  // are only allowed for administrative team/onedoor (already handled under isExceptedTeam above).
+  // Block for other specialist teams.
+  if (viewId === 'receive_record' || viewId === 'receive_contract' || viewId === 'receive_group') {
+    return false;
+  }
+
+  return true;
 };
 
 const AssignModal: React.FC<AssignModalProps> = ({ 

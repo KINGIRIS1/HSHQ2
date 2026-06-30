@@ -66,6 +66,7 @@ import {
   Hash,
   Printer,
   Globe,
+  BookOpen,
 } from "lucide-react";
 
 interface AppRoutesProps {
@@ -281,6 +282,8 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
     return cat.key === "vice_leader";
   }, [currentUser.employeeId, employees]);
 
+  const isEmployee = currentUser.role === UserRole.EMPLOYEE;
+
   // canPerformAction is kept for backward compatibility, but we should use hasPermission where possible
   const canPerformAction =
     isAdmin ||
@@ -288,7 +291,8 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
     isTeamLeader ||
     isViceLeader ||
     isOneDoor ||
-    isDirector;
+    isDirector ||
+    isEmployee;
 
   const [showColumnSelector, setShowColumnSelector] = React.useState(false);
 
@@ -312,6 +316,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
       "registration_check_list",
       "registration_handover_list",
       "registration_director_completed",
+      "registration_vao_so",
     ].includes(currentView);
 
     const isArchiveView = [
@@ -573,6 +578,15 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   <Send size={16} /> Giao 1 cửa
                 </button>
               )}
+
+            {isViewAllowedForUser(currentUser, "registration_vao_so", employees) && (
+              <button
+                onClick={() => props.setCurrentView("registration_vao_so")}
+                className={`px-4 py-3 text-sm font-bold flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${currentView === "registration_vao_so" ? "border-teal-600 text-teal-700 bg-white" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              >
+                <BookOpen size={16} /> Vào số GCN
+              </button>
+            )}
           </div>
         )}
 
@@ -765,7 +779,7 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
           </div>
         )}
 
-        {(currentView === "registration_vao_so" || currentView === "other_records") ? (
+        {currentView === "registration_vao_so" ? (
           <div className="flex-1 overflow-hidden flex flex-col min-h-0 bg-white">
             <VaoSoView currentUser={currentUser} wards={wards} />
           </div>
@@ -1238,15 +1252,6 @@ const AppRoutes: React.FC<AppRoutesProps> = (props) => {
                   >
                     <UserPlus size={18} /> Giao Nhân Viên (
                     {props.selectedRecordIds.size})
-                  </button>
-                  <button
-                    onClick={() => {
-                      props.handleBatchAutoAssign(props.selectedRecordIds, currentView);
-                    }}
-                    className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-bold shadow-md transition-all hover:scale-105"
-                    title="Tự động phân công cán bộ phụ trách theo địa bàn xã được phân công"
-                  >
-                    <Sparkles size={18} /> Giao đồng loạt ({props.selectedRecordIds.size})
                   </button>
                 </>
               )}

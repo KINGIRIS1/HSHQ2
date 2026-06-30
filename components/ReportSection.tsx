@@ -10,6 +10,7 @@ import EmployeeStatsView from './report/EmployeeStatsView';
 import WardStatsView from './report/WardStatsView';
 import DailyStatsView from './report/DailyStatsView';
 import RevenueStatsView from './report/RevenueStatsView';
+import { getEmployeeTeam } from './AssignModal';
 
 const isReg = (type: string | null | undefined): boolean => {
     if (!type) return false;
@@ -158,6 +159,27 @@ const ReportSection: React.FC<ReportSectionProps> = ({
         return allowed;
     }, [rawEmployees, currentUser]);
 
+    const canViewRevenue = useMemo(() => {
+        if (!currentUser) return false;
+        const roleStr = (currentUser.role as string).toUpperCase();
+        if (roleStr === 'ADMIN' || roleStr === 'SUBADMIN') return true;
+
+        const userEmp = rawEmployees.find(e => e.id === currentUser.employeeId);
+        if (!userEmp) {
+            return roleStr === 'ONEDOOR';
+        }
+
+        const dept = (userEmp.department || '').toLowerCase();
+        const pos = (userEmp.position || '').toLowerCase();
+        
+        // Báo cáo doanh thu chỉ dành cho tổ hành chính (hành chính)
+        const isHanhChinh = dept.includes('hành chính') || (userEmp.department && getEmployeeTeam(userEmp) === 'Tổ Hành chính');
+        // Ban giám đốc hoặc lãnh đạo cũng được xem
+        const isDirectorDept = dept.includes('ban giám đốc') || dept.includes('ban lãnh đạo') || dept.includes('giám đốc') || pos.includes('giám đốc') || pos.includes('lãnh đạo');
+
+        return isHanhChinh || isDirectorDept || roleStr === 'ONEDOOR';
+    }, [currentUser, rawEmployees]);
+
     const [mainTab, setMainTab] = useState<'measurement' | 'archive' | 'registration'>(() => {
         // Find first allowed tab on initialization if possible
         if (currentUser) {
@@ -182,6 +204,12 @@ const ReportSection: React.FC<ReportSectionProps> = ({
             setMainTab(allowedMainTabs[0] as any);
         }
     }, [allowedMainTabs, mainTab]);
+
+    useEffect(() => {
+        if (!canViewRevenue && activeTab === 'revenue') {
+            setActiveTab('list');
+        }
+    }, [canViewRevenue, activeTab]);
 
     const [archiveRecords, setArchiveRecords] = useState<RecordFile[]>([]);
 
@@ -642,12 +670,14 @@ const ReportSection: React.FC<ReportSectionProps> = ({
                 >
                     <AlertTriangle size={16}/> Thống kê hồ sơ trễ
                 </button>
-                <button 
-                    onClick={() => setActiveTab('revenue')}
-                    className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'revenue' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
-                >
-                    <Coins size={16}/> Báo cáo Nguồn thu ({filteredData.filter(r => r.paymentAmount && r.paymentAmount > 0).length})
-                </button>
+                {canViewRevenue && (
+                    <button 
+                        onClick={() => setActiveTab('revenue')}
+                        className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'revenue' ? 'border-teal-600 text-teal-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                    >
+                        <Coins size={16}/> Báo cáo Nguồn thu ({filteredData.filter(r => r.paymentAmount && r.paymentAmount > 0).length})
+                    </button>
+                )}
                 <button 
                     onClick={() => setActiveTab('ai')}
                     className={`px-6 py-3 text-sm font-bold border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'ai' ? 'border-purple-600 text-purple-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
