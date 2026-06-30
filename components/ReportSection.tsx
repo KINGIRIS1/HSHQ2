@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { BarChart3, FileSpreadsheet, Loader2, Sparkles, Download, CalendarDays, Printer, Layout, FileText, ListFilter, CheckCircle2, Clock, AlertTriangle, Settings, Key, X, Save, MapPin, UserCheck, ChevronLeft, ChevronRight, PieChart, CheckCircle, Ruler, FolderArchive, CalendarRange, Coins } from 'lucide-react';
-import { RecordFile, RecordStatus, Employee, User } from '../types';
+import { RecordFile, RecordStatus, Employee, User, UserRole } from '../types';
 import { getNormalizedWard, STATUS_LABELS, REGISTRATION_PROCEDURES } from '../constants';
 import { isRecordOverdue, removeVietnameseTones, isRecordApproaching } from '../utils/appHelpers';
 import { saveGeminiKey, getGeminiKey } from '../services/geminiService';
@@ -40,64 +40,88 @@ const ReportSection: React.FC<ReportSectionProps> = ({
     employees: rawEmployees,
     currentUser 
 }) => {
+    const isSystemAdmin = useMemo(() => {
+        if (!currentUser) return false;
+        const roleStr = (currentUser.role as string).toUpperCase();
+        return roleStr === 'ADMIN' || roleStr === 'SUBADMIN';
+    }, [currentUser]);
+
+    const userEmp = useMemo(() => {
+        if (!currentUser) return null;
+        return rawEmployees.find(e => e.id === currentUser.employeeId) || null;
+    }, [rawEmployees, currentUser]);
+
+    const isTeamLeader = useMemo(() => {
+        if (!currentUser) return false;
+        if (isSystemAdmin) return false;
+        if (currentUser.role === UserRole.TEAM_LEADER) return true;
+        if (!userEmp) return false;
+        const pos = removeVietnameseTones(userEmp.position || '').toLowerCase();
+        return pos.includes('to truong') || pos.includes('truong to') || pos.includes('pho to') || pos.includes('pho truong') || pos.includes('truong nhom') || pos.includes('nhom truong');
+    }, [currentUser, userEmp, isSystemAdmin]);
+
+    const myTeamName = useMemo(() => {
+        if (!userEmp) return '';
+        return getEmployeeTeam(userEmp);
+    }, [userEmp]);
+
     // Filter employees and records based on the user's team / department (tổ)
     const employees = useMemo(() => {
         if (!currentUser) return rawEmployees;
-        const roleStr = (currentUser.role as string).toUpperCase();
-        const isSystemAdmin = roleStr === 'ADMIN' || roleStr === 'SUBADMIN';
         if (isSystemAdmin) return rawEmployees;
 
-        const userEmp = rawEmployees.find(e => e.id === currentUser.employeeId);
-        if (!userEmp) return rawEmployees; // fallback if no employee mapping
+        // Nếu là Team Leader, chỉ hiện nhân viên của tổ mình phụ trách
+        if (isTeamLeader && myTeamName) {
+            return rawEmployees.filter(e => getEmployeeTeam(e) === myTeamName);
+        }
 
-        const dept = userEmp.department.toLowerCase();
-        // Exception for administrative/leadership who can view everything
-        const isPrivilegedDept = dept.includes('hành chính') || dept.includes('giám đốc') || dept.includes('lãnh đạo') || dept.includes('quản trị');
-        if (isPrivilegedDept) return rawEmployees;
+        // Đối với tài khoản cá nhân (regular Employee), chỉ hiện chính bản thân mình
+        if (userEmp) {
+            return [userEmp];
+        }
 
-        // Regular department: only see employees in their own department
-        return rawEmployees.filter(e => e.department.toLowerCase() === dept);
-    }, [rawEmployees, currentUser]);
+        return rawEmployees;
+    }, [rawEmployees, currentUser, isSystemAdmin, isTeamLeader, myTeamName, userEmp]);
 
     const records = useMemo(() => {
         if (!currentUser) return rawRecords;
-        const roleStr = (currentUser.role as string).toUpperCase();
-        const isSystemAdmin = roleStr === 'ADMIN' || roleStr === 'SUBADMIN';
         if (isSystemAdmin) return rawRecords;
 
-        const userEmp = rawEmployees.find(e => e.id === currentUser.employeeId);
-        if (!userEmp) return rawRecords; // fallback
-
-        const dept = userEmp.department.toLowerCase();
-        const isPrivilegedDept = dept.includes('hành chính') || dept.includes('giám đốc') || dept.includes('lãnh đạo') || dept.includes('quản trị');
-        if (isPrivilegedDept) return rawRecords;
-
-        // Determine matching domains based on department
-        const isMeasureDept = dept.includes('đo đạc') || dept.includes('kỹ thuật');
-        const isRegDept = dept.includes('cấp giấy') || dept.includes('đăng ký') || dept.includes('biến động') || dept.includes('thẩm định') || dept.includes('pháp chế');
-        const isArchiveDept = dept.includes('lưu trữ') || dept.includes('một cửa') || dept.includes('thông tin');
-
-        // Only see records assigned to employees of the same department, OR matching department domain
-        const empIds = new Set(rawEmployees.filter(e => e.department.toLowerCase() === dept).map(e => e.id));
-        return rawRecords.filter(r => {
-            if (r.assignedTo && empIds.has(r.assignedTo)) return true;
-
-            // Domain matching
-            if (isMeasureDept) {
-                const isMeasureRecord = !['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '') && !isReg(r.recordType);
-                return isMeasureRecord;
-            }
-            if (isRegDept) {
-                return isReg(r.recordType);
-            }
-            if (isArchiveDept) {
-                const isArchiveRecord = ['Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '');
-                return isArchiveRecord;
+        // Nếu là Team Leader, chỉ hiện hồ sơ của tổ mình phụ trách
+        if (isTeamLeader && myTeamName) {
+            // Tổ Hành chính hoặc Ban Giám đốc có thể xem báo cáo của tất cả
+            if (myTeamName === 'Tổ Hành chính' || myTeamName === 'Ban Giám đốc') {
+                return rawRecords;
             }
 
-            return false;
-        });
-    }, [rawRecords, rawEmployees, currentUser]);
+            const teamEmpIds = new Set(rawEmployees.filter(e => getEmployeeTeam(e) === myTeamName).map(e => e.id));
+            return rawRecords.filter(r => {
+                if (r.assignedTo && teamEmpIds.has(r.assignedTo)) return true;
+                
+                // Trùng domain lĩnh vực nếu hồ sơ chưa giao hoặc giao ngoài
+                if (myTeamName === 'Tổ Đo đạc') {
+                    return !['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '') && !isReg(r.recordType);
+                }
+                if (myTeamName === 'Tổ Cấp giấy') {
+                    return isReg(r.recordType);
+                }
+                if (myTeamName === 'Tổ Lưu trữ') {
+                    return ['Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '');
+                }
+                return false;
+            });
+        }
+
+        // Đối với tài khoản cá nhân, chỉ hiện hồ sơ được giao việc của bản thân mình (hoặc có liên quan)
+        const myEmpId = currentUser.employeeId;
+        return rawRecords.filter(r => 
+            r.assignedTo === myEmpId || 
+            r.checkedBy === myEmpId || 
+            r.submittedTo === myEmpId || 
+            r.receivedBy === myEmpId
+        );
+    }, [rawRecords, rawEmployees, currentUser, isSystemAdmin, isTeamLeader, myTeamName]);
+
     const [fromDate, setFromDate] = useState(() => {
         return '2025-01-01';
     });
@@ -108,8 +132,22 @@ const ReportSection: React.FC<ReportSectionProps> = ({
     // State chọn xã phường
     const [selectedWard, setSelectedWard] = useState<string>('all');
     
-    // State chọn nhân viên (Lifting state up)
-    const [selectedEmpId, setSelectedEmpId] = useState<string>('');
+    // State chọn nhân viên (Lifting state up) - mặc định pre-select cho tài khoản cá nhân
+    const [selectedEmpId, setSelectedEmpId] = useState<string>(() => {
+        if (!currentUser) return '';
+        const roleStr = (currentUser.role as string).toUpperCase();
+        const isSysAdmin = roleStr === 'ADMIN' || roleStr === 'SUBADMIN';
+        const userEmpObj = rawEmployees.find(e => e.id === currentUser.employeeId);
+        const isLeader = currentUser.role === UserRole.TEAM_LEADER || (userEmpObj && (() => {
+            const pos = removeVietnameseTones(userEmpObj.position || '').toLowerCase();
+            return pos.includes('to truong') || pos.includes('truong to') || pos.includes('pho to') || pos.includes('pho truong') || pos.includes('truong nhom') || pos.includes('nhom truong');
+        })());
+
+        if (!isSysAdmin && !isLeader) {
+            return currentUser.employeeId || '';
+        }
+        return '';
+    });
 
     // Report Type State
     const [reportType, setReportType] = useState<'week' | 'month' | 'custom'>('custom');
