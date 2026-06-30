@@ -3,7 +3,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { RecordFile, RecordStatus, User, Employee, RolePermissions, DEFAULT_ROLE_PERMISSIONS, UserRole } from '../types';
 import { getEmployeeTeam } from './AssignModal';
 import StatusBadge from './StatusBadge';
-import { Briefcase, ArrowRight, CheckCircle, Clock, Send, AlertTriangle, UserCog, ChevronLeft, ChevronRight, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Bell, CalendarClock, FileCheck, Map, CheckSquare, ClipboardList, FileDown, RotateCcw, CornerUpLeft } from 'lucide-react';
+import { Briefcase, ArrowRight, CheckCircle, Clock, Send, AlertTriangle, UserCog, ChevronLeft, ChevronRight, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Bell, CalendarClock, FileCheck, Map, CheckSquare, ClipboardList, FileDown, RotateCcw, CornerUpLeft, FileSignature } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { getShortRecordType } from '../constants';
 import { confirmAction, isRecordOverdue, isRecordApproaching, getGcnWorkflowStepsHelper } from '../utils/appHelpers';
@@ -498,6 +498,51 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   };
 
   // --- ACTIONS ---
+
+  const handleSignRecord = async (record: RecordFile) => {
+    if (await confirmAction(`Xác nhận ký duyệt hồ sơ ${record.code || record.receiptNumber}?\nHồ sơ sẽ chuyển sang trạng thái "Đã ký duyệt" và chuyển qua bước Chờ giao.`)) {
+        const nowStr = new Date().toISOString();
+        if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
+            const currentArchive = archiveRecords.find(r => r.id === record.id);
+            if (currentArchive) {
+                 const oldHistory = Array.isArray(currentArchive.data?.history) ? currentArchive.data.history : [];
+                 const historyEntry = {
+                     action: 'Ký duyệt',
+                     status: 'signed',
+                     timestamp: nowStr,
+                     user: user.name
+                 };
+                 const newHistory = [...oldHistory, historyEntry];
+                 const updatedData = {
+                     ...currentArchive.data,
+                     approval_date: nowStr,
+                     history: newHistory
+                 };
+                 await saveArchiveRecord({
+                     id: record.id,
+                     status: 'signed',
+                     data: updatedData
+                 });
+            }
+        } else {
+            const updatedRecord = {
+                ...record,
+                status: RecordStatus.SIGNED,
+                approvalDate: nowStr
+            };
+            if (onUpdateRecord) {
+                await onUpdateRecord(updatedRecord);
+            } else {
+                await updateRecordApi(updatedRecord);
+                onUpdateStatus(record, RecordStatus.SIGNED);
+            }
+        }
+        
+        const saoluc = await fetchArchiveRecords('saoluc');
+        const congvan = await fetchArchiveRecords('congvan');
+        setArchiveRecords([...saoluc, ...congvan]);
+    }
+  };
 
   const handleStartWork = async (record: RecordFile) => {
     if (await confirmAction(`Xác nhận bắt đầu thực hiện hồ sơ ${record.code}?\nHồ sơ sẽ chuyển sang trạng thái "Đang thực hiện".`)) {
@@ -1396,6 +1441,9 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                             )}
                                             {activeTab === 'pending_sign' && (isDirector || user.role === UserRole.ADMIN || user.role === UserRole.SUBADMIN || (isTeamLeaderOrChecker && teamEmployeeIds.includes(r.assignedTo || ''))) && (
                                                 <>
+                                                    <button onClick={() => handleSignRecord(r)} title="Ký duyệt" className="px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
+                                                        <FileSignature size={14} /> Ký duyệt
+                                                    </button>
                                                     <button onClick={() => handleOpenReturnStepModal(r)} title="Trả về bước trước" className="px-3 py-1.5 bg-amber-600 text-white rounded-md hover:bg-amber-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
                                                         <RotateCcw size={14} /> Trả về
                                                     </button>

@@ -729,20 +729,38 @@ function App() {
       }
   }, [records, currentUser]);
 
-  const executeBatchExport = useCallback(async (batch: number, date: string) => {
+  const executeBatchExport = useCallback(async (batch: number, date: string, handoverWard?: string, updatedRecords?: RecordFile[]) => {
       try {
-          const matched = records.filter(r => r.exportBatch === batch);
-          if (matched.length === 0) {
-              setToast({ type: 'error', message: `Không tìm thấy hồ sơ thuộc đợt giao nhận số ${batch}!` });
+          const targets = (updatedRecords && updatedRecords.length > 0) 
+              ? updatedRecords 
+              : records.filter(r => selectedRecordIds.has(r.id));
+          
+          if (targets.length === 0) {
+              setToast({ type: 'error', message: 'Không tìm thấy hồ sơ để chốt đợt giao nhận!' });
               return;
           }
-          await exportReturnedListToExcel(matched, String(batch), date);
-          setToast({ type: 'success', message: `Đã xuất file excel đợt bàn giao số ${batch} thành công!` });
+
+          const nowStr = new Date().toISOString();
+          const updates = targets.map(r => ({
+              ...r,
+              status: RecordStatus.HANDOVER,
+              exportBatch: batch,
+              exportDate: date,
+              completedDate: r.completedDate || nowStr,
+              handoverWard: handoverWard || r.handoverWard || null
+          }));
+
+          await updateRecordsBatchById(updates);
+          await exportReturnedListToExcel(updates, String(batch), date);
+          setToast({ type: 'success', message: `Đã chốt đợt giao nhận số ${batch} và xuất file excel thành công!` });
+          setIsAddToBatchModalOpen(false);
+          setSelectedRecordIds(new Set());
+          loadData();
       } catch (error) {
           console.error(error);
-          setToast({ type: 'error', message: 'Lỗi khi xuất file đợt bàn giao.' });
+          setToast({ type: 'error', message: 'Lỗi khi chốt đợt bàn giao và xuất file.' });
       }
-  }, [records]);
+  }, [records, selectedRecordIds, loadData]);
 
   const handleMapCorrectionRequest = useCallback((record: RecordFile) => {
       setRecordForMapCorrection(record);
@@ -761,9 +779,32 @@ function App() {
       setIsExportModalOpen(true);
   }, []);
 
-  const handleConfirmSignBatch = useCallback(() => {
-      setIsAddToBatchModalOpen(true);
-  }, []);
+  const handleConfirmSignBatch = useCallback(async () => {
+      const selectedIds = Array.from(selectedRecordIds);
+      if (selectedIds.length === 0) return;
+      
+      const confirmMsg = `Xác nhận ký duyệt đồng loạt ${selectedIds.length} hồ sơ?\nHồ sơ sẽ chuyển sang trạng thái "Đã ký duyệt" và chuyển qua bước Chờ giao 1 cửa.`;
+      if (await confirmAction(confirmMsg)) {
+          try {
+              const nowStr = new Date().toISOString();
+              const updates = records
+                  .filter(r => selectedRecordIds.has(r.id))
+                  .map(r => ({
+                      ...r,
+                      status: RecordStatus.SIGNED,
+                      approvalDate: nowStr
+                  }));
+              
+              await updateRecordsBatchById(updates);
+              setToast({ type: 'success', message: `Đã ký duyệt ${updates.length} hồ sơ thành công và chuyển sang bước chờ giao 1 cửa!` });
+              setSelectedRecordIds(new Set());
+              loadData();
+          } catch (error) {
+              console.error("Lỗi khi ký duyệt đồng loạt:", error);
+              setToast({ type: 'error', message: 'Có lỗi xảy ra khi ký duyệt đồng loạt.' });
+          }
+      }
+  }, [records, selectedRecordIds, loadData]);
 
   const handleConfirmRejectRecords = useCallback(async (recordsToReject: RecordFile[], reason: string) => {
       const nowStr = new Date().toISOString();

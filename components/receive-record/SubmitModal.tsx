@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, CheckCircle, AlertCircle, FileSignature } from 'lucide-react';
 import { RecordFile, UserRole, User, Employee } from '../../types';
+import { getEmployeeTeam, getRoleCategory } from '../AssignModal';
 
 interface SubmitModalProps {
     isOpen: boolean;
@@ -21,57 +22,36 @@ const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, records, onC
         const emp = u.employeeId ? employees.find(e => e.id === u.employeeId) : null;
         
         if (isCheckMode) {
-            // Chế độ trình kiểm tra: CHỈ Tổ trưởng, Tổ phó của Tổ đo đạc hoặc kỹ thuật, hoặc TEAM_LEADER
+            // Chế độ trình kiểm tra: CHỈ Tổ trưởng, Tổ phó (hoặc TEAM_LEADER) thuộc cùng tổ với người dùng hiện tại
+            if (!currentUser) return false;
+            
+            const currentEmp = currentUser.employeeId ? employees.find(e => e.id === currentUser.employeeId) : null;
+            if (!currentEmp) return false; // Nếu không tìm thấy nhân sự của user hiện tại, không hiển thị
+            
+            const currentUserTeam = getEmployeeTeam(currentEmp);
+            
+            if (!emp) return false; // Phải có thông tin nhân sự để xác định tổ
+            
+            const targetUserTeam = getEmployeeTeam(emp);
+            
+            // Phải cùng tổ
+            if (currentUserTeam !== targetUserTeam) return false;
+            
+            // Phải là Tổ trưởng (leader) hoặc Tổ phó (vice_leader)
+            const cat = getRoleCategory(emp.position);
             const isTeamLeaderUser = u.role === UserRole.TEAM_LEADER;
-            if (!emp) return isTeamLeaderUser;
+            const isLeaderOrVice = cat.key === 'leader' || cat.key === 'vice_leader' || isTeamLeaderUser;
             
-            const dept = emp.department?.toLowerCase() || '';
-            const pos = emp.position?.toLowerCase() || '';
-            
-            const isDoDacOrKyThuat = dept.includes('đo đạc') || dept.includes('kỹ thuật') || dept.includes('bản đồ') || dept.includes('địa chính');
-            const isCapGiayOrDangKy = dept.includes('đăng ký') || dept.includes('cấp giấy') || dept.includes('pháp chế');
-            const isLeader = pos.includes('tổ trưởng') || pos.includes('tổ phó') || pos.includes('trưởng phòng') || pos.includes('phó phòng') || pos.includes('trưởng nhóm') || pos.includes('nhóm trưởng');
-            
-            // Candidate must be some kind of leader or TEAM_LEADER
-            if (!isTeamLeaderUser && !(isDoDacOrKyThuat && isLeader) && !pos.includes('nhóm trưởng') && !pos.includes('tổ trưởng') && !pos.includes('tổ phó')) {
-                return false;
-            }
-
-            // FILTER: ONLY SHOW FOR THEIR SPECIFIC TEAM IF CURRENT USER BELONGS TO TEAM
-            if (currentUser) {
-                const currentEmp = currentUser.employeeId ? employees.find(e => e.id === currentUser.employeeId) : null;
-                if (currentEmp) {
-                    const curDept = (currentEmp.department || '').toLowerCase();
-                    const isCurDoDac = curDept.includes('đo đạc') || curDept.includes('kỹ thuật') || curDept.includes('bản đồ') || curDept.includes('địa chính');
-                    const isCurCapGiay = curDept.includes('đăng ký') || curDept.includes('cấp giấy') || curDept.includes('pháp chế');
-                    
-                    const isTargetDoDac = dept.includes('đo đạc') || dept.includes('kỹ thuật') || dept.includes('bản đồ') || dept.includes('địa chính');
-                    const isTargetCapGiay = dept.includes('đăng ký') || dept.includes('cấp giấy') || dept.includes('pháp chế');
-                    
-                    if (isCurDoDac && !isTargetDoDac) return false;
-                    if (isCurCapGiay && !isTargetCapGiay) return false;
-                    if (!isCurDoDac && !isCurCapGiay) {
-                        // For other general cases, must match department
-                        if (currentEmp.department !== emp.department && !dept.includes(curDept) && !curDept.includes(dept)) {
-                            return false;
-                        }
-                    }
-                }
-            }
-            
-            return true;
+            return isLeaderOrVice;
         } else {
-            // Chế độ trình ký: CHỈ Giám đốc, Phó giám đốc, ADMIN hoặc SUBADMIN
-            if (u.role === UserRole.ADMIN || u.role === UserRole.SUBADMIN) return true;
+            // Chế độ trình ký: CHỈ Ban Giám đốc (Giám đốc, Phó giám đốc), không đưa các tài khoản ADMIN, SUBADMIN, tổ trưởng, hay nhân viên vào
             if (!emp) return false;
             
-            const pos = emp.position?.toLowerCase() || '';
-            const dept = emp.department?.toLowerCase() || '';
+            const teamName = getEmployeeTeam(emp);
+            const pos = (emp.position || '').toLowerCase();
+            const isDirectorPos = pos.includes('giam doc') || pos.includes('giám đốc') || pos.includes('pho giam doc') || pos.includes('phó giám đốc') || pos.includes('lanh dao') || pos.includes('lãnh đạo');
             
-            const isDirectorPos = pos.includes('giám đốc') || pos.includes('phó giám đốc') || pos.includes('lãnh đạo');
-            const isDirectorDept = dept.includes('ban giám đốc') || dept.includes('ban lãnh đạo');
-            
-            return isDirectorPos || isDirectorDept;
+            return teamName === 'Ban Giám đốc' || isDirectorPos;
         }
     });
 

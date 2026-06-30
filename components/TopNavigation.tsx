@@ -53,6 +53,23 @@ const TopNavigation: React.FC<TopNavigationProps> = ({
   const hasPermission = (permissionId: string) => {
     if (isAdmin) return true;
     
+    // TEAM_LEADER / Tổ trưởng / Tổ phó bật tất cả các quyền tại tab thuộc tổ (trừ quản trị hệ thống hệ cốt lõi)
+    const adminPermissions = ['MANAGE_USERS', 'SYSTEM_SETTINGS', 'DELETE_SYSTEM_DATA', 'MANAGE_EMPLOYEES', 'VIEW_AUDIT_LOGS'];
+    let isLeaderOrViceLeader = currentUser.role === UserRole.TEAM_LEADER;
+    if (currentUser.employeeId && employees) {
+        const emp = employees.find(e => e.id === currentUser.employeeId);
+        if (emp) {
+            const cat = getRoleCategory(emp.position);
+            if (cat.key === 'leader' || cat.key === 'vice_leader') {
+                isLeaderOrViceLeader = true;
+            }
+        }
+    }
+
+    if (isLeaderOrViceLeader && !adminPermissions.includes(permissionId)) {
+        return true;
+    }
+
     const rolePerms = rolePermissions[currentUser.role] || [];
     if (rolePerms.includes('*') || rolePerms.includes(permissionId)) return true;
 
