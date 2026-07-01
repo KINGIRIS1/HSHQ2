@@ -115,12 +115,12 @@ export const getShortRecordType = (type: string | null | undefined): string => {
   if (!type) return '---';
   const t = type.toLowerCase();
   
-  if (t.includes('cung cấp tài liệu đất đai')) return 'CC TLĐĐ';
-  if (t.includes('trích lục quy hoạch')) return 'TL Quy hoạch';
-  if (t.includes('cung cấp số thửa đất')) return 'CC Số thửa';
-  if (t.includes('trích đo')) return 'Trích đo';
-  if (t.includes('cắm mốc')) return 'Cắm mốc';
-  if (t.includes('trích lục')) return 'Trích lục';
+  if (t.includes('1. Cung cấp dữ liệu đất đai')) return '1.CCDLĐĐ';
+  if (t.includes('2.2 Trích lục Quy hoạch')) return '2.2 TLQH';
+  if (t.includes('2.6 Cung cấp số thửa')) return '2.6 CCST';
+  if (t.includes('2.3 Trích đo')) return '2.3 TD';
+  if (t.includes('2.4 Trích đo Cắm mốc')) return '2.4 CMốc';
+  if (t.includes('2.1 Trích lục')) return '2.1 TL';
 
   // Ưu tiên kiểm tra các từ khóa dài trước
   if (t.includes('chỉnh lý') || t.includes('hiến đường') || t.includes('thay đổi hlbv')) return 'Chỉnh lý';
