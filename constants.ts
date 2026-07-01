@@ -135,11 +135,6 @@ export const getShortRecordType = (type: string | null | undefined): string => {
   if (t.includes('trích lục')) return '2.1 TL';
   // Kiểm tra "trích đo" sau "chỉnh lý" vì "trích đo chỉnh lý" chứa "trích đo"
   if (t.includes('trích đo')) return '2.3 TĐ';
-
-  // Các loại mới thêm
-  if (t.includes('cung cấp thông tin')) return 'CCTT';
-  if (t.includes('thi hành án')) return 'Thi hành án';
-  if (t.includes('tòa án')) return 'Tòa án';
   
   return type; // Trả về nguyên bản nếu không khớp quy tắc rút gọn
 };
