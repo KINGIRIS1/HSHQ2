@@ -53,7 +53,16 @@ export const DEFAULT_WARDS = [
 ];
 
 export const WARDS = DEFAULT_WARDS;
-
+// Danh sách loại hồ sơ CƠ BẢN (Dùng cho form Tiếp nhận hồ sơ thường xuyên)
+export const RECORD_TYPES = [
+  '1. Cung cấp dữ liệu đất đai',
+  '2.1 Trích lục',
+  '2.2 Trích lục Quy hoạch',
+  '2.3 Trích đo',
+  '2.4 Trích đo Cắm mốc',
+  '2.5 Trích đo Tách - Hợp thửa',
+  '2.6 Cung cấp số thửa'
+];
 // Danh sách quy trình đăng ký cấp giấy (3.*)
 export const REGISTRATION_PROCEDURES = [
   '3.1 Thừa kế',
@@ -67,20 +76,7 @@ export const REGISTRATION_PROCEDURES = [
   '3.9 Đính chính - Đăng ký biến động',
   '3.10 Tách thửa, Hợp thửa',
   '3.11 Gia hạn',
-  '3.12 Chuyển mục đích có xin phép'
 ];
-
-// Danh sách loại hồ sơ CƠ BẢN (Dùng cho form Tiếp nhận hồ sơ thường xuyên)
-export const RECORD_TYPES = [
-  '1. Cung cấp dữ liệu đất đai',
-  '2.1 Trích lục',
-  '2.2 Trích lục Quy hoạch',
-  '2.3 Trích đo',
-  '2.4 Trích đo Cắm mốc',
-  '2.5 Trích đo Tách - Hợp thửa',
-  '2.6 Cung cấp số thửa'
-];
-
 // Danh sách loại hồ sơ MỞ RỘNG (Dùng cho form Thêm mới trong "Tất cả hồ sơ" - Admin/Nội bộ)
 export const EXTENDED_RECORD_TYPES = [
   ...RECORD_TYPES,
@@ -116,26 +112,30 @@ export const getShortRecordType = (type: string | null | undefined): string => {
   const t = type.toLowerCase();
   
   if (t.includes('1. Cung cấp dữ liệu đất đai')) return '1.CCDLĐĐ';
-  if (t.includes('2.2 Trích lục Quy hoạch')) return '2.2 TLQH';
-  if (t.includes('2.6 Cung cấp số thửa')) return '2.6 CCST';
-  if (t.includes('2.3 Trích đo')) return '2.3 TD';
-  if (t.includes('2.4 Trích đo Cắm mốc')) return '2.4 CMốc';
   if (t.includes('2.1 Trích lục')) return '2.1 TL';
-
+  if (t.includes('2.2 Trích lục Quy hoạch')) return '2.2 TLQH';
+  if (t.includes('2.3 Trích đo')) return '2.3 TĐ';
+  if (t.includes('2.4 Trích đo Cắm mốc')) return '2.4 CMốc';
+  if (t.includes('2.5 Trích đo Tách - Hợp thửa')) return '2.5 TT-TH';
+  if (t.includes('2.6 Cung cấp số thửa')) return '2.6 CCST';
+  if (t.includes('3.1 Thừa kế')) return '3.1 TK';
+  if (t.includes('3.2 Tặng Cho')) return '3.2 TC';
+  if (t.includes('3.3 Chuyển Nhượng')) return '3.3 CN';
+  if (t.includes('3.4 Thỏa Thuận')) return '3.4 VBTT';
+  if (t.includes('3.5 Chuyển mục đích Không xin phép')) return '3.5 CMĐ-KXP';
+  if (t.includes('3.6 Cấp đổi')) return '3.6 Cấp đổi';
+  if (t.includes('3.7 Cấp lại')) return '3.7 Cấp Lại';
+  if (t.includes('3.8 Tách thửa Chuyển mục đích')) return '3.8 TT-CMĐ';
+  if (t.includes('3.9 Đính chính - Đăng ký biến động')) return '3.9 ĐC-ĐKBĐ';
+  if (t.includes('3.10 Tách thửa, Hợp thửa')) return '3.10.TT-HH';
+  if (t.includes('3.11 Gia hạn')) return '3.11 GH';
+ 
   // Ưu tiên kiểm tra các từ khóa dài trước
   if (t.includes('chỉnh lý') || t.includes('hiến đường') || t.includes('thay đổi hlbv')) return 'Chỉnh lý';
-  if (t.includes('trích lục')) return 'Trích lục';
+  if (t.includes('trích lục')) return '2.1 TL';
   // Kiểm tra "trích đo" sau "chỉnh lý" vì "trích đo chỉnh lý" chứa "trích đo"
-  if (t.includes('trích đo')) return 'Trích đo';
-  
-  if (t.includes('cắm mốc')) return 'Cắm mốc';
-  if (t.includes('đo đạc')) return 'Đo đạc';
-  if (t.includes('tách thửa')) return 'Tách thửa';
-  if (t.includes('hợp thửa')) return 'Hợp thửa';
-  if (t.includes('chuyển mục đích')) return 'Chuyển MĐ';
-  if (t.includes('cấp đổi')) return 'Cấp đổi';
-  if (t.includes('cấp mới')) return 'Cấp mới';
-  
+  if (t.includes('trích đo')) return '2.3 TĐ';
+
   // Các loại mới thêm
   if (t.includes('cung cấp thông tin')) return 'CCTT';
   if (t.includes('thi hành án')) return 'Thi hành án';
