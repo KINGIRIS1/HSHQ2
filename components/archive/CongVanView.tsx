@@ -32,6 +32,7 @@ import {
   User as UserIcon,
   Users,
   CheckCircle2,
+  LayoutGrid,
   PenTool,
   CheckCircle,
   Eye,
@@ -60,16 +61,17 @@ interface CongVanViewProps {
   setCurrentView?: (view: string) => void;
 }
 
+// Định nghĩa form state riêng để dễ quản lý các trường trong JSON data
 interface CongVanFormData {
   id?: string;
-  so_hieu: string;
-  chu_su_dung: string;
-  xa_phuong: string;
-  to_ban_do: string;
-  thua_dat: string;
-  ngay_nhan: string;
-  hen_tra: string;
-  noi_dung: string;
+  so_hieu: string; // Mã hồ sơ
+  chu_su_dung: string; // Chủ sử dụng / Nơi gửi nhận
+  xa_phuong: string; // Xã phường (Lưu trong data)
+  to_ban_do: string; // Tờ (Lưu trong data)
+  thua_dat: string; // Thửa (Lưu trong data)
+  ngay_nhan: string; // Ngày nhận (Map vào ngay_thang)
+  hen_tra: string; // Hẹn trả (Lưu trong data)
+  noi_dung: string; // Nội dung yêu cầu (Map vào trich_yeu)
   status:
     | "draft"
     | "assigned"
@@ -100,28 +102,41 @@ const CongVanView: React.FC<CongVanViewProps> = ({
   >("all");
   const [records, setRecords] = useState<ArchiveRecord[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
-  
+  const archiveEmployees = useMemo(() => {
+    return employees.filter(emp => {
+      const dept = (emp.department || '').toLowerCase();
+      return dept.includes('lưu trữ') || dept.includes('luu tru') || dept.includes('sao lục') || dept.includes('sao luc') || dept.includes('thông tin') || dept.includes('thong tin') || dept.includes('archive');
+    });
+  }, [employees]);
   const [searchTerm, setSearchTerm] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
 
+  // Filters
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [filterEmployee, setFilterEmployee] = useState("");
 
+  // Detail Modal State
   const [detailRecord, setDetailRecord] = useState<ArchiveRecord | null>(null);
+
+  // Assign Modal State
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  // Handover Modal State
   const [showHandoverModal, setShowHandoverModal] = useState(false);
   const [pendingCompletionRecord, setPendingCompletionRecord] =
     useState<ArchiveRecord | null>(null);
 
+  // Export Modal State
   const [showExportModal, setShowExportModal] = useState(false);
   const [handoverTab, setHandoverTab] = useState<"today" | "history" | "returned">("history");
 
+  // Return Result Modal State
   const [returnRecord, setReturnRecord] = useState<ArchiveRecord | null>(null);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
 
+  // Form State
   const [formData, setFormData] = useState<CongVanFormData>({
     so_hieu: "",
     chu_su_dung: "",
@@ -142,36 +157,17 @@ const CongVanView: React.FC<CongVanViewProps> = ({
   });
 
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
 
-  // Khởi chạy đồng bộ realtime công văn
   useArchiveRealtime("congvan", setRecords);
 
-  const loadData = async () => {
-    const data = await fetchArchiveRecords("congvan");
-    setRecords(data);
-  };
-
-  const loadEmployees = async () => {
-    const data = await fetchEmployees();
-    setEmployees(data);
-  };
-
-  // ==========================================
-  // FIX: TỰ ĐỘNG GỌI TẢI DỮ LIỆU KHI MỞ TRANG
-  // ==========================================
   useEffect(() => {
-    loadEmployees();
     loadData();
+    loadEmployees();
   }, []);
-
-  const archiveEmployees = useMemo(() => {
-    return employees.filter(emp => {
-      const dept = (emp.department || '').toLowerCase();
-      return dept.includes('lưu trữ') || dept.includes('luu tru') || dept.includes('sao lục') || dept.includes('sao luc') || dept.includes('thông tin') || dept.includes('thong tin') || dept.includes('archive');
-    });
-  }, [employees]);
 
   useEffect(() => {
     if (!currentView) return;
@@ -184,10 +180,19 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     else if (currentView === "congvan_handover_list") setSubTab("result");
   }, [currentView]);
 
+  const loadData = async () => {
+    const data = await fetchArchiveRecords("congvan");
+    setRecords(data);
+  };
+
+  const loadEmployees = async () => {
+    const data = await fetchEmployees();
+    setEmployees(data);
+  };
+
   const isAllowedToModify = useMemo(() => {
     const roleUpper = (currentUser.role || "").toUpperCase();
     if (roleUpper === "ADMIN") return true;
-    if (roleUpper === "TEAM_LEADER") return true; 
     if (roleUpper === "SUBADMIN") {
       const emp = employees.find((e) => e.id === currentUser.employeeId);
       if (!emp) return false;
@@ -201,6 +206,8 @@ const CongVanView: React.FC<CongVanViewProps> = ({
           .replace(/Đ/g, "D");
       };
       const cleanDept = removeAccents(dept);
+      
+      // CongVanView is for "Công văn", "Văn phòng", or "Hành chính"
       return cleanDept.includes("cong van") || cleanDept.includes("van phong") || cleanDept.includes("hanh chinh");
     }
     return true; 
@@ -209,35 +216,50 @@ const CongVanView: React.FC<CongVanViewProps> = ({
   const filteredRecords = useMemo(() => {
     let list = records;
 
+    // Filter by Tab
     if (subTab === "draft") list = list.filter((r) => r.status === "draft");
-    if (subTab === "executed") list = list.filter((r) => r.status === "assigned"); 
-    if (subTab === "assigned") list = list.filter((r) => r.status === "executed"); 
-    if (subTab === "sign") list = list.filter((r) => r.status === "pending_sign");
+    if (subTab === "assigned")
+      list = list.filter((r) => r.status === "assigned");
+    if (subTab === "executed")
+      list = list.filter((r) => r.status === "executed");
+    if (subTab === "sign")
+      list = list.filter((r) => r.status === "pending_sign");
     if (subTab === "signed") list = list.filter((r) => r.status === "signed");
     if (subTab === "result") {
       if (handoverTab === "today") {
         list = list.filter((r) => r.status === "signed");
       } else if (handoverTab === "history") {
-        list = list.filter((r) => r.status === "completed" && !r.data?.result_returned_date);
+        list = list.filter((r) => r.status === "completed");
       } else if (handoverTab === "returned") {
-        list = list.filter((r) => r.status === "completed" && r.data?.result_returned_date);
+        list = list.filter(
+          (r) =>
+            r.status === "completed" &&
+            (r.data?.payment_status === "Đã thu" || r.data?.result_returned_date)
+        );
       }
     }
+    // 'all' shows everything
 
+    // Filter by Date
     if (fromDate) list = list.filter((r) => r.ngay_thang >= fromDate);
     if (toDate) list = list.filter((r) => r.ngay_thang <= toDate);
-    if (filterEmployee) list = list.filter((r) => r.data?.assigned_to === filterEmployee);
 
+    // Filter by Employee
+    if (filterEmployee)
+      list = list.filter((r) => r.data?.assigned_to === filterEmployee);
+
+    // Filter by Search
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       list = list.filter(
         (r) =>
           (r.so_hieu || "").toLowerCase().includes(lower) ||
-          (r.noi_nhan_gui || "").toLowerCase().includes(lower) ||
+          (r.noi_nhan_gui || "").toLowerCase().includes(lower) || // Chủ sử dụng / Nơi gửi nhận
           (r.trich_yeu || "").toLowerCase().includes(lower),
       );
     }
 
+    // EXCLUDE records belonging to BAN GIAM DOC, TO TRUONG, TO PHO if currentUser is SUBADMIN
     const isSubAdminUser =
       (currentUser.role as string) === "SUBADMIN" ||
       (currentUser.role as string) === "subadmin";
@@ -290,8 +312,18 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     }
 
     return list;
-  }, [records, subTab, searchTerm, fromDate, toDate, filterEmployee, employees, currentUser]);
+  }, [
+    records,
+    subTab,
+    searchTerm,
+    fromDate,
+    toDate,
+    filterEmployee,
+    employees,
+    currentUser,
+  ]);
 
+  // Reset selection and page when tab/filters change
   useEffect(() => {
     setSelectedIds(new Set());
     setCurrentPage(1);
@@ -316,7 +348,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
       data: {
         assigned_to: employeeId,
         assigned_date: new Date().toISOString(),
-        history: [historyEntry],
+        history: [historyEntry], // Will be appended by updateArchiveRecordsBatch
       },
     };
 
@@ -389,6 +421,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     setSelectedIds(newSet);
   };
 
+  // Helper để lấy tên nhân viên từ ID
   const getEmployeeName = (id?: string) => {
     if (!id) return "-";
     const emp = employees.find((e) => e.id === id);
@@ -406,6 +439,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
       return;
     }
 
+    // Map form data về cấu trúc ArchiveRecord
     let finalStatus = formData.status;
     let assignedTo = formData.assigned_to || undefined;
     let assignedDate = undefined;
@@ -435,6 +469,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
         historyEntries = oldHistory;
       }
     } else {
+      // Thêm mới
       if (assignedTo) {
         finalStatus = "assigned";
         assignedDate = new Date().toISOString();
@@ -466,11 +501,12 @@ const CongVanView: React.FC<CongVanViewProps> = ({
       id: editingId || undefined,
       type: "congvan",
       status: finalStatus,
-      so_hieu: formData.so_hieu,
-      noi_nhan_gui: formData.chu_su_dung,
-      ngay_thang: formData.ngay_nhan,
-      trich_yeu: formData.noi_dung,
+      so_hieu: formData.so_hieu, // Mã hồ sơ / Số hiệu công văn
+      noi_nhan_gui: formData.chu_su_dung, // Chủ sử dụng / Nơi nhận gửi
+      ngay_thang: formData.ngay_nhan, // Ngày nhận
+      trich_yeu: formData.noi_dung, // Nội dung trích yếu
       data: {
+        // Các trường mở rộng
         xa_phuong: formData.xa_phuong,
         to_ban_do: formData.to_ban_do,
         thua_dat: formData.thua_dat,
@@ -478,7 +514,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
         ngay_hoan_thanh: formData.ngay_hoan_thanh,
         danh_sach: formData.danh_sach,
         receipt_number: formData.receipt_number,
-        payment_status: formData.payment_amount && formData.payment_amount > 0 ? "Đã thu" : "Chưa thu",
+        payment_status: formData.payment_status,
         payment_amount: formData.payment_amount || null,
         result_returned_date: formData.result_returned_date,
         ...(assignedTo ? { assigned_to: assignedTo, assigned_date: assignedDate, history: historyEntries } : {}),
@@ -487,6 +523,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     };
 
     const success = await saveArchiveRecord(recordToSave);
+
     if (success) {
       await loadData();
       setIsFormOpen(false);
@@ -522,6 +559,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     record: ArchiveRecord,
     newStatus: ArchiveRecord["status"],
   ) => {
+    // If completing, show modal to select list
     if (newStatus === "completed") {
       setPendingCompletionRecord(record);
       setShowHandoverModal(true);
@@ -536,12 +574,12 @@ const CongVanView: React.FC<CongVanViewProps> = ({
         actionName = "Thu hồi";
         break;
       case "executed":
-        confirmMsg = "Xác nhận xử lý xong và chuyển sang Chờ kiểm tra?";
-        actionName = "Hoàn thành xử lý";
+        confirmMsg = "Xác nhận đã thực hiện xử lý xong?";
+        actionName = "Thực hiện xong";
         break;
       case "pending_sign":
-        confirmMsg = "Xác nhận duyệt kiểm tra và Trình ký công văn?";
-        actionName = "Duyệt kiểm tra & Trình ký";
+        confirmMsg = "Trình ký công văn này?";
+        actionName = "Trình ký";
         break;
       case "signed":
         confirmMsg = "Xác nhận đã ký duyệt công văn?";
@@ -553,11 +591,10 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     }
 
     if (await confirmAction(confirmMsg)) {
-      const currentTimestamp = new Date().toISOString();
       const historyEntry = {
         action: actionName,
         status: newStatus,
-        timestamp: currentTimestamp,
+        timestamp: new Date().toISOString(),
         user: currentUser.name,
       };
 
@@ -584,12 +621,12 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     let actionName = "";
     switch (newStatus) {
       case "executed":
-        confirmMsg = `Xác nhận chuyển xử lý xong ${selectedIds.size} công văn sang Chờ kiểm tra?`;
-        actionName = "Hoàn thành xử lý";
+        confirmMsg = `Xác nhận đã xử lý xong ${selectedIds.size} công văn?`;
+        actionName = "Đã thực hiện";
         break;
       case "pending_sign":
-        confirmMsg = `Xác nhận duyệt kiểm tra và trình ký hàng loạt ${selectedIds.size} công văn?`;
-        actionName = "Duyệt & Trình ký";
+        confirmMsg = `Trình ký ${selectedIds.size} công văn?`;
+        actionName = "Trình ký";
         break;
       case "signed":
         confirmMsg = `Xác nhận đã ký duyệt ${selectedIds.size} công văn?`;
@@ -632,7 +669,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     paymentAmount?: number | null,
   ) => {
     const typeText = receiptType === "receipt" ? "Số biên lai" : "Số hóa đơn";
-    const amountText = paymentAmount ? `${paymentAmount.toLocaleString("vi-VN")} VNĐ` : "0 VNĐ";
+    const amountText = paymentAmount ? `${paymentAmount.toLocaleString("vi-VN")} VNĐ` : "N/A";
     
     if (pendingCompletionRecord) {
       const historyEntry = {
@@ -640,7 +677,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
         status: "completed",
         timestamp: new Date().toISOString(),
         user: currentUser.name,
-        note: `Đã chuyển vào danh sách: ${listName}. ${typeText}: ${receiptNumber || "N/A"}. Số tiền thu: ${amountText}. Ngày trả thực tế: ${resultReturnedDate ? resultReturnedDate.split("-").reverse().join("/") : "N/A"}${isNonGeographic && handoverWard ? ` (Phi địa giới: ${handoverWard})` : ""}`,
+        note: `Đã chuyển vào danh sách: ${listName}. ${typeText}: ${receiptNumber || "N/A"}. Thu tiền: ${paymentStatus}. Số tiền: ${amountText}. Ngày trả thực tế: ${resultReturnedDate ? resultReturnedDate.split("-").reverse().join("/") : "N/A"}${isNonGeographic && handoverWard ? ` (Phi địa giới: ${handoverWard})` : ""}`,
       };
 
       const oldHistory = Array.isArray(pendingCompletionRecord.data?.history)
@@ -656,7 +693,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
         receipt_number: receiptNumber,
         receipt_type: receiptType || "receipt",
         payment_amount: paymentAmount || null,
-        payment_status: paymentAmount && paymentAmount > 0 ? "Đã thu" : "Chưa thu",
+        payment_status: paymentStatus,
         result_returned_date: resultReturnedDate,
         is_non_geographic: isNonGeographic || false,
         handover_ward: handoverWard || "",
@@ -669,15 +706,14 @@ const CongVanView: React.FC<CongVanViewProps> = ({
       });
 
       setPendingCompletionRecord(null);
-      await loadData();
-      setHandoverTab("history"); 
+      loadData();
     } else if (selectedIds.size > 0 && (subTab === "signed" || (subTab === "result" && handoverTab === "today"))) {
       const historyEntry = {
         action: "Đã giao 1 cửa",
         status: "completed",
         timestamp: new Date().toISOString(),
         user: currentUser.name,
-        note: `Đã chuyển vào danh sách: ${listName}. ${typeText}: ${receiptNumber || "N/A"}. Số tiền thu: ${amountText}. Ngày trả thực tế: ${resultReturnedDate ? resultReturnedDate.split("-").reverse().join("/") : "N/A"}${isNonGeographic && handoverWard ? ` (Phi địa giới: ${handoverWard})` : ""}`,
+        note: `Đã chuyển vào danh sách: ${listName}. ${typeText}: ${receiptNumber || "N/A"}. Thu tiền: ${paymentStatus}. Số tiền: ${amountText}. Ngày trả thực tế: ${resultReturnedDate ? resultReturnedDate.split("-").reverse().join("/") : "N/A"}${isNonGeographic && handoverWard ? ` (Phi địa giới: ${handoverWard})` : ""}`,
       };
 
       const updates = {
@@ -688,7 +724,8 @@ const CongVanView: React.FC<CongVanViewProps> = ({
           receipt_number: receiptNumber,
           receipt_type: receiptType || "receipt",
           payment_amount: paymentAmount || null,
-          payment_status: paymentAmount && paymentAmount > 0 ? "Đã thu" : "Chưa thu",
+          payment_status: paymentStatus,
+          result_returned_date: resultReturnedDate,
           is_non_geographic: isNonGeographic || false,
           handover_ward: handoverWard || "",
           history: [historyEntry],
@@ -697,8 +734,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
 
       await updateArchiveRecordsBatch(Array.from(selectedIds), updates);
       setSelectedIds(new Set());
-      await loadData();
-      setHandoverTab("history"); 
+      loadData();
     }
   };
 
@@ -710,14 +746,16 @@ const CongVanView: React.FC<CongVanViewProps> = ({
   ) => {
     if (!returnRecord) return;
     const nowStr = new Date().toISOString().split("T")[0];
-    const amountText = paymentAmount ? `${paymentAmount.toLocaleString("vi-VN")} VNĐ` : "0 VNĐ";
+
+    const typeText = receiptType === "invoice" ? "hóa đơn" : "biên lai";
+    const amountText = paymentAmount ? `${paymentAmount.toLocaleString("vi-VN")} VNĐ` : "N/A";
 
     const historyEntry = {
-      action: "Trả kết quả CV",
+      action: "Trả kết quả",
       status: "completed" as const,
       timestamp: new Date().toISOString(),
       user: currentUser.name,
-      note: `Đã trả kết quả cho ${receiverName}. Số ${receiptType === "invoice" ? "hóa đơn" : "biên lai"}: ${receiptNumber || "N/A"}. Số tiền thực thu: ${amountText}.`,
+      note: `Đã trả kết quả cho ${receiverName}. Số ${typeText}: ${receiptNumber || "N/A"}. Tiền thực tế: ${amountText}.`,
     };
 
     const oldHistory = Array.isArray(returnRecord.data?.history)
@@ -742,8 +780,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     if (success) {
       setReturnRecord(null);
       setIsReturnModalOpen(false);
-      await loadData();
-      setHandoverTab("returned"); 
+      loadData();
     } else {
       alert("Lỗi khi ghi nhận trả kết quả.");
     }
@@ -754,6 +791,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     if (!printWindow) return;
 
     const typeLabel = "CÔNG VĂN";
+    
     const history = record.data?.history || [];
     const historyRows = history
       .map(
@@ -770,6 +808,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
       .join("");
 
     const wardDetail = `<p><b>Vị trí liên quan:</b> Xã/Phường: ${record.data?.xa_phuong || "-"}, Tờ: ${record.data?.to_ban_do || "-"}, Thửa: ${record.data?.thua_dat || "-"}</p>`;
+
     const nonGeographicDetail = record.data?.is_non_geographic && record.data?.handover_ward
       ? `<p style="color: #6b21a8;"><b>Địa bàn giao phi địa giới:</b> ${record.data.handover_ward}</p>`
       : "";
@@ -780,7 +819,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
           <p style="margin: 3px 0;"><b>Hóa đơn/Biên lai:</b> ${record.data?.receipt_number || "---"}</p>
           <p style="margin: 3px 0;"><b>Hẹn trả kết quả:</b> ${record.data?.hen_tra ? record.data.hen_tra.split("-").reverse().join("/") : "---"}</p>
           <p style="margin: 3px 0;"><b>Đợt bàn giao:</b> ${record.data?.danh_sach || "---"}</p>
-          <p style="margin: 3px 0;"><b>Số tiền thu được:</b> ${record.data?.payment_amount ? record.data.payment_amount.toLocaleString("vi-VN") + " VNĐ" : "0 VNĐ"}</p>
+          <p style="margin: 3px 0;"><b>Trạng thái thu tiền:</b> ${record.data?.payment_status || "Chưa thu"}</p>
           <p style="margin: 3px 0;"><b>Ngày trả kết quả thực tế:</b> ${record.data?.result_returned_date ? record.data.result_returned_date.split("-").reverse().join("/") : "---"}</p>
         </div>
       `
@@ -803,6 +842,9 @@ const CongVanView: React.FC<CongVanViewProps> = ({
             table.data-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
             table.data-table th, table.data-table td { border: 1px solid #cbd5e1; padding: 10px; font-size: 13px; text-align: left; }
             table.data-table th { background-color: #f1f5f9; font-weight: bold; }
+            .sign-section { margin-top: 40px; width: 100%; border: none; }
+            .sign-section td { border: none; text-align: center; font-size: 14px; width: 50%; }
+            .sign-space { height: 80px; }
             @media print { body { padding: 10px; } }
           </style>
         </head>
@@ -848,6 +890,20 @@ const CongVanView: React.FC<CongVanViewProps> = ({
               ${historyRows || '<tr><td colspan="5" style="text-align: center;">Chưa ghi nhận lịch sử xử lý</td></tr>'}
             </tbody>
           </table>
+          <table class="sign-section">
+            <tr>
+              <td>
+                <b>NGƯỜI XỬ LÝ HỒ SƠ</b><br>
+                <div class="sign-space"></div>
+                <b>${record.data?.assigned_to ? getEmployeeName(record.data.assigned_to) : "Chưa giao"}</b>
+              </td>
+              <td>
+                <b>NGƯỜI GIAO/TRA CỨU VÀ IN</b><br>
+                <div class="sign-space"></div>
+                <b>${currentUser?.name || "Hệ thống"}</b>
+              </td>
+            </tr>
+          </table>
           <script>
             window.onload = () => {
               window.print();
@@ -869,6 +925,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
 
   const handleEdit = (r: ArchiveRecord) => {
     setEditingId(r.id);
+    // Map từ DB về Form
     setFormData({
       id: r.id,
       so_hieu: r.so_hieu,
@@ -939,10 +996,12 @@ const CongVanView: React.FC<CongVanViewProps> = ({
     }
   };
 
-  const isManagerOrLeader = useMemo(() => {
-    const roleUpper = (currentUser.role || "").toUpperCase();
-    return (roleUpper === "ADMIN" || roleUpper === "SUBADMIN" || roleUpper === "TEAM_LEADER") && isAllowedToModify;
-  }, [currentUser, isAllowedToModify]);
+  const isManager =
+    ((currentUser.role as string) === "ADMIN" ||
+    (currentUser.role as string) === "SUBADMIN" ||
+    (currentUser.role as string) === "admin" ||
+    (currentUser.role as string) === "subadmin") &&
+    isAllowedToModify;
 
   const totalPages = Math.ceil(filteredRecords.length / itemsPerPage);
   const paginatedRecords = filteredRecords.slice(
@@ -962,10 +1021,14 @@ const CongVanView: React.FC<CongVanViewProps> = ({
       const ws = wb.Sheets[wsname];
       const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
+      // Skip header row
       const rows = data.slice(1);
       const newRecords: Partial<ArchiveRecord>[] = [];
+
+      // Get users to link
       const users = await fetchUsers();
 
+      // Helper to get or create employee
       const getOrCreateEmployee = async (name: string): Promise<string> => {
         if (!name) return "";
         const cleanName = toTitleCase(name.trim());
@@ -974,6 +1037,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
         );
 
         if (!emp) {
+          // Create new employee
           const newEmp: Employee = {
             id: crypto.randomUUID(),
             name: cleanName,
@@ -981,10 +1045,12 @@ const CongVanView: React.FC<CongVanViewProps> = ({
             managedWards: [],
           };
           await saveEmployeeApi(newEmp, false);
+          // Update local state to avoid duplicates in same loop
           employees.push(newEmp);
           emp = newEmp;
         }
 
+        // Link to User if exists and not linked
         const user = users.find(
           (u) => u.name.toLowerCase() === cleanName.toLowerCase(),
         );
@@ -997,36 +1063,52 @@ const CongVanView: React.FC<CongVanViewProps> = ({
       };
 
       for (const row of rows as any[]) {
+        // Map columns:
+        // 0: MÃ HS, 1: CHỦ SỬ DỤNG/NƠI GỬI NHẬN, 2: NGÀY NHẬN, 3: HẸN TRẢ, 4: XÃ PHƯỜNG
+        // 5: NGƯỜI THỰC HIỆN, 6: THỬA, 7: TỜ, 8: NGÀY HOÀN THÀNH, 9: DANH SÁCH
+
         const so_hieu = row[0]?.toString() || "";
         if (!so_hieu) continue;
 
+        // Find employee ID by name if provided
         let assigned_to = "";
         const employeeName = row[5]?.toString();
         if (employeeName) {
           assigned_to = await getOrCreateEmployee(employeeName);
         }
 
+        // Parse dates (assuming DD/MM/YYYY or Excel serial date)
         const parseExcelDate = (val: any) => {
           if (!val) return "";
+
           let date: Date | null = null;
+
           if (typeof val === "number") {
+            // Excel serial date
             date = new Date(Math.round((val - 25569) * 86400 * 1000));
           } else if (typeof val === "string") {
             const cleanVal = val.trim();
+            // Check for DD/MM/YYYY
             if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(cleanVal)) {
               const [d, m, y] = cleanVal.split("/");
               date = new Date(Number(y), Number(m) - 1, Number(d));
-            } else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(cleanVal)) {
+            }
+            // Check for DD-MM-YYYY
+            else if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(cleanVal)) {
               const [d, m, y] = cleanVal.split("-");
               date = new Date(Number(y), Number(m) - 1, Number(d));
-            } else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(cleanVal)) {
+            }
+            // Check for YYYY-MM-DD
+            else if (/^\d{4}-\d{1,2}-\d{1,2}$/.test(cleanVal)) {
               date = new Date(cleanVal);
             }
           }
 
           if (date && !isNaN(date.getTime())) {
             const y = date.getFullYear();
+            // Validate year range to prevent typos like 20245
             if (y >= 1900 && y <= 2100) {
+              // Adjust for timezone offset to ensure correct date string
               const offset = date.getTimezoneOffset() * 60000;
               const localDate = new Date(date.getTime() - offset);
               return localDate.toISOString().split("T")[0];
@@ -1043,6 +1125,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
         let history: any[] = [];
         let final_assigned_to = assigned_to;
 
+        // Determine status based on data
         if (ngay_hoan_thanh && danh_sach) {
           status = "completed";
           history.push({
@@ -1081,7 +1164,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
           so_hieu: so_hieu,
           noi_nhan_gui: toTitleCase(row[1]?.toString() || ""),
           ngay_thang: parseExcelDate(row[2]),
-          trich_yeu: "",
+          trich_yeu: "", // Default empty
           data: {
             hen_tra: parseExcelDate(row[3]),
             xa_phuong: xa_phuong,
@@ -1111,6 +1194,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
       }
     };
     reader.readAsArrayBuffer(file);
+    // Reset input
     e.target.value = "";
   };
 
@@ -1181,14 +1265,17 @@ const CongVanView: React.FC<CongVanViewProps> = ({
             <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
               {subTab === "all" && "Tất cả hồ sơ công văn"}
               {subTab === "draft" && "Công văn chưa giao"}
-              {subTab === "executed" && "Công văn đang xử lý (Đang thực hiện)"}
-              {subTab === "assigned" && "Danh sách công văn chờ kiểm tra"}
+              {subTab === "assigned" && "Công văn đang xử lý"}
+              {subTab === "executed" && "Công văn đã xử lý xong"}
               {subTab === "sign" && "Danh sách Trình ký công văn"}
-              {subTab === "signed" && "Danh sách công văn đã ký duyệt"}
+              {subTab === "signed" && "Danh sách Ký duyệt công văn"}
             </h2>
           )}
           <div className="relative flex-1 sm:w-64 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+            <Search
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+              size={18}
+            />
             <input
               className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder={subTab === "result" ? "Tìm kiếm công văn..." : "Tìm Số hiệu CV, Chủ sở hữu..."}
@@ -1198,7 +1285,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
           </div>
         </div>
 
-        {/* Filters */}
+        {/* Filters & Actions */}
         <div className="flex flex-wrap gap-3 items-center bg-gray-50 p-2 rounded-lg border border-gray-100 relative">
           <div className="flex items-center gap-2 bg-white px-2 py-1.5 rounded-md border border-gray-200 shadow-sm">
             <Calendar size={16} className="text-gray-500" />
@@ -1207,6 +1294,7 @@ const CongVanView: React.FC<CongVanViewProps> = ({
               className="text-sm outline-none bg-transparent text-gray-700 w-28"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
+              placeholder="Từ ngày"
             />
             <span className="text-gray-400">-</span>
             <input
@@ -1214,9 +1302,16 @@ const CongVanView: React.FC<CongVanViewProps> = ({
               className="text-sm outline-none bg-transparent text-gray-700 w-28"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
+              placeholder="Đến ngày"
             />
             {(fromDate || toDate) && (
-              <button onClick={() => { setFromDate(""); setToDate(""); }} className="text-gray-400 hover:text-red-500">
+              <button
+                onClick={() => {
+                  setFromDate("");
+                  setToDate("");
+                }}
+                className="text-gray-400 hover:text-red-500"
+              >
                 <X size={14} />
               </button>
             )}
@@ -1231,7 +1326,9 @@ const CongVanView: React.FC<CongVanViewProps> = ({
             >
               <option value="">Tất cả Nhân viên</option>
               {archiveEmployees.map((e) => (
-                <option key={e.id} value={e.id}>{e.name}</option>
+                <option key={e.id} value={e.id}>
+                  {e.name}
+                </option>
               ))}
             </select>
           </div>
@@ -1254,65 +1351,69 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                 onClick={() => setHandoverTab("returned")}
                 className={`flex items-center gap-2 px-3 py-1 rounded text-xs font-bold transition-all ${handoverTab === "returned" ? "bg-orange-600 text-white shadow-sm font-bold shadow-orange-100 border border-orange-200" : "text-gray-600 hover:bg-gray-100"}`}
               >
-                <FileCheck size={14} /> Đã nhận trả KQ
+                <FileCheck size={14} /> Đã nhận trả CV
               </button>
             </div>
           )}
         </div>
 
-        {/* Hành động chính */}
         <div className="flex justify-end gap-3 mt-2">
-          {subTab === "executed" && isManagerOrLeader && selectedIds.size > 0 && (
+          {subTab === "assigned" && isManager && selectedIds.size > 0 && (
             <button
               onClick={() => handleBatchStatusChange("executed")}
               className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-bold shadow-md transition-all animate-pulse"
             >
-              <CheckCircle2 size={18} /> Chuyển kiểm tra ({selectedIds.size})
+              <CheckCircle2 size={18} /> Đã thực hiện ({selectedIds.size})
             </button>
           )}
-          {subTab === "assigned" && isManagerOrLeader && selectedIds.size > 0 && (
+          {subTab === "executed" && isManager && selectedIds.size > 0 && (
             <button
               onClick={() => handleBatchStatusChange("pending_sign")}
               className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 font-bold shadow-md transition-all animate-pulse"
             >
-              <Send size={18} /> Duyệt & Trình ký ({selectedIds.size})
+              <Send size={18} /> Trình ký ({selectedIds.size})
             </button>
           )}
-          {subTab === "sign" && isManagerOrLeader && selectedIds.size > 0 && (
+          {subTab === "sign" && isManager && selectedIds.size > 0 && (
             <button
               onClick={() => handleBatchStatusChange("signed")}
-              className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-bold shadow-md transition-all"
+              className="flex items-center gap-2 bg-teal-600 text-white px-4 py-2 rounded-lg hover:bg-teal-700 font-bold shadow-md transition-all animate-pulse"
             >
-              <PenTool size={18} /> Ký duyệt hàng loạt ({selectedIds.size})
+              <PenTool size={18} /> Ký duyệt ({selectedIds.size})
             </button>
           )}
-          {(subTab === "signed" || (subTab === "result" && handoverTab === "today")) && isManagerOrLeader && selectedIds.size > 0 && (
+          {(subTab === "signed" || (subTab === "result" && handoverTab === "today")) && isManager && selectedIds.size > 0 && (
             <button
-              onClick={() => { setPendingCompletionRecord(null); setShowHandoverModal(true); }}
-              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-bold shadow-md transition-all"
+              onClick={() => {
+                setPendingCompletionRecord(null); // Batch Completing
+                setShowHandoverModal(true);
+              }}
+              className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-bold shadow-md transition-all animate-pulse"
             >
               <FileCheck size={18} /> Giao 1 cửa ({selectedIds.size})
             </button>
           )}
 
-          {(subTab === "draft" || subTab === "all") && isManagerOrLeader && selectedIds.size > 0 && (
+          {(subTab === "draft" || subTab === "all") && isManager && selectedIds.size > 0 && (
             <>
               <button
                 onClick={handleAssign}
                 className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 font-bold shadow-md transition-all text-sm"
+                title="Giao việc thủ công"
               >
                 <Users size={18} /> Giao việc ({selectedIds.size})
               </button>
               <button
                 onClick={handleAutoAssign}
-                className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-indigo-700 font-bold shadow-md transition-all text-sm"
+                className="flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-lg hover:from-blue-700 hover:to-indigo-700 font-bold shadow-md transition-all animate-pulse text-sm"
+                title="Tự động phân công theo địa bàn"
               >
-                <MapPin size={18} /> Giao việc tự động ({selectedIds.size})
+                <MapPin size={18} /> Giao tự động ({selectedIds.size})
               </button>
             </>
           )}
 
-          {isManagerOrLeader && (
+          {isManager && (
             <>
               {subTab === "result" && (
                 <button
@@ -1322,19 +1423,23 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                   <FileDown size={18} /> Xuất DS bàn giao
                 </button>
               )}
-              <label className="flex items-center gap-2 border border-gray-200 bg-white text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-bold cursor-pointer shadow-sm text-sm">
+              <label className="flex items-center gap-2 border border-gray-200 bg-white text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-50 font-bold cursor-pointer shadow-sm transition-all text-sm">
                 <FileSpreadsheet size={18} className="text-green-600" /> Import Excel
-                <input type="file" accept=".xlsx, .xls" onChange={handleImportExcel} className="hidden" />
+                <input
+                  type="file"
+                  accept=".xlsx, .xls"
+                  onChange={handleImportExcel}
+                  className="hidden"
+                />
               </label>
             </>
           )}
-
-          {isAllowedToModify && (
+          {(isManager || (currentUser.role as string) === "TEAM_LEADER" || (currentUser.role as string) === "team_leader") && (
             <button
               onClick={handleAddNew}
               className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-bold shadow-sm shadow-blue-100 transition-all text-sm"
             >
-              <Plus size={18} /> Thêm mới CV
+              <Plus size={18} /> Thêm mới
             </button>
           )}
         </div>
@@ -1347,156 +1452,230 @@ const CongVanView: React.FC<CongVanViewProps> = ({
           <div className="w-96 bg-white rounded-xl shadow-md border border-gray-100 p-6 flex flex-col shrink-0 overflow-y-auto animate-in slide-in-from-left duration-250 z-20">
             <div className="flex justify-between items-center pb-4 border-b border-gray-100 mb-6">
               <h3 className="font-bold text-gray-900 text-lg">
-                {editingId ? "Cập nhật Công văn" : "Thêm mới công văn"}
+                {editingId ? "Cập nhật Công văn" : "Thêm mới"}
               </h3>
-              <button onClick={() => setIsFormOpen(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-50">
+              <button
+                onClick={() => setIsFormOpen(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-50 transition-all"
+              >
                 <X size={20} />
               </button>
             </div>
 
             <form onSubmit={handleSave} className="flex-1 flex flex-col gap-5 text-xs font-medium text-gray-600">
               <div>
-                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">MÃ HỒ SƠ <span className="text-red-500">*</span></label>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  MÃ HỒ SƠ <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
                   readOnly
-                  className="w-full border border-gray-200 bg-gray-50 rounded-lg px-4 py-3 text-sm font-bold text-blue-600 cursor-not-allowed"
+                  className="w-full border border-gray-200 bg-gray-50 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-4 py-3 text-sm outline-none font-bold text-blue-600 placeholder:text-gray-300 transition-all cursor-not-allowed"
                   value={formData.so_hieu}
+                  placeholder="Hệ thống tự động tạo mã..."
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">NGÀY THÁNG <span className="text-red-500">*</span></label>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  NGÀY THÁNG <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="date"
                   required
-                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700"
+                  className="w-full border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-4 py-3 text-sm outline-none font-medium text-gray-700 transition-all"
                   value={formData.ngay_nhan ? formData.ngay_nhan.split("T")[0] : ""}
-                  onChange={(e) => setFormData({ ...formData, ngay_nhan: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, ngay_nhan: e.target.value })
+                  }
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">SỐ CÔNG VĂN - TRÍCH YẾU <span className="text-red-500">*</span></label>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  SỐ CÔNG VĂN - TRÍCH YẾU <span className="text-red-500">*</span>
+                </label>
                 <textarea
                   rows={4}
                   required
-                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm outline-none resize-none font-normal"
+                  className="w-full border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-4 py-3 text-sm outline-none resize-none placeholder:text-gray-300 transition-all font-normal leading-relaxed"
                   value={formData.noi_dung}
-                  onChange={(e) => setFormData({ ...formData, noi_dung: e.target.value })}
-                  placeholder="Nội dung trích yếu công văn..."
+                  onChange={(e) =>
+                    setFormData({ ...formData, noi_dung: e.target.value })
+                  }
+                  placeholder="Nội dung..."
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">CƠ QUAN PHÁT HÀNH <span className="text-red-500">*</span></label>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  CƠ QUAN PHÁT HÀNH <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   required
-                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-700"
+                  className="w-full border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-4 py-3 text-sm outline-none placeholder:text-gray-300 transition-all font-medium text-gray-700"
                   value={formData.chu_su_dung}
-                  onChange={(e) => setFormData({ ...formData, chu_su_dung: e.target.value })}
-                  placeholder="Nơi gửi nhận..."
+                  onChange={(e) =>
+                    setFormData({ ...formData, chu_su_dung: e.target.value })
+                  }
+                  placeholder="Đơn vị..."
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-purple-600 uppercase tracking-wider mb-2 block">Hạn xử lý (Hẹn trả)</label>
+                <label className="text-[11px] font-bold text-purple-600 uppercase tracking-wider mb-2 block">
+                  Hạn xử lý (Hẹn trả)
+                </label>
                 <input
                   type="date"
-                  className="w-full border border-purple-200 bg-purple-50/20 rounded-lg px-4 py-3 text-sm text-purple-700 font-bold"
+                  className="w-full border border-purple-200 bg-purple-50/20 rounded-lg px-4 py-3 text-sm text-purple-700 font-bold outline-none font-medium transition-all"
                   value={formData.hen_tra}
-                  onChange={(e) => setFormData({ ...formData, hen_tra: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, hen_tra: e.target.value })
+                  }
                 />
               </div>
 
               <div>
-                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">Người xử lý hồ sơ</label>
+                <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider mb-2 block">
+                  Người giao việc / Người xử lý
+                </label>
                 <select
-                  className="w-full border border-gray-200 rounded-lg px-4 py-3 text-sm bg-white"
+                  className="w-full border border-gray-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 rounded-lg px-4 py-3 text-sm outline-none bg-white font-medium text-gray-700 transition-all"
                   value={formData.assigned_to || ""}
-                  onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, assigned_to: e.target.value })
+                  }
                 >
                   <option value="">-- Để tự động hoặc giao việc sau --</option>
                   {archiveEmployees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>{emp.name}</option>
+                    <option key={emp.id} value={emp.id}>
+                      {emp.name} ({emp.department || "Lưu trữ"})
+                    </option>
                   ))}
                 </select>
               </div>
 
+              {/* Nếu đang sửa trạng thái completed thì lấy thêm thông tin bàn giao */}
               {formData.status === "completed" && (
                 <div className="p-4 bg-green-50/30 rounded-xl border border-green-100 flex flex-col gap-4">
                   <span className="font-bold text-[10px] text-green-700 uppercase tracking-wider">Thông tin bàn giao 1 cửa</span>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-bold text-green-700 uppercase mb-1 block">Ngày bàn giao</label>
+                      <label className="text-xs font-bold text-green-700 uppercase mb-1 block">
+                        Ngày bàn giao
+                      </label>
                       <input
                         type="date"
                         className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm outline-none"
                         value={formData.ngay_hoan_thanh || ""}
-                        onChange={(e) => setFormData({ ...formData, ngay_hoan_thanh: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            ngay_hoan_thanh: e.target.value,
+                          })
+                        }
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-bold text-green-700 uppercase mb-1 block">Đợt giao</label>
+                      <label className="text-xs font-bold text-green-700 uppercase mb-1 block">
+                        Đợt giao
+                      </label>
                       <input
                         type="text"
                         className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm outline-none"
                         value={formData.danh_sach || ""}
-                        onChange={(e) => setFormData({ ...formData, danh_sach: e.target.value })}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            danh_sach: e.target.value,
+                          })
+                        }
                         placeholder="VD: Đợt 1"
                       />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-bold text-green-700 uppercase mb-1 block">Số biên lai/hoá đơn</label>
+                      <label className="text-xs font-bold text-green-700 uppercase mb-1 block">
+                        Số biên lai/hoá đơn
+                      </label>
                       <input
                         type="text"
                         className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm outline-none font-mono"
                         value={formData.receipt_number || ""}
-                        onChange={(e) => setFormData({ ...formData, receipt_number: e.target.value })}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setFormData({
+                            ...formData,
+                            receipt_number: val,
+                            payment_status: val.trim() ? "Đã thu" : formData.payment_status,
+                          });
+                        }}
                         placeholder="Số biên lai..."
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-bold text-green-700 uppercase mb-1 block">Số tiền thu được (VNĐ)</label>
+                      <label className="text-xs font-bold text-green-700 uppercase mb-1 block">
+                        Số tiền thu được (VNĐ)
+                      </label>
                       <input
                         type="text"
-                        className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-green-500 focus:ring-1 focus:ring-blue-500"
+                        className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
                         value={formData.payment_amount !== null && formData.payment_amount !== undefined ? String(formData.payment_amount) : ""}
                         onChange={(e) => {
                           const val = e.target.value.replace(/[^0-9]/g, "");
-                          setFormData({ ...formData, payment_amount: val ? parseInt(val, 10) : null });
+                          const amount = val ? parseInt(val, 10) : null;
+                          setFormData({
+                            ...formData,
+                            payment_amount: amount,
+                            payment_status: amount !== null && amount > 0 ? "Đã thu" : "Chưa thu",
+                          });
                         }}
                         placeholder="Nhập số tiền..."
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs font-bold text-green-700 uppercase mb-1 block">Ngày nhận trả thực tế</label>
+                    <label className="text-xs font-bold text-green-700 uppercase mb-1 block">
+                      Ngày nhận trả thực tế
+                    </label>
                     <input
                       type="date"
                       className="w-full border border-green-200 bg-white rounded-lg px-3 py-2 text-sm outline-none"
                       value={formData.result_returned_date || ""}
-                      onChange={(e) => setFormData({ ...formData, result_returned_date: e.target.value })}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          result_returned_date: e.target.value,
+                        })
+                      }
                     />
                   </div>
                 </div>
               )}
 
               <div className="pt-4 flex gap-4 justify-end border-t border-gray-100">
-                <button type="button" onClick={() => setIsFormOpen(false)} className="px-5 py-2.5 text-gray-500 text-sm font-semibold">Hủy</button>
-                <button type="submit" className="px-5 py-2.5 bg-[#e25813] text-white rounded-lg font-semibold text-sm hover:bg-[#c8460b] flex items-center gap-2 shadow-sm">
-                  <Save size={16} /> Lưu công văn
+                <button
+                  type="button"
+                  onClick={() => setIsFormOpen(false)}
+                  className="px-5 py-2.5 text-gray-500 hover:text-gray-700 text-sm font-semibold transition-all"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-[#e25813] text-white rounded-lg font-semibold text-sm hover:bg-[#c8460b] flex items-center gap-2 shadow-sm transition-all"
+                >
+                  <Save size={16} /> Lưu
                 </button>
               </div>
             </form>
           </div>
         )}
 
-        {/* Data Table */}
         <div className="flex-1 overflow-hidden bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
           <div className="overflow-auto flex-1">
             <table className="w-full text-left border-collapse">
@@ -1506,19 +1685,33 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                     <input
                       type="checkbox"
                       onChange={handleSelectAll}
-                      checked={filteredRecords.length > 0 && selectedIds.size === filteredRecords.length}
+                      checked={
+                        filteredRecords.length > 0 &&
+                        selectedIds.size === filteredRecords.length
+                      }
                       disabled={!isAllowedToModify}
                     />
                   </th>
                   <th className="p-3 w-10 text-center">#</th>
                   <th className="p-3 w-32 text-center whitespace-nowrap">Mã hồ sơ</th>
-                  <th className="p-3 w-48 text-center whitespace-nowrap">Cơ quan ban hành</th>
+                  <th className="p-3 w-48 text-center whitespace-nowrap">Cơ quan ban hành / Nơi nhận</th>
                   <th className="p-3 w-24 text-center whitespace-nowrap">Ngày công văn</th>
-                  {subTab === "all" && <th className="p-3 w-32 text-center whitespace-nowrap">Trạng thái</th>}
-                  {subTab === "result" && <th className="p-3 w-40 text-center text-green-800 bg-green-50/30 whitespace-nowrap">Trạng thái</th>}
-                  {subTab !== "draft" && <th className="p-3 w-48 text-center whitespace-nowrap">Người xử lý</th>}
+                  {subTab === "all" && (
+                    <th className="p-3 w-32 text-center whitespace-nowrap">Trạng thái</th>
+                  )}
+                  {subTab === "result" && (
+                    <th className="p-3 w-40 text-center text-green-800 bg-green-50/30 whitespace-nowrap">Trạng thái</th>
+                  )}
+                  {subTab !== "draft" && (
+                    <th className="p-3 w-48 text-center whitespace-nowrap">Người xử lý</th>
+                  )}
                   <th className="p-3 w-24 text-center whitespace-nowrap">Hạn xử lý</th>
-                  {(subTab === "all" || subTab === "result") && <th className="p-3 w-32 text-center whitespace-nowrap">Đợt bàn giao</th>}
+                  {subTab === "all" && (
+                    <th className="p-3 w-32 text-center whitespace-nowrap">Ngày giao nhận</th>
+                  )}
+                  {subTab === "result" && (
+                    <th className="p-3 w-32 text-center whitespace-nowrap">Đợt bàn giao</th>
+                  )}
                   <th className="p-3 w-64 text-center whitespace-nowrap">Trích yếu nội dung</th>
                   <th className="p-3 w-28 text-center whitespace-nowrap">Thao tác</th>
                 </tr>
@@ -1526,7 +1719,10 @@ const CongVanView: React.FC<CongVanViewProps> = ({
               <tbody className="text-sm divide-y divide-gray-100">
                 {paginatedRecords.length > 0 ? (
                   paginatedRecords.map((r, idx) => (
-                    <tr key={r.id} className={`hover:bg-blue-50/50 group ${selectedIds.has(r.id) ? "bg-blue-50" : ""}`}>
+                    <tr
+                      key={r.id}
+                      className={`hover:bg-blue-50/50 group ${selectedIds.has(r.id) ? "bg-blue-50" : ""}`}
+                    >
                       <td className="p-3 text-center">
                         <input
                           type="checkbox"
@@ -1535,13 +1731,26 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                           disabled={!isAllowedToModify}
                         />
                       </td>
-                      <td className="p-3 text-center text-gray-500">{(currentPage - 1) * itemsPerPage + idx + 1}</td>
-                      <td className="p-3 font-bold text-blue-600 cursor-pointer hover:underline" onClick={() => setDetailRecord(r)}>{r.so_hieu}</td>
-                      <td className="p-3 font-medium text-gray-800">{toTitleCase(r.noi_nhan_gui)}</td>
-                      <td className="p-3 text-gray-600">{formatDate(r.ngay_thang)}</td>
+                      <td className="p-3 text-center text-gray-500">
+                        {(currentPage - 1) * itemsPerPage + idx + 1}
+                      </td>
+                      <td
+                        className="p-3 font-bold text-blue-600 cursor-pointer hover:underline"
+                        onClick={() => setDetailRecord(r)}
+                      >
+                        {r.so_hieu}
+                      </td>
+                      <td className="p-3 font-medium text-gray-800">
+                        {toTitleCase(r.noi_nhan_gui)}
+                      </td>
+                      <td className="p-3 text-gray-600">
+                        {formatDate(r.ngay_thang)}
+                      </td>
                       {subTab === "all" && (
                         <td className="p-3 text-center">
-                          <span className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${STATUS_COLORS[mapStatusToEnum(r.status)]}`}>
+                          <span
+                            className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${STATUS_COLORS[mapStatusToEnum(r.status)]}`}
+                          >
                             {STATUS_LABELS[mapStatusToEnum(r.status)]}
                           </span>
                         </td>
@@ -1554,77 +1763,210 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                                 <span className="w-1.5 h-1.5 bg-amber-500 rounded-full animate-pulse"></span>
                                 Chờ giao 1 cửa
                               </span>
-                            ) : r.data?.result_returned_date ? (
+                            ) : r.data?.result_returned_date || r.data?.payment_status === "Đã thu" ? (
                               <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-bold border border-emerald-200 flex items-center gap-1">
-                                ● Đã nhận trả KQ ({r.data?.payment_amount?.toLocaleString("vi-VN")} đ)
+                                ● Đã trả kết quả CV
                               </span>
                             ) : (
                               <span className="px-2.5 py-1 bg-green-50 text-green-700 rounded-full text-xs font-bold border border-green-200 flex items-center gap-1">
-                                ● Đã lập bàn giao
+                                ● Đã bàn giao
                               </span>
+                            )}
+                            
+                            {r.data?.is_non_geographic && r.data?.handover_ward && (
+                              <div className="flex items-center gap-1 px-1.5 py-0.5 bg-purple-50 text-purple-700 text-[10px] font-bold rounded border border-purple-200">
+                                📍 Phi địa giới: {r.data.handover_ward}
+                              </div>
                             )}
                           </div>
                         </td>
                       )}
                       {subTab !== "draft" && (
                         <td className="p-3 text-indigo-600 font-medium">
-                          {r.data?.assigned_to && (
+                          {r.data?.assigned_to ? (
                             <div className="flex items-center gap-1">
-                              <UserIcon size={14} /> {getEmployeeName(r.data?.assigned_to)}
+                              <UserIcon size={14} />{" "}
+                              {getEmployeeName(r.data?.assigned_to)}
+                            </div>
+                          ) : null}
+                        </td>
+                      )}
+                      <td className="p-3 text-purple-600 font-medium whitespace-nowrap">
+                        {formatDate(r.data?.hen_tra)}
+                      </td>
+                      {subTab === "all" && (
+                        <td className="p-3 text-center">
+                          {r.data?.danh_sach && (
+                            <div className="text-xs font-bold text-gray-700">
+                              {r.data.danh_sach}
                             </div>
                           )}
+                          <div className="text-gray-600 font-medium">
+                            {formatDate(r.data?.ngay_hoan_thanh)}
+                          </div>
                         </td>
                       )}
-                      <td className="p-3 text-purple-600 font-medium whitespace-nowrap">{formatDate(r.data?.hen_tra)}</td>
-                      {(subTab === "all" || subTab === "result") && (
+                      {subTab === "result" && (
                         <td className="p-3 text-center">
-                          {r.data?.danh_sach && <div className="text-xs font-bold text-gray-700">{r.data.danh_sach}</div>}
-                          <div className="text-gray-600 font-medium">{formatDate(r.data?.ngay_hoan_thanh)}</div>
+                          {r.data?.danh_sach && (
+                            <div className="text-xs font-bold text-gray-700">
+                              {r.data.danh_sach}
+                            </div>
+                          )}
+                          <div className="text-gray-650 text-xs mt-0.5">
+                            {formatDate(r.data?.ngay_hoan_thanh)}
+                          </div>
                         </td>
                       )}
-                      <td className="p-3 text-gray-500 italic truncate max-w-xs" title={r.trich_yeu}>{r.trich_yeu}</td>
+                      <td className="p-3 text-gray-500 italic truncate max-w-xs " title={r.trich_yeu}>
+                        {r.trich_yeu}
+                      </td>
                       <td className="p-3 text-center">
                         <div className="flex justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => setDetailRecord(r)} className="p-1.5 text-gray-600 hover:bg-gray-100 rounded" title="Xem chi tiết"><Eye size={14} /></button>
-                          <button onClick={() => handlePrintRecord(r)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="In phiếu"><Printer size={14} /></button>
-                          
-                          {r.status === "draft" && isAllowedToModify && (
-                            <button onClick={() => { setSelectedIds(new Set([r.id])); setShowAssignModal(true); }} className="p-1.5 text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100" title="Giao việc"><Users size={14} /></button>
+                          <button
+                            onClick={() => setDetailRecord(r)}
+                            className="p-1.5 text-gray-600 hover:bg-gray-100 rounded"
+                            title="Xem chi tiết"
+                          >
+                            <Eye size={14} />
+                          </button>
+                          <button
+                            onClick={() => handlePrintRecord(r)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                            title="Xem và In phiếu"
+                          >
+                            <Printer size={14} />
+                          </button>
+                          {r.status === "draft" && isManager && (
+                            <button
+                              onClick={() => {
+                                setSelectedIds(new Set([r.id]));
+                                setShowAssignModal(true);
+                              }}
+                              className="p-1.5 text-indigo-600 bg-indigo-50 rounded hover:bg-indigo-100"
+                              title="Giao việc"
+                            >
+                              <Users size={14} />
+                            </button>
                           )}
 
-                          {r.status === "assigned" && isAllowedToModify && (
+                          {r.status === "assigned" && isManager && (
                             <>
-                              <button onClick={() => handleStatusChange(r, "draft")} className="p-1.5 text-orange-600 bg-orange-50 rounded hover:bg-orange-100" title="Thu hồi"><RotateCcw size={14} /></button>
-                              <button onClick={() => handleStatusChange(r, "executed")} className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100" title="Hoàn thành xử lý"><CheckCircle size={14} /></button>
+                              <button
+                                onClick={() => handleStatusChange(r, "draft")}
+                                className="p-1.5 text-orange-600 bg-orange-50 rounded hover:bg-orange-100"
+                                title="Thu hồi"
+                              >
+                                <RotateCcw size={14} />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleStatusChange(r, "executed")
+                                }
+                                className="p-1.5 text-blue-600 bg-blue-50 rounded hover:bg-blue-100"
+                                title="Đã thực hiện"
+                              >
+                                <CheckCircle size={14} />
+                              </button>
                             </>
                           )}
 
-                          {r.status === "executed" && isAllowedToModify && (
+                          {r.status === "executed" && isManager && (
                             <>
-                              <button onClick={() => handleStatusChange(r, "assigned")} className="p-1.5 text-orange-600 bg-orange-50 rounded hover:bg-orange-100" title="Quay lại"><RotateCcw size={14} /></button>
-                              <button onClick={() => handleStatusChange(r, "pending_sign")} className="p-1.5 text-purple-600 bg-purple-50 rounded hover:bg-purple-100" title="Duyệt & Trình ký"><Send size={14} /></button>
+                              <button
+                                onClick={() =>
+                                  handleStatusChange(r, "assigned")
+                                }
+                                className="p-1.5 text-orange-600 bg-orange-50 rounded hover:bg-orange-100"
+                                title="Quay lại"
+                              >
+                                <RotateCcw size={14} />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleStatusChange(r, "pending_sign")
+                                }
+                                className="p-1.5 text-purple-600 bg-purple-50 rounded hover:bg-purple-100"
+                                title="Trình ký"
+                              >
+                                <Send size={14} />
+                              </button>
                             </>
                           )}
 
-                          {r.status === "pending_sign" && isAllowedToModify && (
+                          {r.status === "pending_sign" && isManager && (
                             <>
-                              <button onClick={() => handleStatusChange(r, "executed")} className="p-1.5 text-orange-600 bg-orange-50 rounded hover:bg-orange-100" title="Trả lại phòng ban"><RotateCcw size={14} /></button>
-                              <button onClick={() => handleStatusChange(r, "signed")} className="p-1.5 text-teal-600 bg-teal-50 rounded hover:bg-teal-100" title="Ký duyệt công văn"><PenTool size={14} /></button>
+                              <button
+                                onClick={() =>
+                                  handleStatusChange(r, "executed")
+                                }
+                                className="p-1.5 text-orange-600 bg-orange-50 rounded hover:bg-orange-100"
+                                title="Trả lại"
+                              >
+                                <RotateCcw size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleStatusChange(r, "signed")}
+                                className="p-1.5 text-teal-600 bg-teal-50 rounded hover:bg-teal-100"
+                                title="Ký duyệt"
+                              >
+                                <PenTool size={14} />
+                              </button>
                             </>
                           )}
 
-                          {r.status === "signed" && isAllowedToModify && (
-                            <button onClick={() => handleStatusChange(r, "completed")} className="p-1.5 text-green-600 bg-green-50 rounded hover:bg-green-100" title="Đã giao 1 cửa"><FileCheck size={14} /></button>
-                          )}
-
-                          {r.status === "completed" && isAllowedToModify && !r.data?.result_returned_date && (
-                            <button onClick={() => { setReturnRecord(r); setIsReturnModalOpen(true); }} className="p-1.5 text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100" title="Trả kết quả thực tế"><FileCheck size={14} /></button>
-                          )}
-
-                          {isAllowedToModify && (
+                          {r.status === "signed" && isManager && (
                             <>
-                              <button onClick={() => handleEdit(r)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded" title="Sửa"><Edit size={14} /></button>
-                              <button onClick={() => handleDelete(r.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded" title="Xóa"><Trash2 size={14} /></button>
+                              <button
+                                onClick={() =>
+                                  handleStatusChange(r, "pending_sign")
+                                }
+                                className="p-1.5 text-orange-600 bg-orange-50 rounded hover:bg-orange-100"
+                                title="Trả lại"
+                              >
+                                <RotateCcw size={14} />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleStatusChange(r, "completed")
+                                }
+                                className="p-1.5 text-green-600 bg-green-50 rounded hover:bg-green-100"
+                                title="Đã giao 1 cửa"
+                              >
+                                <FileCheck size={14} />
+                              </button>
+                            </>
+                          )}
+
+                          {r.status === "completed" && isManager && !r.data?.result_returned_date && (
+                            <button
+                              onClick={() => {
+                                setReturnRecord(r);
+                                setIsReturnModalOpen(true);
+                              }}
+                              className="p-1.5 text-emerald-600 bg-emerald-50 rounded hover:bg-emerald-100"
+                              title="Trả kết quả"
+                            >
+                              <FileCheck size={14} />
+                            </button>
+                          )}
+
+                          {(isManager || (currentUser.role as string) === "TEAM_LEADER" || (currentUser.role as string) === "team_leader") && (
+                            <>
+                              <button
+                                onClick={() => handleEdit(r)}
+                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                                title="Sửa"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(r.id)}
+                                className="p-1.5 text-red-500 hover:bg-red-50 rounded"
+                                title="Xóa"
+                              >
+                                <Trash2 size={14} />
+                              </button>
                             </>
                           )}
                         </div>
@@ -1633,62 +1975,146 @@ const CongVanView: React.FC<CongVanViewProps> = ({
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={12} className="p-8 text-center text-gray-400 italic">Không có dữ liệu công văn thỏa mãn điều kiện</td>
+                    <td
+                      colSpan={subTab !== "draft" ? 12 : 11}
+                      className="p-8 text-center text-gray-400 italic"
+                    >
+                      Không có công văn dữ liệu
+                    </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-
-          {/* Pagination Component */}
+          {/* Pagination */}
           {totalPages > 1 && (
             <div className="p-3 border-t border-gray-200 flex items-center justify-between bg-gray-50 shrink-0 select-none">
               <span className="text-xs text-gray-500 font-medium">
-                Hiển thị {(currentPage - 1) * itemsPerPage + 1} -{Math.min(currentPage * itemsPerPage, filteredRecords.length)} / {filteredRecords.length} công văn
+                Hiển thị {(currentPage - 1) * itemsPerPage + 1} -{" "}
+                {Math.min(currentPage * itemsPerPage, filteredRecords.length)} /{" "}
+                {filteredRecords.length} công văn
               </span>
-              <div className="flex gap-1">
-                <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-2 py-1 rounded border border-gray-300 bg-white text-xs disabled:opacity-50">Trước</button>
+              <div className="flex gap-1 animate-none">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-2 py-1 rounded border border-gray-300 bg-white text-xs disabled:opacity-50 hover:bg-gray-100"
+                >
+                  Trước
+                </button>
                 {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
                   let p = i + 1;
                   if (totalPages > 5) {
                     if (currentPage > 3) p = currentPage - 2 + i;
                     if (p > totalPages) p = totalPages - (4 - i);
+                    if (p < 1) p = i + 1;
                   }
                   return (
-                    <button key={p} onClick={() => setCurrentPage(p)} className={`px-2 py-1 rounded border text-xs font-medium min-w-[24px] ${currentPage === p ? "bg-blue-600 text-white" : "bg-white text-gray-600"}`}>{p}</button>
+                    <button
+                      key={p}
+                      onClick={() => setCurrentPage(p)}
+                      className={`px-2 py-1 rounded border text-xs font-medium min-w-[24px] ${currentPage === p ? "bg-blue-600 text-white border-blue-600" : "border-gray-300 bg-white hover:bg-gray-100 text-gray-600"}`}
+                    >
+                      {p}
+                    </button>
                   );
                 })}
-                <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-2 py-1 rounded border border-gray-300 bg-white text-xs disabled:opacity-50">Sau</button>
+                <button
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  disabled={currentPage === totalPages}
+                  className="px-2 py-1 rounded border border-gray-300 bg-white text-xs disabled:opacity-50 hover:bg-gray-100"
+                >
+                  Sau
+                </button>
               </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modals Mapping */}
       {showAssignModal && (
         <AssignModal
           isOpen={showAssignModal}
-          onClose={() => { setShowAssignModal(false); setSelectedIds(new Set()); }}
+          onClose={() => {
+            setShowAssignModal(false);
+            setSelectedIds(new Set());
+          }}
           onConfirm={handleConfirmAssign}
           employees={archiveEmployees}
-          selectedRecords={records.filter((r) => selectedIds.has(r.id)).map((r) => ({ id: r.id, code: r.so_hieu, customerName: r.noi_nhan_gui, ward: r.data?.xa_phuong, status: RecordStatus.RECEIVED } as RecordFile))}
+          selectedRecords={records
+            .filter((r) => selectedIds.has(r.id))
+            .map(
+              (r) =>
+                ({
+                  id: r.id,
+                  code: r.so_hieu,
+                  customerName: r.noi_nhan_gui,
+                  ward: r.data?.xa_phuong,
+                  status: RecordStatus.RECEIVED,
+                }) as RecordFile,
+            )}
           currentUser={currentUser}
           filterDepartment="Lưu trữ"
         />
       )}
 
-      {detailRecord && <ArchiveDetailModal isOpen={!!detailRecord} onClose={() => setDetailRecord(null)} record={detailRecord} getEmployeeName={getEmployeeName} currentUser={currentUser} />}
-      {showHandoverModal && <HandoverListModal isOpen={showHandoverModal} onClose={() => { setShowHandoverModal(false); setPendingCompletionRecord(null); }} onConfirm={handleConfirmHandover} type="congvan" wards={wards} />}
+      {detailRecord && (
+        <ArchiveDetailModal
+          isOpen={!!detailRecord}
+          onClose={() => setDetailRecord(null)}
+          record={detailRecord}
+          getEmployeeName={getEmployeeName}
+          currentUser={currentUser}
+        />
+      )}
+
+      {showHandoverModal && (
+        <HandoverListModal
+          isOpen={showHandoverModal}
+          onClose={() => {
+            setShowHandoverModal(false);
+            setPendingCompletionRecord(null);
+          }}
+          onConfirm={handleConfirmHandover}
+          type="congvan"
+          wards={wards}
+        />
+      )}
+
       {isReturnModalOpen && returnRecord && (
         <ReturnResultModal
           isOpen={isReturnModalOpen}
-          onClose={() => { setIsReturnModalOpen(false); setReturnRecord(null); }}
-          record={{ id: returnRecord.id, code: returnRecord.so_hieu, customerName: returnRecord.noi_nhan_gui || "", receipt_number: returnRecord.data?.receipt_number || "", receiptType: returnRecord.data?.receipt_type || "receipt", paymentAmount: returnRecord.data?.payment_amount || null } as any}
+          onClose={() => {
+            setIsReturnModalOpen(false);
+            setReturnRecord(null);
+          }}
+          record={
+            returnRecord
+              ? ({
+                  id: returnRecord.id,
+                  code: returnRecord.so_hieu,
+                  customerName: returnRecord.noi_nhan_gui || "",
+                  receiptNumber: returnRecord.data?.receipt_number || "",
+                  receiptType: returnRecord.data?.receipt_type || "receipt",
+                  paymentAmount: returnRecord.data?.payment_amount || null,
+                } as any)
+              : null
+          }
           onConfirm={handleConfirmReturnResult}
         />
       )}
-      {showExportModal && <ExportHandoverModal isOpen={showExportModal} onClose={() => setShowExportModal(false)} records={records} type="congvan" wards={wards} />}
+
+      {showExportModal && (
+        <ExportHandoverModal
+          isOpen={showExportModal}
+          onClose={() => setShowExportModal(false)}
+          records={records}
+          type="congvan"
+          wards={wards}
+        />
+      )}
     </div>
   );
 };
