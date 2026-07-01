@@ -22,26 +22,56 @@ const SubmitModal: React.FC<SubmitModalProps> = ({ isOpen, onClose, records, onC
         const emp = u.employeeId ? employees.find(e => e.id === u.employeeId) : null;
         
         if (isCheckMode) {
-            // Chế độ trình kiểm tra: CHỈ Tổ trưởng, Tổ phó (hoặc TEAM_LEADER) thuộc cùng tổ với người dùng hiện tại
-            if (!currentUser) return false;
-            
-            const currentEmp = currentUser.employeeId ? employees.find(e => e.id === currentUser.employeeId) : null;
-            if (!currentEmp) return false; // Nếu không tìm thấy nhân sự của user hiện tại, không hiển thị
-            
-            const currentUserTeam = getEmployeeTeam(currentEmp);
-            
-            if (!emp) return false; // Phải có thông tin nhân sự để xác định tổ
+            // Chế độ trình kiểm tra: CHỈ Tổ trưởng, Tổ phó (hoặc TEAM_LEADER) thuộc cùng tổ với hồ sơ hoặc với người dùng hiện tại
+            if (!emp) return false;
             
             const targetUserTeam = getEmployeeTeam(emp);
             
-            // Phải cùng tổ
-            if (currentUserTeam !== targetUserTeam) return false;
-            
-            // Phải là Tổ trưởng (leader) hoặc Tổ phó (vice_leader)
+            // Phải là Tổ trưởng (leader) hoặc Tổ phó (vice_leader) hoặc TEAM_LEADER role
             const cat = getRoleCategory(emp.position);
-            const isLeaderOrVice = cat.key === 'leader' || cat.key === 'vice_leader';
+            const isLeaderOrVice = cat.key === 'leader' || cat.key === 'vice_leader' || u.role === UserRole.TEAM_LEADER;
             
-            return isLeaderOrVice;
+            if (!isLeaderOrVice) return false;
+            
+            // Xác định tổ cần trình kiểm tra của các hồ sơ đang xử lý
+            const getRecordTeam = (r: RecordFile): string => {
+                if (r.assignedTo) {
+                    const assignedEmp = employees.find(e => e.id === r.assignedTo);
+                    if (assignedEmp) {
+                        const team = getEmployeeTeam(assignedEmp);
+                        if (team && team !== 'Ban Giám đốc') return team;
+                    }
+                }
+                
+                if (!r.recordType) return 'Tổ Đo đạc';
+                const t = r.recordType.trim().toLowerCase();
+                const isReg = r.recordType.includes('Đăng ký') || r.recordType.includes('Cấp giấy') || r.recordType.includes('Biến động') || r.recordType.includes('GCN') || t.includes('bien dong') || t.includes('cap giay');
+                if (isReg) return 'Tổ Cấp giấy';
+                
+                if (t.includes('luu tru') || t.includes('sao luc') || t.includes('thong tin') || t.includes('cong van') || t.includes('công văn')) {
+                    return 'Tổ Lưu trữ';
+                }
+                return 'Tổ Đo đạc';
+            };
+            
+            const recordTeams = records.map(getRecordTeam);
+            
+            // Lấy tổ của người dùng hiện tại làm phương án dự phòng
+            let currentUserTeam = '';
+            if (currentUser && currentUser.employeeId) {
+                const currentEmp = employees.find(e => e.id === currentUser.employeeId);
+                if (currentEmp) {
+                    currentUserTeam = getEmployeeTeam(currentEmp);
+                }
+            }
+            
+            // Checker hợp lệ nếu thuộc một trong các tổ của hồ sơ đang trình, hoặc thuộc tổ của currentUser
+            // Nếu không có hồ sơ nào được truyền vào (records rỗng), cho phép hiển thị dựa trên tổ của currentUser
+            const isMatchTeam = (records.length > 0 && recordTeams.includes(targetUserTeam)) || 
+                                (currentUserTeam && targetUserTeam === currentUserTeam) ||
+                                (!currentUserTeam && records.length === 0); // fallback cho admin khi ko chọn hồ sơ
+            
+            return isMatchTeam;
         } else {
             // Chế độ trình ký: CHỈ Ban Giám đốc (Giám đốc, Phó giám đốc), không đưa các tài khoản ADMIN, SUBADMIN, tổ trưởng, hay nhân viên vào
             if (!emp) return false;

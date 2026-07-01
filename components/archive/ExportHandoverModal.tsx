@@ -39,8 +39,11 @@ const ExportHandoverModal: React.FC<ExportHandoverModalProps> = ({
   useEffect(() => {
     const batches = new Set<string>();
     records.forEach((r) => {
-      // Filter by type and completed status
-      if (r.type !== type || r.status !== "completed") return;
+      // Filter by type and completed status - Combine saoluc and congvan
+      const isTypeMatch = (type === "saoluc" || type === "congvan")
+        ? (r.type === "saoluc" || r.type === "congvan")
+        : (r.type === type);
+      if (!isTypeMatch || r.status !== "completed") return;
 
       // Filter by date (ngay_hoan_thanh)
       if ((r.data?.ngay_hoan_thanh || "").split("T")[0] !== selectedDate)
@@ -63,7 +66,10 @@ const ExportHandoverModal: React.FC<ExportHandoverModalProps> = ({
   const handleExport = () => {
     // Filter records to export
     const exportData = records.filter((r) => {
-      if (r.type !== type || r.status !== "completed") return false;
+      const isTypeMatch = (type === "saoluc" || type === "congvan")
+        ? (r.type === "saoluc" || r.type === "congvan")
+        : (r.type === type);
+      if (!isTypeMatch || r.status !== "completed") return false;
       if ((r.data?.ngay_hoan_thanh || "").split("T")[0] !== selectedDate)
         return false;
       if (selectedWard !== "all") {
@@ -93,7 +99,10 @@ const ExportHandoverModal: React.FC<ExportHandoverModalProps> = ({
 
   const handlePrintHandover = () => {
     const exportData = records.filter((r) => {
-      if (r.type !== type || r.status !== "completed") return false;
+      const isTypeMatch = (type === "saoluc" || type === "congvan")
+        ? (r.type === "saoluc" || r.type === "congvan")
+        : (r.type === type);
+      if (!isTypeMatch || r.status !== "completed") return false;
       if ((r.data?.ngay_hoan_thanh || "").split("T")[0] !== selectedDate)
         return false;
       if (selectedWard !== "all") {
@@ -121,7 +130,7 @@ const ExportHandoverModal: React.FC<ExportHandoverModalProps> = ({
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
 
-    const titleStr = type === "saoluc" ? "BÀN GIAO HỒ SƠ SAO LỤC, TRÍCH LỤC" : "BÀN GIAO CÔNG VĂN MỘT CỬA";
+    const titleStr = (type === "saoluc" || type === "congvan") ? "BÀN GIAO HỒ SƠ SAO LỤC & CÔNG VĂN MỘT CỬA" : (type === "saoluc" ? "BÀN GIAO HỒ SƠ SAO LỤC, TRÍCH LỤC" : "BÀN GIAO CÔNG VĂN MỘT CỬA");
     const dateStr = selectedDate ? selectedDate.split("-").reverse().join("/") : "";
     
     const rows = exportData.map((r, index) => {
@@ -245,9 +254,9 @@ const ExportHandoverModal: React.FC<ExportHandoverModalProps> = ({
     wsData.push([""]); // Empty row
 
     const title =
-      type === "saoluc"
-        ? "DANH SÁCH BÀN GIAO HỒ SƠ SAO LỤC"
-        : "DANH SÁCH BÀN GIAO CÔNG VĂN";
+      (type === "saoluc" || type === "congvan")
+        ? "DANH SÁCH BÀN GIAO HỒ SƠ SAO LỤC & CÔNG VĂN MỘT CỬA"
+        : (type === "saoluc" ? "DANH SÁCH BÀN GIAO HỒ SƠ SAO LỤC" : "DANH SÁCH BÀN GIAO CÔNG VĂN");
     wsData.push([title]);
     wsData.push([
       `NGÀY ${day < 10 ? "0" + day : day} THÁNG ${month < 10 ? "0" + month : month} NĂM ${year}`,

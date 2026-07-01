@@ -1,8 +1,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import * as XLSX from 'xlsx-js-style';
-import { RecordFile, RecordStatus } from '../types';
+import { RecordFile, RecordStatus, Employee } from '../types';
 import { X, FileDown, Calendar, Layers, MapPin, Printer, Eye } from 'lucide-react';
+import { REGISTRATION_PROCEDURES } from '../constants';
+import { isArchiveType } from '../utils/appHelpers';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -11,11 +13,121 @@ interface ExportModalProps {
   wards: string[];
   type: 'handover' | 'check_list'; // Phân loại danh sách
   onPreview: (workbook: XLSX.WorkBook, fileName: string) => void; // Callback để mở Preview
+  employees: Employee[];
+  currentView?: string;
 }
 
-const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, records, wards, type, onPreview }) => {
+const cleanDeptName = (str: string): string => {
+  if (!str) return '';
+  return str.toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d");
+};
+
+const isReg = (type: string | null | undefined): boolean => {
+  if (!type) return false;
+  const t = type.trim().toLowerCase();
+  return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
+};
+
+const getEmployeeTeam = (emp: Employee): string => {
+  const dept = cleanDeptName(emp.department || '');
+  const pos = cleanDeptName(emp.position || '');
+
+  if (dept.includes('luu tru') || dept.includes('sao luc') || dept.includes('thong tin')) {
+    return 'Tổ Lưu trữ';
+  }
+
+  if (
+    dept.includes('do dac') || 
+    dept.includes('ky thuat') || 
+    dept.includes('dia chinh') || 
+    dept.includes('noi nghiep') || 
+    dept.includes('ngoai nghiep') || 
+    dept.includes('do hinh') || 
+    dept.includes('ban do') ||
+    dept.includes('to do') ||
+    dept === 'do'
+  ) {
+    return 'Tổ Đo đạc';
+  }
+
+  if (
+    dept.includes('cap giay') || 
+    dept.includes('dang ky') || 
+    dept.includes('bien dong') || 
+    dept.includes('cap qsd') || 
+    dept.includes('tham dinh')
+  ) {
+    return 'Tổ Cấp giấy';
+  }
+
+  if (
+    dept.includes('giam doc') || 
+    dept.includes('lanh dao') || 
+    pos.includes('giam doc') || 
+    pos.includes('pho giam doc') || 
+    pos.includes('truong phong')
+  ) {
+    return 'Ban Giám Đốc';
+  }
+
+  return 'Khác';
+};
+
+const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, records, wards, type, onPreview, employees, currentView }) => {
   const [selectedBatchKey, setSelectedBatchKey] = useState<string>('');
   const [selectedWard, setSelectedWard] = useState<string>('all');
+  const [selectedDept, setSelectedDept] = useState<string>('all');
+
+  const getRecordDepartment = (r: RecordFile): string => {
+    if (r.assignedTo) {
+        const emp = employees.find(e => e.id === r.assignedTo);
+        if (emp) {
+            const team = getEmployeeTeam(emp);
+            if (team && team !== 'Ban Giám Đốc') {
+                return team;
+            }
+        }
+    }
+
+    // Fallback to recordType based classification
+    if (!r.recordType) return 'Tổ Đo đạc';
+    const t = r.recordType.trim().toLowerCase();
+    
+    if (isReg(r.recordType)) return 'Tổ Cấp giấy';
+    
+    const isArchive = isArchiveType(r.recordType) || r.recordType === 'Sao lục' || r.recordType === 'Công văn' || r.recordType === '1.1 Công văn' || r.recordType === '1. Cung cấp dữ liệu đất đai' || r.recordType === '1.1 Cung cấp dữ liệu đất đai' || r.recordType === 'Cung cấp tài liệu đất đai';
+    if (isArchive) return 'Tổ Lưu trữ';
+    
+    if (['cmd', 'tòa án', 'thi hành án'].includes(t)) {
+        return 'Khác';
+    }
+    
+    return 'Tổ Đo đạc';
+  };
+
+  const isDeptFixed = useMemo(() => {
+    if (!currentView) return false;
+    const view = currentView.toLowerCase();
+    return (
+      view.includes('gcn') || 
+      view.includes('capgiay') || 
+      view.includes('cap_giay') ||
+      view.includes('archive') || 
+      view.includes('congvan') || 
+      view.includes('luutru') || 
+      view.includes('sao_luc') ||
+      [
+        'assign_tasks', 
+        'completed_list', 
+        'pending_check_list', 
+        'check_list', 
+        'director_completed', 
+        'handover_list'
+      ].includes(currentView)
+    );
+  }, [currentView]);
 
   // 1. Tổng hợp danh sách các đợt (Batch Options)
   const batchOptions = useMemo(() => {
@@ -46,13 +158,13 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, records, war
           // Logic cho Trình Ký: Dựa vào ngày tiếp nhận (receivedDate) để gom nhóm
           // Lấy các hồ sơ đang Chờ ký hoặc Đã ký (nhưng chưa giao)
           if (r.status === RecordStatus.PENDING_SIGN || r.status === RecordStatus.SIGNED) {
-             const dateStr = r.receivedDate ? r.receivedDate.split('T')[0] : null;
-             if (!dateStr) return;
-             const key = `date_${dateStr}`;
-             if (!batches[key]) {
-                 batches[key] = { date: dateStr, batch: 'Theo ngày', count: 0 };
-             }
-             batches[key].count++;
+              const dateStr = r.receivedDate ? r.receivedDate.split('T')[0] : null;
+              if (!dateStr) return;
+              const key = `date_${dateStr}`;
+              if (!batches[key]) {
+                  batches[key] = { date: dateStr, batch: 'Theo ngày', count: 0 };
+              }
+              batches[key].count++;
           }
       }
     });
@@ -63,15 +175,41 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, records, war
         .sort((a, b) => b.date.localeCompare(a.date));
   }, [records, isOpen, type]);
 
-  // Tự động chọn đợt mới nhất khi mở modal
+  // Tự động chọn đợt mới nhất và bộ phận mặc định khi mở modal
   useEffect(() => {
     if (isOpen && batchOptions.length > 0) {
         setSelectedBatchKey(batchOptions[0].key);
     } else {
         setSelectedBatchKey('');
     }
-    if (isOpen) setSelectedWard('all');
-  }, [isOpen, batchOptions]);
+    if (isOpen) {
+        setSelectedWard('all');
+        
+        if (currentView) {
+            const view = currentView.toLowerCase();
+            if (view.includes('gcn') || view.includes('capgiay') || view.includes('cap_giay')) {
+                setSelectedDept('Tổ Cấp giấy');
+            } else if (view.includes('archive') || view.includes('congvan') || view.includes('luutru') || view.includes('sao_luc')) {
+                setSelectedDept('Tổ Lưu trữ');
+            } else if (
+                view === 'all_records' || 
+                view === 'assign_tasks' || 
+                view === 'completed_list' || 
+                view === 'pending_check_list' || 
+                view === 'check_list' || 
+                view === 'director_completed' || 
+                view === 'handover_list' || 
+                view.includes('do_dac')
+            ) {
+                setSelectedDept('Tổ Đo đạc');
+            } else {
+                setSelectedDept('all');
+            }
+        } else {
+            setSelectedDept('all');
+        }
+    }
+  }, [isOpen, batchOptions, currentView]);
 
   const formatDate = (d: string) => {
       const date = new Date(d);
@@ -145,9 +283,29 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, records, war
         fileName = `Trinh_Ky_Ngay_${safeDate}`;
     }
 
+    if (selectedDept !== 'all') {
+        recordsToExport = recordsToExport.filter(r => getRecordDepartment(r) === selectedDept);
+    }
+
     if (recordsToExport.length === 0) {
         alert("Không tìm thấy hồ sơ nào cho lựa chọn này.");
         return null;
+    }
+
+    if (selectedDept !== 'all') {
+        title += ` - ${selectedDept.toUpperCase()}`;
+        fileName += `_${removeVietnameseTones(selectedDept)}`;
+        
+        // Cập nhật lại phụ đề hiển thị số lượng hồ sơ thực tế sau khi lọc bộ phận
+        if (type === 'handover') {
+            const parts = selectedBatchKey.split('_');
+            const batchStr = parts.slice(1).join('_');
+            const displayBatch = batchStr === 'NOT_BATCHED' ? 'CHƯA TẠO ĐỢT' : `ĐỢT ${batchStr}`;
+            subTitle = `${displayBatch}  -  ${selectedDept.toUpperCase()}  -  SỐ LƯỢNG: ${recordsToExport.length}`;
+        } else {
+            const dateStr = selectedBatchKey.replace('date_', '');
+            subTitle = `NGÀY TIẾP NHẬN: ${formatDate(dateStr)}  -  ${selectedDept.toUpperCase()}  -  SỐ LƯỢNG: ${recordsToExport.length}`;
+        }
     }
 
     if (selectedWard !== 'all') {
@@ -466,20 +624,41 @@ const ExportModal: React.FC<ExportModalProps> = ({ isOpen, onClose, records, war
             </div>
 
             {batchOptions.length > 0 && (
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">2. Lọc theo Xã / Phường (Tùy chọn)</label>
-                    <div className="relative">
-                        <select
-                            className="w-full appearance-none border border-gray-300 rounded-lg px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-gray-700 font-medium"
-                            value={selectedWard}
-                            onChange={(e) => setSelectedWard(e.target.value)}
-                        >
-                            <option value="all">-- Tất cả Xã / Phường --</option>
-                            {wards.map(w => (
-                                <option key={w} value={w}>{w}</option>
-                            ))}
-                        </select>
-                        <MapPin className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" size={18} />
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">2. Lọc theo Xã / Phường (Tùy chọn)</label>
+                        <div className="relative">
+                            <select
+                                className="w-full appearance-none border border-gray-300 rounded-lg px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-gray-700 font-medium"
+                                value={selectedWard}
+                                onChange={(e) => setSelectedWard(e.target.value)}
+                            >
+                                <option value="all">-- Tất cả Xã / Phường --</option>
+                                {wards.map(w => (
+                                    <option key={w} value={w}>{w}</option>
+                                ))}
+                            </select>
+                            <MapPin className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" size={18} />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">3. Lọc theo Tổ / Bộ phận Chuyên môn (Tùy chọn) {isDeptFixed && <span className="text-xs text-blue-600 font-normal">(Cố định theo Tab)</span>}</label>
+                        <div className="relative">
+                            <select
+                                className="w-full appearance-none border border-gray-300 rounded-lg px-4 py-3 pr-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none bg-white text-gray-700 font-medium disabled:bg-gray-100 disabled:text-gray-500"
+                                value={selectedDept}
+                                onChange={(e) => setSelectedDept(e.target.value)}
+                                disabled={isDeptFixed}
+                            >
+                                <option value="all">-- Tất cả các tổ chuyên môn --</option>
+                                <option value="Tổ Đo đạc">Tổ Đo đạc</option>
+                                <option value="Tổ Cấp giấy">Tổ Cấp giấy</option>
+                                <option value="Tổ Lưu trữ">Tổ Lưu trữ</option>
+                                <option value="Khác">Khác / Hành chính</option>
+                            </select>
+                            <Layers className="absolute right-3 top-3.5 text-gray-400 pointer-events-none" size={18} />
+                        </div>
                     </div>
                 </div>
             )}

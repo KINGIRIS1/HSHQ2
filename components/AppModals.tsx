@@ -183,6 +183,8 @@ const AppModals: React.FC<AppModalsProps> = (props) => {
                 wards={props.wards} 
                 type={props.exportModalType}
                 onPreview={props.handleExcelPreview}
+                employees={props.employees}
+                currentView={props.currentView}
             />
             
             <AddToBatchModal

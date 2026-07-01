@@ -2,6 +2,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { RecordFile, RecordStatus } from '../types';
 import { getNormalizedWard, getShortRecordType, REGISTRATION_PROCEDURES } from '../constants';
+import { isArchiveType } from '../utils/appHelpers';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { FileText, RotateCcw, CheckCircle, ArchiveX, MapPin, Layers, CalendarRange, Filter, CalendarDays, Calendar } from 'lucide-react';
 
@@ -84,7 +85,8 @@ const DashboardView: React.FC<DashboardViewProps> = ({ records }) => {
 
     const measRecords = useMemo(() => {
         return filteredRecords.filter(r => 
-            !['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '') &&
+            !['CMD', 'Tòa án', 'Thi hành án'].includes(r.recordType || '') &&
+            !isArchiveType(r.recordType) && r.recordType !== 'Sao lục' && r.recordType !== 'Công văn' && r.recordType !== '1.1 Công văn' &&
             !isReg(r.recordType)
         );
     }, [filteredRecords]);
@@ -94,7 +96,7 @@ const DashboardView: React.FC<DashboardViewProps> = ({ records }) => {
     }, [filteredRecords]);
 
     const archRecords = useMemo(() => {
-        return filteredRecords.filter(r => ['Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || ''));
+        return filteredRecords.filter(r => isArchiveType(r.recordType) || ['Sao lục', 'Công văn', '1.1 Công văn'].includes(r.recordType || ''));
     }, [filteredRecords]);
 
     // Thống kê chi tiết từng bộ phận

@@ -7,7 +7,7 @@ import MainLayout from './components/layout/MainLayout';
 import AppRoutes from './components/AppRoutes';
 import AppModals from './components/AppModals';
 
-import { DEFAULT_VISIBLE_COLUMNS, confirmAction, fillTimelineDatesForReturn, removeVietnameseTones, isDefaultTaxProcedure, isRegType, getGcnWorkflowStepsHelper } from './utils/appHelpers';
+import { DEFAULT_VISIBLE_COLUMNS, confirmAction, fillTimelineDatesForReturn, removeVietnameseTones, isDefaultTaxProcedure, isRegType, getGcnWorkflowStepsHelper, isArchiveType } from './utils/appHelpers';
 import { getEmployeeTeam } from './components/AssignModal';
 import { exportReportToExcel, exportReturnedListToExcel } from './utils/excelExport';
 import { generateReport } from './services/geminiService';
@@ -640,6 +640,18 @@ function App() {
           const nextIdx = currentIdx + 1;
           if (nextIdx < stepConfigs.length) {
               const nextStep = stepConfigs[nextIdx];
+
+              if (nextStep.overallStatus === RecordStatus.PENDING_CHECK) {
+                  setSubmitTargetRecords([record]);
+                  setIsSubmitCheckModalOpen(true);
+                  return;
+              }
+              if (nextStep.overallStatus === RecordStatus.PENDING_SIGN) {
+                  setSubmitTargetRecords([record]);
+                  setIsSubmitModalOpen(true);
+                  return;
+              }
+
               if (nextStep.label.includes("Phiếu chuyển Thuế") || nextStep.label.includes("Lập phiếu chuyển thuế")) {
                   setTaxTargetRecord(record);
                   setTaxLandPlot(record.landPlot || '');
@@ -666,14 +678,14 @@ function App() {
               if (nextStep.overallStatus === RecordStatus.COMPLETED_WORK && !record.completedWorkDate) {
                   updates.completedWorkDate = nowStr;
               }
-              if (nextStep.overallStatus === RecordStatus.PENDING_CHECK && !record.pendingCheckDate) {
+              if ((nextStep.overallStatus as any) === RecordStatus.PENDING_CHECK && !record.pendingCheckDate) {
                   updates.pendingCheckDate = nowStr;
               }
               if (nextStep.overallStatus === RecordStatus.CHECKED) {
                   updates.checkedDate = nowStr;
                   updates.checkedBy = record.checkedBy || currentUser?.employeeId || null;
               }
-              if (nextStep.overallStatus === RecordStatus.PENDING_SIGN && !record.submissionDate) {
+              if ((nextStep.overallStatus as any) === RecordStatus.PENDING_SIGN && !record.submissionDate) {
                   updates.submissionDate = nowStr;
               }
               if (nextStep.overallStatus === RecordStatus.SIGNED && !record.approvalDate) {
@@ -705,13 +717,25 @@ function App() {
           const foundIdx = flow.indexOf(record.status);
           if (foundIdx !== -1 && foundIdx < flow.length - 1) {
               const nextStatus = flow[foundIdx + 1];
+
+              if (nextStatus === RecordStatus.PENDING_CHECK) {
+                  setSubmitTargetRecords([record]);
+                  setIsSubmitCheckModalOpen(true);
+                  return;
+              }
+              if (nextStatus === RecordStatus.PENDING_SIGN) {
+                  setSubmitTargetRecords([record]);
+                  setIsSubmitModalOpen(true);
+                  return;
+              }
+
               const updates = getUpdatesForStatusChange(nextStatus);
               setRecords(prev => prev.map(r => r.id === record.id ? { ...r, ...updates } : r));
               await updateRecordApi({ ...record, ...updates });
               setToast({ type: 'success', message: `Đã chuyển trạng thái hồ sơ sang ${nextStatus}!` });
           }
       }
-  }, [records, currentUser]);
+  }, [records, currentUser, holidays]);
 
   const executeBatchExport = useCallback(async (batch: number, date: string, handoverWard?: string, updatedRecords?: RecordFile[]) => {
       try {
@@ -1246,13 +1270,25 @@ function App() {
                 try {
                     const nowStr = new Date().toISOString();
                     const updates = submitTargetRecords.map(r => {
-                        const isLuuTru = r.recordType === 'Cung cấp tài liệu đất đai' || 
+                        const isLuuTru = isArchiveType(r.recordType) || 
                                          r.recordType === 'Sao lục' || 
-                                         r.recordType === 'Công văn';
+                                         r.recordType === 'Công văn' ||
+                                         r.recordType === '1.1 Công văn';
+                        
+                        let extraUpdates: any = {};
+                        if (isRegType(r.recordType)) {
+                            let currentStepIndex = r.currentStepIndex;
+                            if (currentStepIndex === undefined || currentStepIndex === null) {
+                                currentStepIndex = 0;
+                            }
+                            extraUpdates.currentStepIndex = currentStepIndex + 1;
+                        }
+
                         if (isLuuTru) {
                             const responsibleId = r.assignedTo || currentUser?.employeeId || null;
                             return {
                                 ...r,
+                                ...extraUpdates,
                                 status: RecordStatus.PENDING_SIGN,
                                 completedWorkDate: r.completedWorkDate || nowStr,
                                 pendingCheckDate: r.pendingCheckDate || nowStr,
@@ -1264,6 +1300,7 @@ function App() {
                         } else {
                             return {
                                 ...r,
+                                ...extraUpdates,
                                 status: RecordStatus.PENDING_SIGN,
                                 checkedDate: r.checkedDate || nowStr,
                                 checkedBy: r.checkedBy || currentUser?.employeeId || null,
@@ -1296,13 +1333,24 @@ function App() {
             onConfirm={async (checkerId) => {
                 try {
                     const nowStr = new Date().toISOString();
-                    const updates = submitTargetRecords.map(r => ({
-                        ...r,
-                        status: RecordStatus.PENDING_CHECK,
-                        completedWorkDate: r.completedWorkDate || nowStr,
-                        pendingCheckDate: nowStr,
-                        checkedBy: checkerId
-                    }));
+                    const updates = submitTargetRecords.map(r => {
+                        let extraUpdates: any = {};
+                        if (isRegType(r.recordType)) {
+                            let currentStepIndex = r.currentStepIndex;
+                            if (currentStepIndex === undefined || currentStepIndex === null) {
+                                currentStepIndex = 0;
+                            }
+                            extraUpdates.currentStepIndex = currentStepIndex + 1;
+                        }
+                        return {
+                            ...r,
+                            ...extraUpdates,
+                            status: RecordStatus.PENDING_CHECK,
+                            completedWorkDate: r.completedWorkDate || nowStr,
+                            pendingCheckDate: nowStr,
+                            checkedBy: checkerId
+                        };
+                    });
                     await updateRecordsBatchById(updates);
                     setToast({ type: 'success', message: `Đã trình kiểm tra ${updates.length} hồ sơ thành công!` });
                     setIsSubmitCheckModalOpen(false);

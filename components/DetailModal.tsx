@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { RecordFile, Employee, User, UserRole, SplitItem, RecordStatus, Holiday } from '../types';
 import { getNormalizedWard, REGISTRATION_PROCEDURES } from '../constants';
 import StatusBadge from './StatusBadge';
-import { X, MapPin, FileText, User as UserIcon, Receipt, DollarSign, CheckCircle2, Circle, Send, FileSignature, CheckSquare, CalendarClock, FileCheck, Calculator, Loader2, StickyNote, Save, Bell, Printer, Pencil, Trash2, Info, FileDown, AlertTriangle, Activity, ArrowRight, RotateCcw } from 'lucide-react';
+import { X, MapPin, FileText, User as UserIcon, Receipt, DollarSign, CheckCircle2, Circle, Send, FileSignature, CheckSquare, CalendarClock, FileCheck, Calculator, Loader2, StickyNote, Save, Bell, Printer, Pencil, Trash2, Info, FileDown, AlertTriangle, Activity, ArrowRight, RotateCcw, Lock } from 'lucide-react';
 import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../services/docxService';
 import DocxPreviewModal from './DocxPreviewModal';
 import { updateRecordApi, fetchContracts } from '../services/api';
@@ -135,6 +135,20 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
   const [personalNote, setPersonalNote] = useState('');
   const [isSavingNote, setIsSavingNote] = useState(false);
 
+  // State cho Ghi chú nội bộ / Ghi chú hồ sơ
+  const [privateNote, setPrivateNote] = useState('');
+  const [isSavingPrivateNote, setIsSavingPrivateNote] = useState(false);
+
+  // State cho Cập nhật thông tin hồ sơ
+  const [measurementNumber, setMeasurementNumber] = useState('');
+  const [excerptNumber, setExcerptNumber] = useState('');
+  const [assignedTo, setAssignedTo] = useState('');
+  const [exportBatch, setExportBatch] = useState('');
+  const [exportDate, setExportDate] = useState('');
+  const [resultReturnedDate, setResultReturnedDate] = useState('');
+  const [receiptNumber, setReceiptNumber] = useState('');
+  const [isSavingRecordInfo, setIsSavingRecordInfo] = useState(false);
+
   // State cho Nhắc nhở
   const [reminderDate, setReminderDate] = useState('');
   const [isSavingReminder, setIsSavingReminder] = useState(false);
@@ -198,6 +212,14 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
   useEffect(() => {
       if (record) {
           setPersonalNote(record.personalNotes || '');
+          setPrivateNote(record.privateNotes || '');
+          setMeasurementNumber(record.measurementNumber || '');
+          setExcerptNumber(record.excerptNumber || '');
+          setAssignedTo(record.assignedTo || '');
+          setExportBatch(record.exportBatch ? String(record.exportBatch) : '');
+          setExportDate(record.exportDate ? record.exportDate.split('T')[0] : '');
+          setResultReturnedDate(record.resultReturnedDate ? record.resultReturnedDate.split('T')[0] : '');
+          setReceiptNumber(record.receiptNumber || '');
           // Chuyển ISO string sang format datetime-local (yyyy-MM-ddTHH:mm) để hiển thị trong input
           if (record.reminderDate) {
               const d = new Date(record.reminderDate);
@@ -316,6 +338,22 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       }
   };
 
+  const handleSavePrivateNote = async () => {
+      setIsSavingPrivateNote(true);
+      if (!activeRecord) return;
+      const updatedRecord = { ...activeRecord, privateNotes: privateNote };
+      const result = await updateRecordApi(updatedRecord);
+      setIsSavingPrivateNote(false);
+      
+      if (result) {
+          setLocalRecord(updatedRecord);
+          alert('Đã lưu ghi chú hồ sơ thành công!');
+          onRefreshData?.();
+      } else {
+          alert('Lỗi khi lưu ghi chú hồ sơ.');
+      }
+  };
+
   const handleSaveReminder = async () => {
       setIsSavingReminder(true);
       if (!activeRecord) return;
@@ -339,6 +377,36 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
           onRefreshData?.();
       } else {
           alert('Lỗi khi lưu nhắc nhở.');
+      }
+  };
+
+  const handleSaveRecordInfo = async () => {
+      setIsSavingRecordInfo(true);
+      if (!activeRecord) return;
+      
+      const batchVal = exportBatch && !isNaN(parseInt(exportBatch, 10)) ? parseInt(exportBatch, 10) : null;
+      
+      const updatedRecord = { 
+          ...activeRecord, 
+          measurementNumber: measurementNumber || null,
+          excerptNumber: excerptNumber || null,
+          assignedTo: assignedTo || null,
+          exportBatch: batchVal,
+          exportDate: exportDate || null,
+          resultReturnedDate: resultReturnedDate || null,
+          receiptNumber: receiptNumber || null,
+          privateNotes: privateNote || null,
+      };
+      
+      const result = await updateRecordApi(updatedRecord);
+      setIsSavingRecordInfo(false);
+      
+      if (result) {
+          setLocalRecord(updatedRecord);
+          alert('Cập nhật thông tin hồ sơ thành công!');
+          onRefreshData?.();
+      } else {
+          alert('Lỗi khi cập nhật thông tin hồ sơ.');
       }
   };
 
@@ -735,6 +803,12 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       RecordStatus.SIGNED, RecordStatus.HANDOVER, RecordStatus.RETURNED
   ].includes(record.status) || !!record.approvalDate;
 
+  const canEditRecordInfo = !!(
+      currentUser?.role === UserRole.ADMIN || 
+      currentUser?.role === UserRole.SUBADMIN || 
+      currentUser?.role === UserRole.TEAM_LEADER || 
+      record.assignedTo === currentUser?.employeeId
+  );
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -1277,7 +1351,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                 {/* COLUMN 2: CHI TIẾT & TÀI CHÍNH */}
                 <div className="space-y-6">
                     {/* NỘI DUNG */}
-                    <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm h-full flex flex-col">
+                    <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex flex-col">
                         <h3 className="text-xs font-bold text-purple-600 uppercase mb-4 flex items-center gap-2 border-l-4 border-purple-600 pl-2">
                             <FileText size={16}/> Nội dung chi tiết
                         </h3>
@@ -1286,18 +1360,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                             {record.content || 'Không có nội dung chi tiết.'}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-6 mb-6">
-                            <div>
-                                <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Số trích đo</label>
-                                <p className="text-sm font-bold text-gray-800">{record.measurementNumber || '---'}</p>
-                            </div>
-                            <div>
-                                <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Số trích lục</label>
-                                <p className="text-sm font-bold text-gray-800">{record.excerptNumber || '---'}</p>
-                            </div>
-                        </div>
-
-                        <div className="border-t border-gray-100 pt-4 grid grid-cols-2 gap-4">
+                        <div className="pt-2 grid grid-cols-2 gap-4">
                             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 flex items-center gap-3">
                                 <div className="bg-blue-200 p-1.5 rounded text-blue-700"><Receipt size={16}/></div>
                                 <div>
@@ -1364,19 +1427,93 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                                 </div>
                             </div>
                         )}
+                    </div>
 
-                        {/* Ghi chú nội bộ */}
-                        {record.privateNotes && (
-                            <div className="mt-4 pt-4 border-t border-dashed border-gray-200">
-                                <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                                    <div className="flex items-center gap-2 mb-1 text-yellow-800 font-bold text-xs">
-                                        <Info size={14} />
-                                        <span>Ghi chú nội bộ</span>
+                    {/* CẬP NHẬT THÔNG TIN HỒ SƠ */}
+                    <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-5">
+                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                            <h3 className="text-xs font-bold text-indigo-600 uppercase flex items-center gap-2 border-l-4 border-indigo-600 pl-2">
+                                <FileSignature size={16}/> Thông tin hồ sơ cập nhật
+                            </h3>
+                        </div>
+
+                        {/* ROW 1: SỐ TRÍCH ĐO, SỐ TRÍCH LỤC, GIAO NHÂN VIÊN XỬ LÝ */}
+                        <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-200">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                <div className="md:col-span-1">
+                                    <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1.5">Số trích đo</label>
+                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
+                                        {measurementNumber || <span className="text-gray-400 italic">Chưa có</span>}
                                     </div>
-                                    <p className="text-yellow-900 text-xs italic">"{record.privateNotes}"</p>
+                                </div>
+                                <div className="md:col-span-1">
+                                    <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1.5">Số trích lục</label>
+                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
+                                        {excerptNumber || <span className="text-gray-400 italic">Chưa có</span>}
+                                    </div>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1.5">Nhân viên xử lý</label>
+                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
+                                        {(() => {
+                                            const emp = employees.find(e => e.id === assignedTo);
+                                            return emp ? `${emp.name} ${emp.department ? `(${emp.department})` : ''}` : <span className="text-gray-400 italic">Chưa giao việc</span>;
+                                        })()}
+                                    </div>
                                 </div>
                             </div>
-                        )}
+                        </div>
+
+                        {/* ROW 2: ĐỢT XUẤT (BATCH), NGÀY XUẤT */}
+                        <div className="bg-blue-50/30 p-4 rounded-xl border border-blue-200">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-blue-600 uppercase mb-1.5">Đợt xuất (Batch)</label>
+                                    <div className="bg-white border border-blue-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
+                                        {exportBatch || <span className="text-gray-400 italic">Chưa có</span>}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-blue-600 uppercase mb-1.5">Ngày xuất</label>
+                                    <div className="bg-white border border-blue-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
+                                        {exportDate ? formatDate(exportDate) : <span className="text-gray-400 italic">Chưa có</span>}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ROW 3: TRẢ KẾT QUẢ CHO DÂN */}
+                        <div className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-200">
+                            <h4 className="text-xs font-bold text-emerald-800 uppercase flex items-center gap-2 mb-3">
+                                <FileCheck size={16} className="text-emerald-600" />
+                                <span>Trả kết quả cho dân</span>
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-emerald-600 uppercase mb-1.5">Ngày trả kết quả</label>
+                                    <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
+                                        {resultReturnedDate ? formatDate(resultReturnedDate) : <span className="text-gray-400 italic">Chưa có</span>}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-[11px] font-bold text-emerald-600 uppercase mb-1.5">Số Biên Lai</label>
+                                    <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
+                                        {receiptNumber || <span className="text-gray-400 italic">Chưa có</span>}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ROW 4: GHI CHÚ NỘI BỘ */}
+                        <div className="bg-yellow-50/30 p-4 rounded-xl border border-yellow-200">
+                            <h4 className="text-xs font-bold text-yellow-800 uppercase flex items-center gap-2 mb-3">
+                                <Lock size={14} className="text-yellow-600" />
+                                <span>Ghi chú nội bộ</span>
+                            </h4>
+                            <div className="bg-white border border-yellow-200 rounded-lg p-3 text-sm text-gray-800 shadow-sm min-h-[80px] whitespace-pre-wrap">
+                                {privateNote || <span className="text-gray-400 italic">Chưa có ghi chú nội bộ</span>}
+                            </div>
+                        </div>
                     </div>
                 </div>
 

@@ -177,7 +177,13 @@ export function isDefaultTaxProcedure(type: string | null | undefined): boolean 
 }
 
 export function isRegType(type: string | null | undefined): boolean {
-    return true; // Applied GCN detailed step progress tracking to all procedures
+    if (!type) return false;
+    const t = type.trim().toLowerCase();
+    const REG_PROCEDURES = [
+        "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
+        "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
+    ];
+    return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
 }
 
 export interface GcnStepConfig {

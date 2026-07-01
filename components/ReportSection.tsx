@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { BarChart3, FileSpreadsheet, Loader2, Sparkles, Download, CalendarDays, Printer, Layout, FileText, ListFilter, CheckCircle2, Clock, AlertTriangle, Settings, Key, X, Save, MapPin, UserCheck, ChevronLeft, ChevronRight, PieChart, CheckCircle, Ruler, FolderArchive, CalendarRange, Coins } from 'lucide-react';
 import { RecordFile, RecordStatus, Employee, User, UserRole } from '../types';
 import { getNormalizedWard, STATUS_LABELS, REGISTRATION_PROCEDURES } from '../constants';
-import { isRecordOverdue, removeVietnameseTones, isRecordApproaching } from '../utils/appHelpers';
+import { isRecordOverdue, removeVietnameseTones, isRecordApproaching, isArchiveType } from '../utils/appHelpers';
 import { saveGeminiKey, getGeminiKey } from '../services/geminiService';
 import { fetchArchiveRecords } from '../services/apiArchive';
 import EmployeeStatsView from './report/EmployeeStatsView';
@@ -100,13 +100,13 @@ const ReportSection: React.FC<ReportSectionProps> = ({
                 
                 // Trùng domain lĩnh vực nếu hồ sơ chưa giao hoặc giao ngoài
                 if (myTeamName === 'Tổ Đo đạc') {
-                    return !['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '') && !isReg(r.recordType);
+                    return !['CMD', 'Tòa án', 'Thi hành án'].includes(r.recordType || '') && !isArchiveType(r.recordType) && r.recordType !== 'Sao lục' && r.recordType !== 'Công văn' && !isReg(r.recordType);
                 }
                 if (myTeamName === 'Tổ Cấp giấy') {
                     return isReg(r.recordType);
                 }
                 if (myTeamName === 'Tổ Lưu trữ') {
-                    return ['Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '');
+                    return isArchiveType(r.recordType) || ['Sao lục', 'Công văn'].includes(r.recordType || '');
                 }
                 return false;
             });
@@ -292,7 +292,7 @@ const ReportSection: React.FC<ReportSectionProps> = ({
                         content: r.trich_yeu
                     } as RecordFile));
                     
-                    const cungCapRecordsFromMain = records.filter(r => r.recordType === 'Cung cấp tài liệu đất đai');
+                    const cungCapRecordsFromMain = records.filter(r => isArchiveType(r.recordType) || r.recordType === 'Sao lục' || r.recordType === 'Công văn');
 
                     setArchiveRecords([...mapped, ...cungCapRecordsFromMain]);
                 } catch (e) {
@@ -306,7 +306,8 @@ const ReportSection: React.FC<ReportSectionProps> = ({
     const activeRecords = useMemo(() => {
         if (mainTab === 'measurement') {
             return records.filter(r => 
-                !['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn'].includes(r.recordType || '') &&
+                !['CMD', 'Tòa án', 'Thi hành án'].includes(r.recordType || '') &&
+                !isArchiveType(r.recordType) && r.recordType !== 'Sao lục' && r.recordType !== 'Công văn' &&
                 !isReg(r.recordType)
             );
         } else if (mainTab === 'registration') {

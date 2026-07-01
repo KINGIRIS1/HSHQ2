@@ -80,6 +80,7 @@ interface SaoLucFormData {
   danh_sach?: string;
   receipt_number?: string;
   payment_status?: "Chưa thu" | "Đã thu";
+  payment_amount?: number | null;
   result_returned_date?: string;
 }
 
@@ -136,6 +137,7 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
     danh_sach: "",
     receipt_number: "",
     payment_status: "Chưa thu",
+    payment_amount: null,
     result_returned_date: "",
   });
 
@@ -451,6 +453,7 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
         danh_sach: formData.danh_sach,
         receipt_number: formData.receipt_number,
         payment_status: formData.payment_status,
+        payment_amount: formData.payment_amount || null,
         result_returned_date: formData.result_returned_date,
         ...(assignedTo ? { assigned_to: assignedTo, assigned_date: assignedDate, history: historyEntries } : {}),
       },
@@ -484,6 +487,7 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
       danh_sach: "",
       receipt_number: "",
       payment_status: "Chưa thu",
+      payment_amount: null,
       result_returned_date: "",
     });
   };
@@ -876,6 +880,7 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
       danh_sach: r.data?.danh_sach || "",
       receipt_number: r.data?.receipt_number || "",
       payment_status: r.data?.payment_status || "Chưa thu",
+      payment_amount: r.data?.payment_amount !== undefined ? r.data?.payment_amount : null,
       result_returned_date: r.data?.result_returned_date || "",
     });
     setIsFormOpen(true);
@@ -887,7 +892,20 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
     resetForm();
   };
 
-  const formatDate = (d: string) => (d ? d.split("-").reverse().join("/") : "");
+  const formatDate = (d: string) => {
+    if (!d) return "";
+    if (d.includes("/")) return d.split("T")[0];
+    try {
+      const datePart = d.split("T")[0];
+      const parts = datePart.split("-");
+      if (parts.length === 3) {
+        return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+      }
+      return d;
+    } catch (e) {
+      return d;
+    }
+  };
 
   const mapStatusToEnum = (s: string): RecordStatus => {
     switch (s) {
@@ -1626,23 +1644,23 @@ const SaoLucView: React.FC<SaoLucViewProps> = ({
                     </div>
                     <div>
                       <label className="text-xs font-bold text-green-700 uppercase mb-1 block">
-                        Thu tiền
+                        Số tiền thu được (VNĐ)
                       </label>
-                      <select
-                        className="w-full border border-green-300 bg-white rounded-lg px-3 py-2 text-sm outline-none"
-                        value={formData.payment_status || "Chưa thu"}
-                        onChange={(e) =>
+                      <input
+                        type="text"
+                        className="w-full border border-green-300 bg-white rounded-lg px-3 py-2 text-sm font-mono font-bold outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500"
+                        value={formData.payment_amount !== null && formData.payment_amount !== undefined ? String(formData.payment_amount) : ""}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9]/g, "");
+                          const amount = val ? parseInt(val, 10) : null;
                           setFormData({
                             ...formData,
-                            payment_status: e.target.value as
-                              | "Chưa thu"
-                              | "Đã thu",
-                          })
-                        }
-                      >
-                        <option value="Chưa thu">Chưa thu tiền</option>
-                        <option value="Đã thu">Đã thu tiền</option>
-                      </select>
+                            payment_amount: amount,
+                            payment_status: amount !== null && amount > 0 ? "Đã thu" : "Chưa thu",
+                          });
+                        }}
+                        placeholder="Nhập số tiền..."
+                      />
                     </div>
                   </div>
                   <div>

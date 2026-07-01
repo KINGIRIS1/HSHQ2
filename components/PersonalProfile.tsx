@@ -6,7 +6,7 @@ import StatusBadge from './StatusBadge';
 import { Briefcase, ArrowRight, CheckCircle, Clock, Send, AlertTriangle, UserCog, ChevronLeft, ChevronRight, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Bell, CalendarClock, FileCheck, Map, CheckSquare, ClipboardList, FileDown, RotateCcw, CornerUpLeft, FileSignature } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { getShortRecordType } from '../constants';
-import { confirmAction, isRecordOverdue, isRecordApproaching, getGcnWorkflowStepsHelper } from '../utils/appHelpers';
+import { confirmAction, isRecordOverdue, isRecordApproaching, getGcnWorkflowStepsHelper, isArchiveType } from '../utils/appHelpers';
 import { updateRecordApi } from '../services/api';
 import { fetchArchiveRecords, ArchiveRecord, saveArchiveRecord } from '../services/apiArchive';
 import SubmitModal from './receive-record/SubmitModal';
@@ -49,13 +49,7 @@ function removeVietnameseTones(str: string): string {
 }
 
 const isRegType = (type: string | null | undefined): boolean => {
-    if (!type) return false;
-    const t = type.trim().toLowerCase();
-    const REG_PROCEDURES = [
-        "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
-        "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
-    ];
-    return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
+    return false;
 };
 
 const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDirector, users, employees, rolePermissions, onUpdateStatus, onUpdateRecord, onViewRecord, onCreateLiquidation, onMapCorrection, holidays }) => {
@@ -265,7 +259,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
       return emp.department?.toLowerCase().includes('đo đạc') || emp.department?.toLowerCase().includes('kỹ thuật') || emp.position?.toLowerCase().includes('đo đạc');
   }, [user.employeeId, employees]);
 
-  // 1. Hồ sơ Đang thực hiện (ASSIGNED, IN_PROGRESS, COMPLETED_WORK, REJECTED, and also PENDING_CHECK, CHECKED, PENDING_SIGN if assigned to user so they can track/withdraw)
+  // 1. Hồ sơ Đang thực hiện (ASSIGNED, IN_PROGRESS, COMPLETED_WORK, REJECTED, PENDING_SUPPLEMENT)
   const pendingRecords = useMemo(() => {
       let list = myRecords.filter(r => {
           const isAssigned = r.assignedTo === effectiveId;
@@ -274,34 +268,27 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
               r.status === RecordStatus.IN_PROGRESS || 
               r.status === RecordStatus.COMPLETED_WORK || 
               r.status === RecordStatus.REJECTED ||
-              r.status === RecordStatus.PENDING_CHECK ||
-              r.status === RecordStatus.CHECKED ||
-              r.status === RecordStatus.PENDING_SIGN;
+              r.status === RecordStatus.PENDING_SUPPLEMENT;
           
           return isAssigned && isPendingOrActiveStatus;
       });
       return filterAndSort(list, searchTerm, sortConfig);
   }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
-  // 2. Hồ sơ Đã thực hiện (Bỏ qua - Trống)
-  const completedWorkRecords = useMemo(() => {
-      return [];
-  }, []);
-
-  // 3. Hồ sơ Chờ kiểm tra (PENDING_CHECK) - Dành cho Tổ trưởng/Tổ phó
+  // 3. Hồ sơ Chờ kiểm tra (PENDING_CHECK, CHECKED) - Dành cho Tổ trưởng/Tổ phó hoặc người được giao hồ sơ theo dõi
   const pendingCheckRecords = useMemo(() => {
       let list = myRecords.filter(r => 
           (r.status === RecordStatus.PENDING_CHECK || r.status === RecordStatus.CHECKED) &&
-          r.checkedBy === effectiveId
+          (r.checkedBy === effectiveId || r.assignedTo === effectiveId)
       );
       return filterAndSort(list, searchTerm, sortConfig);
   }, [myRecords, searchTerm, sortConfig, effectiveId]);
 
-  // 4. Hồ sơ Chờ ký (PENDING_SIGN) - Chuyển thành Tab chính
+  // 4. Hồ sơ Chờ ký (PENDING_SIGN) - Dành cho người ký duyệt hoặc người được giao hồ sơ theo dõi
   const reviewRecords = useMemo(() => {
       let list = myRecords.filter(r => 
           r.status === RecordStatus.PENDING_SIGN &&
-          r.submittedTo === effectiveId
+          (r.submittedTo === effectiveId || r.assignedTo === effectiveId)
       );
       return filterAndSort(list, searchTerm, sortConfig);
   }, [myRecords, searchTerm, sortConfig, effectiveId]);
@@ -673,9 +660,10 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
             } else {
                 // Normal Record
                 const nowStr = new Date().toISOString();
-                const isLuuTruAll = record.recordType === 'Cung cấp tài liệu đất đai' || 
+                const isLuuTruAll = isArchiveType(record.recordType) || 
                                     record.recordType === 'Sao lục' || 
-                                    record.recordType === 'Công văn';
+                                    record.recordType === 'Công văn' ||
+                                    record.recordType === '1.1 Công văn';
                 const responsibleId = record.assignedTo || user.employeeId || null;
                 const updatedRecord = {
                     ...record,
@@ -1161,6 +1149,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
           case 'pending': return 'Đang thực hiện';
           case 'pending_check': return 'Chờ kiểm tra';
           case 'pending_sign': return 'Chờ ký';
+          case 'finished': return 'Hoàn thành';
           case 'reminder': return 'Nhắc việc';
           default: return 'danh sách';
       }
@@ -1257,7 +1246,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                 >
                     <FileCheck size={16} /> Hoàn thành ({finishedRecords.length})
                 </button>
-                {!isDirector && !isChecker && (
+                {!isDirector && (
                     <button 
                         onClick={() => { setActiveTab('reminder'); setCurrentPage(1); setSearchTerm(''); }}
                         className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-all whitespace-nowrap ${
@@ -1427,7 +1416,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                                                         </button>
                                                     ) : (
                                                         <>
-                                                            {(r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn') ? (
+                                                            {(isArchiveType(r.recordType) || r.recordType === 'Sao lục' || r.recordType === 'Công văn' || r.recordType === '1.1 Công văn') ? (
                                                                 <button onClick={() => handleForwardToSign(r)} title="Trình ký duyệt" className="px-3 py-1.5 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-xs font-bold flex items-center gap-2 shadow-sm transition-all">
                                                                     <Send size={14} /> Trình ký
                                                                 </button>

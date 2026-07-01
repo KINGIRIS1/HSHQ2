@@ -388,7 +388,7 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
 
               // Deadline will be calculated at the end of the loop after all fields (like hasTax) are parsed
 
-              if (record.recordType === 'Cung cấp tài liệu đất đai' || record.recordType === '1. Cung cấp dữ liệu đất đai') {
+              if (record.recordType === 'Cung cấp tài liệu đất đai' || record.recordType === '1. Cung cấp dữ liệu đất đai' || record.recordType === '1.1 Cung cấp dữ liệu đất đai') {
                   record.price = 310000;
               }
 
@@ -644,6 +644,8 @@ const ImportModal: React.FC<ImportModalProps> = ({ isOpen, onClose, onImport, em
               record.id = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substr(2, 9);
               
               if (mode === 'create') {
+                  const category = currentView ? getTabCategory(currentView) : 'receive';
+                  record.isDeptSynced = category !== 'receive';
                   if (!record.customerName) errors.push("Thiếu tên Chủ sử dụng.");
               } else {
                   if (!record.code) errors.push("Thiếu Mã HS (Bắt buộc để cập nhật).");

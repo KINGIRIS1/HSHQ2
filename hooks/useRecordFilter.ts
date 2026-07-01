@@ -1,7 +1,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { RecordFile, User, UserRole, RecordStatus, Employee } from '../types';
-import { removeVietnameseTones, isRecordOverdue, isRecordApproaching } from '../utils/appHelpers';
+import { removeVietnameseTones, isRecordOverdue, isRecordApproaching, isArchiveType } from '../utils/appHelpers';
 import { REGISTRATION_PROCEDURES } from '../constants';
 
 export const useRecordFilter = (
@@ -272,8 +272,13 @@ export const useRecordFilter = (
             return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
         };
         
+        const isSpecializedView = isRegistrationView || isArchiveView || isCongVanView || isOtherView || isMeasurementView;
+        if (isSpecializedView) {
+            result = result.filter(r => r.isDeptSynced !== false);
+        }
+
         if (isArchiveView) {
-            result = result.filter(r => r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục' || r.recordType === 'Công văn' || r.recordType === '1.1 Công văn');
+            result = result.filter(r => isArchiveType(r.recordType) || r.recordType === 'Sao lục' || r.recordType === 'Công văn' || r.recordType === '1.1 Công văn');
         } else if (isCongVanView) {
             result = result.filter(r => r.recordType === 'Công văn' || r.recordType === '1.1 Công văn');
         } else if (isRegistrationView) {
@@ -282,7 +287,8 @@ export const useRecordFilter = (
             result = result.filter(r => ['CMD', 'Tòa án', 'Thi hành án'].includes(r.recordType || ''));
         } else if (isMeasurementView) {
             result = result.filter(r => 
-                !['CMD', 'Tòa án', 'Thi hành án', 'Cung cấp tài liệu đất đai', 'Sao lục', 'Công văn', '1.1 Công văn'].includes(r.recordType || '') &&
+                !['CMD', 'Tòa án', 'Thi hành án'].includes(r.recordType || '') &&
+                !isArchiveType(r.recordType) && r.recordType !== 'Sao lục' && r.recordType !== 'Công văn' && r.recordType !== '1.1 Công văn' &&
                 !isReg(r.recordType)
             );
         }

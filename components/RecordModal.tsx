@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { RecordFile, RecordStatus, Employee, User, UserRole, Holiday } from '../types';
-import { GROUPS, EXTENDED_RECORD_TYPES, STATUS_LABELS, REGISTRATION_PROCEDURES } from '../constants';
+import { GROUPS, STATUS_LABELS, REGISTRATION_PROCEDURES } from '../constants';
 import { isArchiveType, groupEmployeesByDepartment, removeVietnameseTones, getStatusLabel } from '../utils/appHelpers';
 import { getEmployeeTeam } from './AssignModal';
 import { X, Save, Lock, User as UserIcon, MapPin, FileText, Calendar, FileCheck } from 'lucide-react';
@@ -122,7 +122,7 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
         "archive_pending_check_list", "archive_check_list", "archive_handover_list", 
         "archive_director_completed"
     ].includes(currentView)) {
-        return ['1. Cung cấp dữ liệu đất đai'];
+        return ['1.1 Cung cấp dữ liệu đất đai'];
     }
 
     // 2. Phân hệ Cấp Giấy (Đăng ký)
@@ -161,14 +161,14 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
 
     // 5. Mặc định: Hiển thị tất cả ngoại trừ 'CMD', 'Tòa án', 'Thi hành án' và '2.7 Trích lục CMĐ' (không hiện ở tab hồ sơ)
     return [
-      ...REGISTRATION_PROCEDURES,
-      '1. Cung cấp dữ liệu đất đai',
+      '1.1 Cung cấp dữ liệu đất đai',
       '2.1 Trích lục',
       '2.2 Trích lục Quy hoạch',
       '2.3 Trích đo',
       '2.4 Trích đo Cắm mốc',
       '2.5 Trích đo Tách - Hợp thửa',
-      '2.6 Cung cấp số thửa'
+      '2.6 Cung cấp số thửa',
+      ...REGISTRATION_PROCEDURES
     ];
   }, [currentView]);
 
@@ -684,12 +684,10 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                                 </div>
                             </div>
                         )}
-                        {hasAdminRights && (
-                            <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
-                                <div className="flex items-center gap-2 mb-1"><Lock size={14} className="text-yellow-600" /><label className="text-xs font-bold text-yellow-800 uppercase">Ghi chú nội bộ</label></div>
-                                <textarea rows={2} className="w-full border border-yellow-300 rounded-md px-3 py-2 bg-white text-sm" value={val(formData.privateNotes)} onChange={(e) => handleChange('privateNotes', e.target.value)} />
-                            </div>
-                        )}
+                        <div className="bg-yellow-50 p-3 rounded-lg border border-yellow-200">
+                            <div className="flex items-center gap-2 mb-1"><Lock size={14} className="text-yellow-600" /><label className="text-xs font-bold text-yellow-800 uppercase">Ghi chú nội bộ</label></div>
+                            <textarea rows={2} className="w-full border border-yellow-300 rounded-md px-3 py-2 bg-white text-sm" value={val(formData.privateNotes)} onChange={(e) => handleChange('privateNotes', e.target.value)} placeholder="Nhập ghi chú nội bộ..." />
+                        </div>
                     </div>
                 </div>
             </form>

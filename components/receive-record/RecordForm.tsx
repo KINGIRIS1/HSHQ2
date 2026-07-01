@@ -221,7 +221,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
         "archive_pending_check_list", "archive_check_list", "archive_handover_list", 
         "archive_director_completed"
     ].includes(currentView)) {
-        types = ['1. Cung cấp dữ liệu đất đai', '1.1 Công văn'];
+        types = ['1.1 Cung cấp dữ liệu đất đai', '1.1 Công văn'];
     }
 
     // 2. Phân hệ Cấp Giấy
@@ -260,14 +260,14 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
     // 5. Mặc định (cho Một cửa hoặc không xác định): Hiển thị tất cả ngoại trừ 'Cung cấp thông tin'
     else {
         types = [
-          ...REGISTRATION_PROCEDURES,
-          '1. Cung cấp dữ liệu đất đai',
+          '1.1 Cung cấp dữ liệu đất đai',
           '2.1 Trích lục',
           '2.2 Trích lục Quy hoạch',
           '2.3 Trích đo',
           '2.4 Trích đo Cắm mốc',
           '2.5 Trích đo Tách - Hợp thửa',
-          '2.6 Cung cấp số thửa'
+          '2.6 Cung cấp số thửa',
+          ...REGISTRATION_PROCEDURES
         ];
     }
 
@@ -703,6 +703,9 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
         notes: JSON.stringify(extraData),
         id: formData.id || Math.random().toString(36).substr(2, 9), 
         status: formData.status || RecordStatus.RECEIVED,
+        isDeptSynced: formData.id 
+            ? (formData.isDeptSynced ?? true) 
+            : (currentView && currentView !== 'receive_record' && currentView !== 'receive_contract' ? true : false),
         receivedDate: finalReceivedDate,
         receivedBy: formData.receivedBy || currentUser.employeeId || currentUser.username
     } as RecordFile;
