@@ -1,9 +1,6 @@
-
 import { RecordStatus, Employee, RecordFile, User, UserRole, Contract } from './types';
 
 // CẤU HÌNH KẾT NỐI
-// QUAN TRỌNG: Để dùng Cloud (Supabase), hãy dán URL dự án vào đây.
-// Nếu dùng Mạng LAN (Local), đổi lại thành 'http://localhost:3005'
 export const API_BASE_URL = 'https://dajjhubrhybodggbqapt.supabase.co'; 
 
 // PHIÊN BẢN HIỆN TẠI CỦA ỨNG DỤNG
@@ -13,7 +10,7 @@ export const STATUS_LABELS: Record<RecordStatus, string> = {
   [RecordStatus.RECEIVED]: 'Chưa giao',
   [RecordStatus.ASSIGNED]: 'Đã giao việc',
   [RecordStatus.IN_PROGRESS]: 'Đang thực hiện',
-  [RecordStatus.COMPLETED_WORK]: 'Đã thực hiện', // MỚI: Đã bổ sung
+  [RecordStatus.COMPLETED_WORK]: 'Đã thực hiện', 
   [RecordStatus.PENDING_CHECK]: 'Chờ kiểm tra',
   [RecordStatus.CHECKED]: 'Đã kiểm tra',
   [RecordStatus.PENDING_SIGN]: 'Chờ ký duyệt',
@@ -30,7 +27,7 @@ export const STATUS_COLORS: Record<RecordStatus, string> = {
   [RecordStatus.RECEIVED]: 'bg-gray-100 text-gray-800',
   [RecordStatus.ASSIGNED]: 'bg-blue-100 text-blue-800',
   [RecordStatus.IN_PROGRESS]: 'bg-yellow-100 text-yellow-800',
-  [RecordStatus.COMPLETED_WORK]: 'bg-cyan-100 text-cyan-800', // MỚI: Đã bổ sung
+  [RecordStatus.COMPLETED_WORK]: 'bg-cyan-100 text-cyan-800',
   [RecordStatus.PENDING_CHECK]: 'bg-orange-100 text-orange-800',
   [RecordStatus.CHECKED]: 'bg-teal-100 text-teal-800',
   [RecordStatus.PENDING_SIGN]: 'bg-purple-100 text-purple-800',
@@ -53,9 +50,16 @@ export const DEFAULT_WARDS = [
 ];
 
 export const WARDS = DEFAULT_WARDS;
-// Danh sách loại hồ sơ CƠ BẢN (Dùng cho form Tiếp nhận hồ sơ thường xuyên)
+
+// --- PHÂN CHIA LOẠI HỒ SƠ THEO TAB ---
+
+// 1. Tab Lưu trữ: Chỉ có đầu 1.x
+export const ARCHIVE_TYPES = [
+  '1.1 Cung cấp dữ liệu đất đai'
+];
+
+// 2. Tab Đo đạc: Bao gồm toàn bộ từ 2.1 đến 2.6
 export const RECORD_TYPES = [
-  '1. Cung cấp dữ liệu đất đai',
   '2.1 Trích lục',
   '2.2 Trích lục Quy hoạch',
   '2.3 Trích đo',
@@ -63,151 +67,89 @@ export const RECORD_TYPES = [
   '2.5 Trích đo Tách - Hợp thửa',
   '2.6 Cung cấp số thửa'
 ];
-// Danh sách quy trình đăng ký cấp giấy (3.*)
+
+// 3. Tab Đăng ký: Toàn bộ đầu 3.x
 export const REGISTRATION_PROCEDURES = [
   '3.1 Thừa kế',
-  '3.2 Tặng Cho',
-  '3.3 Chuyển Nhượng',
-  '3.4 Thỏa Thuận',
-  '3.5 Chuyển mục đích Không xin phép',
+  '3.2 Tặng cho',
+  '3.3 Chuyển nhượng',
+  '3.4 Thỏa thuận',
+  '3.5 Chuyển mục đích không xin phép',
   '3.6 Cấp đổi',
   '3.7 Cấp lại',
   '3.8 Tách thửa Chuyển mục đích',
   '3.9 Đính chính - Đăng ký biến động',
-  '3.10 Tách thửa, Hợp thửa',
-  '3.11 Gia hạn',
-];
-// Danh sách loại hồ sơ MỞ RỘNG (Dùng cho form Thêm mới trong "Tất cả hồ sơ" - Admin/Nội bộ)
-export const EXTENDED_RECORD_TYPES = [
-  ...RECORD_TYPES,
-  'Cung cấp thông tin',
-  'CMD',
-  'Thi hành án',
-  'Tòa án'
+  '3.10 Tách thửa',
+  '3.11 Hợp thửa',
+  '3.12 Gia hạn',
 ];
 
-// Hàm chuẩn hóa hiển thị tên Xã/Phường (Xóa Xã/Phường/TT)
+// Tổng hợp để dùng cho các bộ lọc chung (không được xóa)
+export const ALL_RECORD_TYPES = [
+  ...ARCHIVE_TYPES,
+  ...RECORD_TYPES,
+  ...REGISTRATION_PROCEDURES
+];
+
+// --- HÀM CHUẨN HÓA VÀ RÚT GỌN ---
+
 export const getNormalizedWard = (ward: string | null | undefined): string => {
   if (!ward) return '';
   let w = ward.trim();
-  
-  // Xóa các tiền tố hành chính thông dụng (không phân biệt hoa thường)
   w = w.replace(/^(xã|phường|thị trấn|tt\.|p\.|x\.)\s+/yi, '');
-
   const lower = w.toLowerCase();
-
-  // 1. Xử lý các mã viết tắt đặc biệt
   if (lower === 'tk' || lower === 'tân khai') return 'Tân Khai';
   if (lower === 'md' || lower === 'minh đức') return 'Minh Đức';
   if (lower === 'th' || lower === 'tân hưng') return 'Tân Hưng';
   if (lower === 'tq' || lower === 'tân quan') return 'Tân Quan';
-
-  // 2. Xử lý Title Case (Viết hoa chữ cái đầu mỗi từ)
   return w.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
 };
 
-// Hàm rút gọn tên loại hồ sơ để hiển thị trong Danh sách (Table)
 export const getShortRecordType = (type: string | null | undefined): string => {
   if (!type) return '---';
   const t = type.toLowerCase();
   
-  if (t.includes('1. Cung cấp dữ liệu đất đai')) return '1.CCDLĐĐ';
-  if (t.includes('2.1 Trích lục')) return '2.1 TL';
-  if (t.includes('2.2 Trích lục Quy hoạch')) return '2.2 TLQH';
-  if (t.includes('2.3 Trích đo')) return '2.3 TĐ';
-  if (t.includes('2.4 Trích đo Cắm mốc')) return '2.4 CMốc';
-  if (t.includes('2.5 Trích đo Tách - Hợp thửa')) return '2.5 TT-TH';
-  if (t.includes('2.6 Cung cấp số thửa')) return '2.6 CCST';
-  if (t.includes('3.1 Thừa kế')) return '3.1 TK';
-  if (t.includes('3.2 Tặng Cho')) return '3.2 TC';
-  if (t.includes('3.3 Chuyển Nhượng')) return '3.3 CN';
-  if (t.includes('3.4 Thỏa Thuận')) return '3.4 VBTT';
-  if (t.includes('3.5 Chuyển mục đích Không xin phép')) return '3.5 CMĐ-KXP';
-  if (t.includes('3.6 Cấp đổi')) return '3.6 Cấp đổi';
-  if (t.includes('3.7 Cấp lại')) return '3.7 Cấp Lại';
-  if (t.includes('3.8 Tách thửa Chuyển mục đích')) return '3.8 TT-CMĐ';
-  if (t.includes('3.9 Đính chính - Đăng ký biến động')) return '3.9 ĐC-ĐKBĐ';
-  if (t.includes('3.10 Tách thửa, Hợp thửa')) return '3.10.TT-HH';
-  if (t.includes('3.11 Gia hạn')) return '3.11 GH';
- 
-  // Ưu tiên kiểm tra các từ khóa dài trước
-  if (t.includes('chỉnh lý') || t.includes('hiến đường') || t.includes('thay đổi hlbv')) return 'Chỉnh lý';
+  // Kiểm tra cụm từ dài/đặc biệt trước
+  if (t.includes('cung cấp dữ liệu đất đai')) return '1.1 CC DL ĐĐ';
+  if (t.includes('trích lục quy hoạch')) return '2.2 TLQH';
   if (t.includes('trích lục')) return '2.1 TL';
-  // Kiểm tra "trích đo" sau "chỉnh lý" vì "trích đo chỉnh lý" chứa "trích đo"
+  if (t.includes('trích đo cắm mốc')) return '2.4 CMốc';
+  if (t.includes('trích đo tách - hợp thửa')) return '2.5 TT-TH';
   if (t.includes('trích đo')) return '2.3 TĐ';
-  
-  return type; // Trả về nguyên bản nếu không khớp quy tắc rút gọn
+  if (t.includes('cung cấp số thửa')) return '2.6 CC Số Thửa';
+  if (t.includes('tách thửa chuyển mục đích')) return '3.8 TT-CMĐ';
+  if (t.includes('chuyển mục đích không xin phép')) return '3.5 CMĐ-KXP';
+  if (t.includes('đính chính') || t.includes('biến động')) return '3.9 ĐC-ĐKBĐ';
+  if (t.includes('thừa kế')) return '3.1 TK';
+  if (t.includes('tặng cho')) return '3.2 TC';
+  if (t.includes('chuyển nhượng')) return '3.3 CN';
+  if (t.includes('thỏa thuận')) return '3.4 VBTT';
+  if (t.includes('cấp đổi')) return '3.6 Cấp Đổi';
+  if (t.includes('cấp lại')) return '3.7 Cấp Lại';
+  if (t.includes('tách thửa')) return '3.10 TT';
+  if (t.includes('hợp thửa')) return '3.11 HT';
+  if (t.includes('gia hạn')) return '3.12 GH';
+ 
+  return type; 
 };
 
+// --- DỮ LIỆU MẪU (MOCK DATA) ---
+
 export const MOCK_EMPLOYEES: Employee[] = [
-  { 
-    id: 'emp1', 
-    name: 'Nguyễn Văn A', 
-    department: 'Phòng Kỹ thuật', 
-    position: 'Trưởng phòng',
-    managedWards: ['Tân Quan'] 
-  },
-  { 
-    id: 'emp2', 
-    name: 'Trần Thị B', 
-    department: 'Phòng Pháp chế', 
-    position: 'Chuyên viên',
-    managedWards: ['Minh Đức', 'Tân Khai'] 
-  },
-  { 
-    id: 'emp3', 
-    name: 'Lê Văn C', 
-    department: 'Ban Lãnh đạo', 
-    position: 'Phó Giám Đốc',
-    managedWards: [] 
-  },
-  { 
-    id: 'emp4', 
-    name: 'Phạm Thị D', 
-    department: 'Tổ Thông tin lưu trữ', 
-    position: 'Tổ trưởng',
-    managedWards: [] 
-  },
-  { 
-    id: 'emp5', 
-    name: 'Hoàng Văn E', 
-    department: 'Tổ Thông tin lưu trữ', 
-    position: 'Chuyên viên',
-    managedWards: [] 
-  }
+  { id: 'emp1', name: 'Nguyễn Văn A', department: 'Tổ Đo dạc', position: 'Tổ Trưởng', managedWards: ['Tân Quan'] },
+  { id: 'emp2', name: 'Trần Thị B', department: 'Tổ Cấp giấy', position: 'Tổ Trưởng', managedWards: ['Minh Đức', 'Tân Khai'] },
+  { id: 'emp3', name: 'Lê Văn C', department: 'Ban Lãnh đạo', position: 'Phó Giám Đốc', managedWards: [] },
+  { id: 'emp4', name: 'Phạm Thị D', department: 'Tổ Thông tin lưu trữ', position: 'Tổ trưởng', managedWards: [] },
+  { id: 'emp5', name: 'Hoàng Văn E', department: 'Tổ Thông tin lưu trữ', position: 'Chuyên viên', managedWards: [] }
 ];
 
 export const MOCK_USERS: User[] = [
-  {
-    username: 'admin',
-    password: '123',
-    name: 'Administrator',
-    role: UserRole.ADMIN
-  },
-  {
-    username: 'manager',
-    password: '123',
-    name: 'Phó Giám Đốc',
-    role: UserRole.SUBADMIN,
-    employeeId: 'emp3'
-  },
-  {
-    username: 'nv_a',
-    password: '123',
-    name: 'Nguyễn Văn A',
-    role: UserRole.EMPLOYEE,
-    employeeId: 'emp1'
-  },
-  {
-    username: 'nv_b',
-    password: '123',
-    name: 'Trần Thị B',
-    role: UserRole.EMPLOYEE,
-    employeeId: 'emp2'
-  }
+  { username: 'admin', password: '123', name: 'Administrator', role: UserRole.ADMIN },
+  { username: 'manager', password: '123', name: 'Phó Giám Đốc', role: UserRole.SUBADMIN, employeeId: 'emp3' },
+  { username: 'nv_a', password: '123', name: 'Nguyễn Văn A', role: UserRole.EMPLOYEE, employeeId: 'emp1' },
+  { username: 'nv_b', password: '123', name: 'Trần Thị B', role: UserRole.EMPLOYEE, employeeId: 'emp2' }
 ];
 
-// Dữ liệu mẫu ban đầu nếu Server chưa có gì
 const getRelativeDate = (daysOffset: number) => {
   const date = new Date();
   date.setDate(date.getDate() + daysOffset);
@@ -220,8 +162,8 @@ export const MOCK_RECORDS: RecordFile[] = [
     code: 'HS-2024-001',
     customerName: 'DỮ LIỆU MẪU (OFFLINE)',
     phoneNumber: '0909123456',
-    recordType: 'Trích lục bản đồ địa chính',
-    content: 'Vui lòng kết nối Server để xem dữ liệu thực',
+    recordType: '2.1 Trích lục',
+    content: 'Dữ liệu mẫu ngoại tuyến',
     receivedDate: getRelativeDate(0), 
     deadline: getRelativeDate(5),      
     status: RecordStatus.RECEIVED,
