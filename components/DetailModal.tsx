@@ -7,7 +7,7 @@ import { X, MapPin, FileText, User as UserIcon, Receipt, DollarSign, CheckCircle
 import { generateDocxBlobAsync, hasTemplate, STORAGE_KEYS } from '../services/docxService';
 import DocxPreviewModal from './DocxPreviewModal';
 import { updateRecordApi, fetchContracts } from '../services/api';
-import { calculateDeadline, isDefaultTaxProcedure, isRegType, getGcnWorkflowStepsHelper } from '../utils/appHelpers';
+import { calculateDeadline, isDefaultTaxProcedure, isRegType, getGcnWorkflowStepsHelper, isArchiveType, isMeasurementType, groupEmployeesByDepartment } from '../utils/appHelpers';
 import { getEmployeeTeam } from './AssignModal';
 import SystemReceiptTemplate from './receive-record/SystemReceiptTemplate';
 import SystemAnnexTemplate from './receive-record/SystemAnnexTemplate';
@@ -49,18 +49,18 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
   const activeRecord = localRecord || initialRecord;
   const record = activeRecord;
 
-  const isGCN = !!(record?.recordType && (
-      record.recordType.trim().toLowerCase().startsWith('3.') || 
-      record.recordType.trim().toLowerCase() === 'đăng ký' || 
-      record.recordType.trim().toLowerCase() === 'cấp giấy' || 
-      record.recordType.trim().toLowerCase() === 'cấp đổi' || 
-      record.recordType.trim().toLowerCase() === 'cấp lại' || 
-      REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === record.recordType?.trim().toLowerCase())
-  ));
+  const isGCN = !!(record?.recordType && isRegType(record.recordType));
+  const isLuuTru = !!(record?.recordType && isArchiveType(record.recordType));
+  const isDoDac = !!(record?.recordType && isMeasurementType(record.recordType));
 
   const isTrichDo = !!(record?.recordType && (
-      record.recordType.toLowerCase().includes('trích đo') || 
-      record.recordType.toLowerCase().includes('trich do')
+      record.recordType.trim().startsWith('2.3') ||
+      record.recordType.trim().startsWith('2.4') ||
+      record.recordType.trim().startsWith('2.5') ||
+      (!record.recordType.trim().startsWith('2.1') && 
+       !record.recordType.trim().startsWith('2.2') && 
+       !record.recordType.trim().startsWith('2.6') && 
+       isMeasurementType(record.recordType))
   ));
 
   const showLiquidationAndAnnex = !isGCN && isTrichDo;
@@ -113,7 +113,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
           return checkerName || "Tổ trưởng kiểm tra";
       }
       if (label.includes("trình ký gcn") || label.includes("trình ký giấy")) {
-          return directorName ? `Trình: ${assignedName || "NV"} -> Duyệt: ${directorName}` : (assignedName || "Nhân viên trình");
+          return directorName ? `Trình: ${checkerName || assignedName || "Tổ trưởng"} -> Duyệt: ${directorName}` : (checkerName || assignedName || "Tổ trưởng trình");
       }
       if (label.includes("vô số")) {
           return assignedName || "Cán bộ bộ phận Cấp giấy";
@@ -147,6 +147,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
   const [exportDate, setExportDate] = useState('');
   const [resultReturnedDate, setResultReturnedDate] = useState('');
   const [receiptNumber, setReceiptNumber] = useState('');
+  const [paymentAmount, setPaymentAmount] = useState('');
   const [isSavingRecordInfo, setIsSavingRecordInfo] = useState(false);
 
   // State cho Nhắc nhở
@@ -220,6 +221,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
           setExportDate(record.exportDate ? record.exportDate.split('T')[0] : '');
           setResultReturnedDate(record.resultReturnedDate ? record.resultReturnedDate.split('T')[0] : '');
           setReceiptNumber(record.receiptNumber || '');
+          setPaymentAmount(record.paymentAmount !== null && record.paymentAmount !== undefined ? String(record.paymentAmount) : '');
           // Chuyển ISO string sang format datetime-local (yyyy-MM-ddTHH:mm) để hiển thị trong input
           if (record.reminderDate) {
               const d = new Date(record.reminderDate);
@@ -385,6 +387,9 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       if (!activeRecord) return;
       
       const batchVal = exportBatch && !isNaN(parseInt(exportBatch, 10)) ? parseInt(exportBatch, 10) : null;
+      const paymentVal = paymentAmount && !isNaN(parseInt(paymentAmount.replace(/[^0-9]/g, ''), 10))
+          ? parseInt(paymentAmount.replace(/[^0-9]/g, ''), 10)
+          : null;
       
       const updatedRecord = { 
           ...activeRecord, 
@@ -396,6 +401,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
           resultReturnedDate: resultReturnedDate || null,
           receiptNumber: receiptNumber || null,
           privateNotes: privateNote || null,
+          paymentAmount: paymentVal,
       };
       
       const result = await updateRecordApi(updatedRecord);
@@ -419,7 +425,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
       const currentPrivateNotes = activeRecord.privateNotes ? `${activeRecord.privateNotes}\n${formattedReason}` : formattedReason;
       
       const isReg = isGCN;
-      const isArchive = activeRecord.recordType === 'Sao lục' || activeRecord.recordType === 'Công văn';
+      const isArchive = !!(activeRecord.recordType && isArchiveType(activeRecord.recordType));
       
       let nextStatus = RecordStatus.IN_PROGRESS;
       const trackingUpdates: Partial<RecordFile> = {};
@@ -1430,89 +1436,129 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                     </div>
 
                     {/* CẬP NHẬT THÔNG TIN HỒ SƠ */}
-                    <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm space-y-5">
-                        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                            <h3 className="text-xs font-bold text-indigo-600 uppercase flex items-center gap-2 border-l-4 border-indigo-600 pl-2">
-                                <FileSignature size={16}/> Thông tin hồ sơ cập nhật
-                            </h3>
-                        </div>
-
-                        {/* ROW 1: SỐ TRÍCH ĐO, SỐ TRÍCH LỤC, GIAO NHÂN VIÊN XỬ LÝ */}
-                        <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-200">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                                <div className="md:col-span-1">
-                                    <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1.5">Số trích đo</label>
-                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
-                                        {measurementNumber || <span className="text-gray-400 italic">Chưa có</span>}
-                                    </div>
-                                </div>
-                                <div className="md:col-span-1">
-                                    <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1.5">Số trích lục</label>
-                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
-                                        {excerptNumber || <span className="text-gray-400 italic">Chưa có</span>}
-                                    </div>
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className="block text-[11px] font-bold text-gray-500 uppercase mb-1.5">Nhân viên xử lý</label>
-                                    <div className="bg-white border border-gray-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
-                                        {(() => {
-                                            const emp = employees.find(e => e.id === assignedTo);
-                                            return emp ? `${emp.name} ${emp.department ? `(${emp.department})` : ''}` : <span className="text-gray-400 italic">Chưa giao việc</span>;
-                                        })()}
-                                    </div>
-                                </div>
+                    <div className="space-y-4">
+                        {/* Hàng 1: GIAO NHÂN VIÊN */}
+                        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
+                            <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Giao nhân viên xử lý</label>
+                                <select 
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all cursor-pointer font-semibold text-gray-700"
+                                    value={assignedTo}
+                                    onChange={(e) => setAssignedTo(e.target.value)}
+                                >
+                                    <option value="">-- Chưa giao --</option>
+                                    {groupEmployeesByDepartment(employees).map(group => (
+                                        <optgroup key={group.key} label={group.label} className="font-bold text-blue-700 bg-blue-50">
+                                            {group.employees.map(emp => (
+                                                <option key={emp.id} value={emp.id} className="text-gray-800 font-normal bg-white">
+                                                    {emp.name} ({emp.position || 'Nhân viên'})
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    ))}
+                                </select>
                             </div>
                         </div>
 
-                        {/* ROW 2: ĐỢT XUẤT (BATCH), NGÀY XUẤT */}
-                        <div className="bg-blue-50/30 p-4 rounded-xl border border-blue-200">
+                        {/* Hàng 2: ĐỢT XUẤT, NGÀY XUẤT */}
+                        <div className="bg-indigo-50/40 p-4 rounded-xl border border-indigo-200 shadow-sm">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-[11px] font-bold text-blue-600 uppercase mb-1.5">Đợt xuất (Batch)</label>
-                                    <div className="bg-white border border-blue-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
-                                        {exportBatch || <span className="text-gray-400 italic">Chưa có</span>}
-                                    </div>
+                                    <label className="text-[10px] font-bold text-indigo-700 uppercase block mb-1">Đợt xuất (Batch)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-medium text-gray-800"
+                                        placeholder="Nhập đợt xuất..."
+                                        value={exportBatch}
+                                        onChange={(e) => setExportBatch(e.target.value)}
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-[11px] font-bold text-blue-600 uppercase mb-1.5">Ngày xuất</label>
-                                    <div className="bg-white border border-blue-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
-                                        {exportDate ? formatDate(exportDate) : <span className="text-gray-400 italic">Chưa có</span>}
-                                    </div>
+                                    <label className="text-[10px] font-bold text-indigo-700 uppercase block mb-1">Ngày xuất</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full border border-indigo-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all font-medium text-gray-800"
+                                        value={exportDate}
+                                        onChange={(e) => setExportDate(e.target.value)}
+                                    />
                                 </div>
                             </div>
                         </div>
 
-                        {/* ROW 3: TRẢ KẾT QUẢ CHO DÂN */}
-                        <div className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-200">
-                            <h4 className="text-xs font-bold text-emerald-800 uppercase flex items-center gap-2 mb-3">
-                                <FileCheck size={16} className="text-emerald-600" />
-                                <span>Trả kết quả cho dân</span>
+                        {/* Hàng 3: TRẢ KẾT QUẢ CHO DÂN */}
+                        <div className="bg-emerald-50/30 p-4 rounded-xl border border-emerald-200 shadow-sm space-y-3">
+                            <h4 className="text-xs font-bold text-emerald-800 uppercase flex items-center gap-1.5">
+                                <FileCheck size={14} className="text-emerald-600" /> Trả kết quả cho dân
                             </h4>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
-                                    <label className="block text-[11px] font-bold text-emerald-600 uppercase mb-1.5">Ngày trả kết quả</label>
-                                    <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
-                                        {resultReturnedDate ? formatDate(resultReturnedDate) : <span className="text-gray-400 italic">Chưa có</span>}
-                                    </div>
+                                    <label className="text-[10px] font-bold text-emerald-700 uppercase block mb-1">Ngày trả kết quả</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full border border-emerald-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all font-medium text-gray-800"
+                                        value={resultReturnedDate}
+                                        onChange={(e) => setResultReturnedDate(e.target.value)}
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-[11px] font-bold text-emerald-600 uppercase mb-1.5">Số Biên Lai</label>
-                                    <div className="bg-white border border-emerald-200 rounded-lg px-3 py-2 text-sm font-medium text-gray-800 shadow-sm min-h-[38px] flex items-center">
-                                        {receiptNumber || <span className="text-gray-400 italic">Chưa có</span>}
-                                    </div>
+                                    <label className="text-[10px] font-bold text-emerald-700 uppercase block mb-1">Số Biên lai/ Hóa đơn</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border border-emerald-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all font-medium text-gray-800"
+                                        placeholder="Nhập số biên lai/ hóa đơn..."
+                                        value={receiptNumber}
+                                        onChange={(e) => setReceiptNumber(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[10px] font-bold text-emerald-700 uppercase block mb-1">Số tiền (VNĐ)</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full border border-emerald-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100 transition-all font-mono font-bold text-emerald-800 text-right"
+                                        placeholder="Nhập số tiền..."
+                                        value={paymentAmount ? parseInt(paymentAmount.replace(/[^0-9]/g, ''), 10).toLocaleString('vi-VN') : ''}
+                                        onChange={(e) => {
+                                            const raw = e.target.value.replace(/[^0-9]/g, '');
+                                            setPaymentAmount(raw);
+                                        }}
+                                    />
                                 </div>
                             </div>
                         </div>
 
-                        {/* ROW 4: GHI CHÚ NỘI BỘ */}
-                        <div className="bg-yellow-50/30 p-4 rounded-xl border border-yellow-200">
-                            <h4 className="text-xs font-bold text-yellow-800 uppercase flex items-center gap-2 mb-3">
-                                <Lock size={14} className="text-yellow-600" />
-                                <span>Ghi chú nội bộ</span>
+                        {/* Hàng 4: GHI CHÚ NỘI BỘ */}
+                        <div className="bg-yellow-50/40 p-4 rounded-xl border border-yellow-200 shadow-sm space-y-2">
+                            <h4 className="text-xs font-bold text-yellow-800 uppercase flex items-center gap-1.5">
+                                <Lock size={14} className="text-yellow-600" /> Ghi chú nội bộ
                             </h4>
-                            <div className="bg-white border border-yellow-200 rounded-lg p-3 text-sm text-gray-800 shadow-sm min-h-[80px] whitespace-pre-wrap">
-                                {privateNote || <span className="text-gray-400 italic">Chưa có ghi chú nội bộ</span>}
-                            </div>
+                            <textarea 
+                                rows={2} 
+                                className="w-full border border-yellow-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:border-yellow-500 focus:ring-2 focus:ring-yellow-100 transition-all font-medium text-gray-800"
+                                placeholder="Nhập ghi chú nội bộ cho hồ sơ..."
+                                value={privateNote}
+                                onChange={(e) => setPrivateNote(e.target.value)}
+                            />
+                        </div>
+
+                        {/* NÚT LƯU CẬP NHẬT */}
+                        <div className="flex justify-end pt-2">
+                            <button
+                                onClick={handleSaveRecordInfo}
+                                disabled={isSavingRecordInfo}
+                                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 text-white font-bold text-xs rounded-lg shadow-md transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                            >
+                                {isSavingRecordInfo ? (
+                                    <>
+                                        <Loader2 size={14} className="animate-spin" />
+                                        Đang lưu...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save size={14} />
+                                        Cập nhật thông tin hồ sơ
+                                    </>
+                                )}
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1647,8 +1693,8 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                                 })() : undefined}
                             />
 
-                            {/* Ẩn mốc kiểm tra cho một số loại hồ sơ */}
-                            {!(record.recordType === 'Cung cấp tài liệu đất đai' || record.recordType === 'Sao lục' || record.recordType === 'Công văn') && (
+                            {/* Ẩn mốc kiểm tra cho hồ sơ Lưu trữ */}
+                            {!isLuuTru && (
                                 <>
                                     <TimelineItem 
                                         date={record.pendingCheckDate} 
@@ -1657,12 +1703,9 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                                         icon={Send}
                                         colorClass={{text: 'text-orange-700', border: 'border-orange-600', bg: 'bg-orange-600'}}
                                         subText={record.pendingCheckDate ? (() => {
-                                            const assigned = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
                                             const checker = record.checkedBy ? employees.find(e => e.id === record.checkedBy) : null;
-                                            let text = '';
-                                            if (assigned) text += `Người trình: ${assigned.name}`;
-                                            if (checker) text += (text ? ` \n` : '') + `Người kiểm tra: ${checker.name} (${checker.position || 'Tổ trưởng'})`;
-                                            return text || undefined;
+                                            if (checker) return `Người kiểm tra: ${checker.name} (${checker.position || 'Tổ trưởng'})`;
+                                            return undefined;
                                         })() : undefined}
                                     />
 
@@ -1687,14 +1730,7 @@ export const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, recor
                                 label="TRÌNH KÝ" 
                                 icon={Send}
                                 colorClass={{text: 'text-purple-700', border: 'border-purple-600', bg: 'bg-purple-600'}}
-                                subText={record.submissionDate ? (() => {
-                                    const assigned = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
-                                    const director = record.submittedTo ? (users.find(u => u.employeeId === record.submittedTo) || employees.find(e => e.id === record.submittedTo)) : null;
-                                    let text = '';
-                                    if (assigned) text += `Người trình: ${assigned.name}`;
-                                    if (director) text += (text ? ` \n` : '') + `Người nhận trình: ${director.name} (${(director as any).position || 'Lãnh đạo'})`;
-                                    return text || undefined;
-                                })() : undefined}
+                                subText={undefined}
                             />
                             
                              <TimelineItem 

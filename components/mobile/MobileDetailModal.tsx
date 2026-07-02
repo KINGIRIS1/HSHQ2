@@ -800,7 +800,7 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
                       return checkerName || "Tổ trưởng kiểm tra";
                   }
                   if (label.includes("trình ký gcn") || label.includes("trình ký giấy")) {
-                      return directorName ? `Trình: ${assignedName || "NV"} -> Duyệt: ${directorName}` : (assignedName || "Nhân viên trình");
+                      return directorName ? `Trình: ${checkerName || assignedName || "Tổ trưởng"} -> Duyệt: ${directorName}` : (checkerName || assignedName || "Tổ trưởng trình");
                   }
                   if (label.includes("vô số")) {
                       return assignedName || "Cán bộ bộ phận Cấp giấy";
@@ -1021,12 +1021,9 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
                         icon={Send}
                         colorClass={{text: 'text-orange-600', border: 'border-orange-600', bg: 'bg-orange-600'}}
                         subText={record.pendingCheckDate ? (() => {
-                            const assigned = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
                             const checker = record.checkedBy ? employees.find(e => e.id === record.checkedBy) : null;
-                            let text = '';
-                            if (assigned) text += `Người trình: ${assigned.name}`;
-                            if (checker) text += (text ? ` \n` : '') + `Người kiểm tra: ${checker.name} (${checker.position || 'Tổ trưởng'})`;
-                            return text || undefined;
+                            if (checker) return `Người kiểm tra: ${checker.name} (${checker.position || 'Tổ trưởng'})`;
+                            return undefined;
                         })() : undefined}
                       />
                       <TimelineItem 
@@ -1050,14 +1047,7 @@ export const MobileDetailModal: React.FC<MobileDetailModalProps> = ({
                     label="TRÌNH KÝ" 
                     icon={Send}
                     colorClass={{text: 'text-purple-600', border: 'border-purple-600', bg: 'bg-purple-600'}}
-                    subText={record.submissionDate ? (() => {
-                        const assigned = record.assignedTo ? employees.find(e => e.id === record.assignedTo) : null;
-                        const director = record.submittedTo ? (users.find(u => u.employeeId === record.submittedTo) || employees.find(e => e.id === record.submittedTo)) : null;
-                        let text = '';
-                        if (assigned) text += `Người trình: ${assigned.name}`;
-                        if (director) text += (text ? ` \n` : '') + `Người nhận trình: ${director.name} (${(director as any).position || 'Lãnh đạo'})`;
-                        return text || undefined;
-                    })() : undefined}
+                    subText={undefined}
                   />
                   
                   <TimelineItem 

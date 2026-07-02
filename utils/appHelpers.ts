@@ -29,20 +29,22 @@ export function formatDateKey(date: Date): string {
 export function calculateDeadline(type: string, receivedDateStr: string, holidays: Holiday[] = [], hasTax?: boolean): string {
     if (!receivedDateStr) return '';
     let daysToAdd = 30; 
-    const lowerType = (type || '').toLowerCase();
+    const lowerType = (type || '').trim().toLowerCase();
 
-    if (lowerType.includes('cmđ') || lowerType.includes('cmd') || lowerType.includes('2.7 trích lục cmđ')) {
-        daysToAdd = 2;
-    } else if (lowerType.includes('cung cấp tài liệu đất đai') || 
-        lowerType.includes('cung cấp dữ liệu đất đai') || 
-        lowerType.includes('dữ liệu đất đai') || 
-        lowerType.includes('trích lục quy hoạch') || 
-        lowerType.includes('cung cấp số thửa đất') || 
-        lowerType.includes('cung cấp số thửa') || 
-        lowerType.includes('trích lục')) {
+    if (lowerType.startsWith('1.') || isArchiveType(type)) {
         daysToAdd = 10;
-    } else if (lowerType.includes('trích đo') || lowerType.includes('cắm mốc') || lowerType.includes('tách thửa')) {
+    } else if (lowerType.startsWith('2.') || isMeasurementType(type)) {
+        if (lowerType.includes('cmđ') || lowerType.includes('cmd')) {
+            daysToAdd = 2;
+        } else if (lowerType.includes('trích đo') || lowerType.includes('cắm mốc') || lowerType.includes('tách')) {
+            daysToAdd = 30;
+        } else {
+            daysToAdd = 10;
+        }
+    } else if (lowerType.startsWith('3.') || isRegType(type)) {
         daysToAdd = 30;
+    } else if (lowerType.includes('cmđ') || lowerType.includes('cmd')) {
+        daysToAdd = 2;
     }
     
     // Note: The user requested that the receipt's appointment date (expected) should NOT include the financial obligation payment time.
@@ -142,14 +144,29 @@ export function getStatusLabel(status: RecordStatus, recordType?: string | null)
 
 export function isMeasurementType(recordType: string | null | undefined): boolean {
     if (!recordType) return false;
-    const t = recordType.toLowerCase();
-    return t.includes('đo đạc') || t.includes('trích đo') || t.includes('cắm mốc') || t.includes('trích lục') || t.includes('số thửa');
+    const t = recordType.trim().toLowerCase();
+    if (t.startsWith('1.')) return false;
+    if (t.startsWith('2.')) return true;
+    if (t.startsWith('3.')) return false;
+    return t.includes('đo đạc') || 
+           t.includes('trích đo') || 
+           t.includes('cắm mốc') || 
+           t.includes('trích lục') || 
+           t.includes('số thửa');
 }
 
 export function isArchiveType(recordType: string | null | undefined): boolean {
     if (!recordType) return false;
-    const t = recordType.toLowerCase();
-    return t.includes('lưu trữ') || t.includes('cung cấp dữ liệu') || t.includes('cung cấp tài liệu') || t.includes('cung cấp thông tin');
+    const t = recordType.trim().toLowerCase();
+    if (t.startsWith('1.')) return true;
+    if (t.startsWith('2.')) return false;
+    if (t.startsWith('3.')) return false;
+    return t.includes('lưu trữ') || 
+           t.includes('sao lục') || 
+           t.includes('công văn') || 
+           t.includes('cung cấp dữ liệu') || 
+           t.includes('cung cấp tài liệu') || 
+           t.includes('cung cấp thông tin');
 }
 
 // --- HÀM TIỆN ÍCH XỬ LÝ CHUỖI TIẾNG VIỆT ---
@@ -179,11 +196,14 @@ export function isDefaultTaxProcedure(type: string | null | undefined): boolean 
 export function isRegType(type: string | null | undefined): boolean {
     if (!type) return false;
     const t = type.trim().toLowerCase();
+    if (t.startsWith('1.')) return false;
+    if (t.startsWith('2.')) return false;
+    if (t.startsWith('3.')) return true;
     const REG_PROCEDURES = [
         "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
         "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
     ];
-    return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
+    return t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
 }
 
 export interface GcnStepConfig {
@@ -291,19 +311,21 @@ export function getGcnWorkflowStepsHelper(record: RecordFile, holidays: Holiday[
 
     // Proportional scaling of GCN workflow step durations to synchronize with the total received days of the procedure
     let totalProcedureDays = 30;
-    const rTypeLower = (record.recordType || '').toLowerCase();
-    if (rTypeLower.includes('cmđ') || rTypeLower.includes('cmd') || rTypeLower.includes('2.7 trích lục cmđ')) {
-        totalProcedureDays = 2;
-    } else if (rTypeLower.includes('cung cấp tài liệu đất đai') || 
-        rTypeLower.includes('cung cấp dữ liệu đất đai') || 
-        rTypeLower.includes('dữ liệu đất đai') || 
-        rTypeLower.includes('trích lục quy hoạch') || 
-        rTypeLower.includes('cung cấp số thửa đất') || 
-        rTypeLower.includes('cung cấp số thửa') || 
-        rTypeLower.includes('trích lục')) {
+    const rTypeLower = (record.recordType || '').trim().toLowerCase();
+    if (rTypeLower.startsWith('1.') || isArchiveType(record.recordType)) {
         totalProcedureDays = 10;
-    } else if (rTypeLower.includes('trích đo') || rTypeLower.includes('cắm mốc') || rTypeLower.includes('tách thửa')) {
+    } else if (rTypeLower.startsWith('2.') || isMeasurementType(record.recordType)) {
+        if (rTypeLower.includes('cmđ') || rTypeLower.includes('cmd')) {
+            totalProcedureDays = 2;
+        } else if (rTypeLower.includes('trích đo') || rTypeLower.includes('cắm mốc') || rTypeLower.includes('tách')) {
+            totalProcedureDays = 30;
+        } else {
+            totalProcedureDays = 10;
+        }
+    } else if (rTypeLower.startsWith('3.') || isRegType(record.recordType)) {
         totalProcedureDays = 30;
+    } else if (rTypeLower.includes('cmđ') || rTypeLower.includes('cmd')) {
+        totalProcedureDays = 2;
     }
 
     const getDefaultWeight = (label: string): number => {

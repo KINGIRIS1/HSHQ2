@@ -4,7 +4,7 @@ import { RecordFile } from '../types';
 import { MOCK_RECORDS, API_BASE_URL } from '../constants';
 import { logError, getFromCache, saveToCache, CACHE_KEYS, sanitizeData, normalizeCode, mapRecordFromDb } from './apiCore';
 
-const RECORD_DB_COLUMNS = [
+export const RECORD_DB_COLUMNS = [
     'id', 'code', 'customerName', 'phoneNumber', 'cccd', 'customerAddress', 'ward', 'landPlot', 'mapSheet', 
     'area', 'address', 'group', 'content', 'recordType', 'receivedDate', 'receivedBy', 'deadline', 
     'assignedDate', 'submissionDate', 'approvalDate', 'completedDate', 'status', 'assignedTo', 'submittedTo', 'checkedBy',
@@ -13,7 +13,7 @@ const RECORD_DB_COLUMNS = [
     'authorizedBy', 'authDocType', 'otherDocs', 'exportBatch', 'exportDate', 'handoverWard',
     'measurementNumber', 'excerptNumber',
     'reminderDate', 'lastRemindedAt',
-    'receiptNumber', 'resultReturnedDate', 'receiverName',
+    'receiptNumber', 'resultReturnedDate', 'receiverName', 'receiptType', 'paymentAmount', 'receiptPhoto',
     'needsMapCorrection',
     'issueNumber', 'entryNumber', 'issueDate', 'residentialArea',
     'price', 'advancePayment', 'isDeptSynced',
@@ -21,9 +21,9 @@ const RECORD_DB_COLUMNS = [
     'rejectReason', 'rejectDate'
 ];
 
-const OPTIONAL_NEW_COLUMNS = [
+export const OPTIONAL_NEW_COLUMNS = [
     'customerAddress', 'issueNumber', 'entryNumber', 'issueDate', 'residentialArea',
-    'needsMapCorrection', 'receiptNumber', 'resultReturnedDate', 'receiverName',
+    'needsMapCorrection', 'receiptNumber', 'resultReturnedDate', 'receiverName', 'receiptType', 'paymentAmount', 'receiptPhoto',
     'reminderDate', 'lastRemindedAt', 'measurementNumber', 'excerptNumber',
     'authorizedBy', 'authDocType', 'otherDocs',
     'privateNotes', 'personalNotes', 'checkedBy', 'pendingCheckDate', 'checkedDate', 'completedWorkDate',

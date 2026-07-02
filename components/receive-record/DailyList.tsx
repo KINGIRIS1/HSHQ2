@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import * as XLSX from 'xlsx-js-style';
 import { RecordFile, RecordStatus, Employee } from '../../types';
 import { getNormalizedWard, getShortRecordType, REGISTRATION_PROCEDURES } from '../../constants';
+import { isArchiveType, isMeasurementType, isRegType } from '../../utils/appHelpers';
 import { Search, Eye, FileSpreadsheet, Pencil, Printer, Trash2, Send, XCircle, UserPlus } from 'lucide-react';
 import AssignModal from '../AssignModal';
 
@@ -78,8 +79,20 @@ const DailyList: React.FC<DailyListProps> = ({
           const recordDate = r.receivedDate ? r.receivedDate.split('T')[0] : '';
           if (recordDate !== filterDate) return false;
           
-          // 2. Lọc theo Bộ phận (gồm: Đo đạc, Lưu trữ, Đăng ký)
+          // 2. Lọc theo Bộ phận (gồm: 1.x Lưu trữ, 2.x Đo đạc, 3.x Cấp giấy)
           const getRecordDepartment = (rec: RecordFile): string => {
+              if (rec.recordType) {
+                  if (isArchiveType(rec.recordType)) {
+                      return '1.x Lưu trữ';
+                  }
+                  if (isMeasurementType(rec.recordType)) {
+                      return '2.x Đo đạc';
+                  }
+                  if (isRegType(rec.recordType)) {
+                      return '3.x Cấp giấy';
+                  }
+              }
+
               if (rec.assignedTo) {
                   const emp = employees.find(e => e.id === rec.assignedTo);
                   if (emp && emp.department) {
@@ -90,14 +103,14 @@ const DailyList: React.FC<DailyListProps> = ({
                           deptLower.includes('tổ đo') || deptLower.includes('dia chinh') ||
                           deptLower.includes('bản đồ') || deptLower.includes('ban do')
                       ) {
-                          return 'Đo đạc';
+                          return '2.x Đo đạc';
                       }
                       if (
                           deptLower.includes('lưu trữ') || deptLower.includes('luu tru') || 
                           deptLower.includes('sao lục') || deptLower.includes('sao luc') ||
                           deptLower.includes('văn thư') || deptLower.includes('van thu')
                       ) {
-                          return 'Lưu trữ';
+                          return '1.x Lưu trữ';
                       }
                       if (
                           deptLower.includes('đăng ký') || deptLower.includes('dang ky') || 
@@ -105,48 +118,12 @@ const DailyList: React.FC<DailyListProps> = ({
                           deptLower.includes('biến động') || deptLower.includes('bien dong') ||
                           deptLower.includes('một cửa') || deptLower.includes('mot cua')
                       ) {
-                          return 'Cấp giấy';
+                          return '3.x Cấp giấy';
                       }
                   }
               }
 
-              if (rec.recordType) {
-                  const typeLower = rec.recordType.toLowerCase();
-                  if (
-                      typeLower.includes('trích đo') || typeLower.includes('trich do') || 
-                      typeLower.includes('cắm mốc') || typeLower.includes('cam moc') || 
-                      typeLower.includes('tách thửa') || typeLower.includes('tach thua') ||
-                      typeLower.includes('đo đạc') || typeLower.includes('do dac')
-                  ) {
-                      return 'Đo đạc';
-                  }
-                  
-                  if (
-                      typeLower.includes('cung cấp') || typeLower.includes('cung cap') || 
-                      typeLower.includes('trích lục') || typeLower.includes('trich luc') || 
-                      typeLower.includes('lưu trữ') || typeLower.includes('luu tru') || 
-                      typeLower.includes('sao lục') || typeLower.includes('sao luc')
-                  ) {
-                      return 'Lưu trữ';
-                  }
-                  
-                  if (
-                      typeLower.includes('đăng ký') || typeLower.includes('dang ky') ||
-                      typeLower.includes('cấp giấy') || typeLower.includes('cap giay') ||
-                      typeLower.includes('cấp đổi') || typeLower.includes('cap doi') ||
-                      typeLower.includes('biến động') || typeLower.includes('bien dong') ||
-                      typeLower.includes('chuyển nhượng') || typeLower.includes('chuyen nhuong') ||
-                      typeLower.includes('thế chấp') || typeLower.includes('the chap') ||
-                      typeLower.includes('xóa thế chấp') || typeLower.includes('xoa the chap') ||
-                      typeLower.includes('tặng cho') || typeLower.includes('tang cho') ||
-                      typeLower.includes('thừa kế') || typeLower.includes('thua ke') ||
-                      typeLower.includes('thỏa thuận') || typeLower.includes('thoa thuan')
-                  ) {
-                      return 'Cấp giấy';
-                  }
-              }
-
-              return 'Cấp giấy';
+              return '3.x Cấp giấy';
           };
           // Bỏ chức năng chọn toàn bộ mặc định. Tích bộ nào hiển thị bộ đó, không tích bộ nào thì không hiển thị.
           const rDept = getRecordDepartment(r);
@@ -572,7 +549,7 @@ const DailyList: React.FC<DailyListProps> = ({
       }
   };
 
-  const DEPARTMENTS = ['Đo đạc', 'Lưu trữ', 'Cấp giấy'];
+  const DEPARTMENTS = ['1.x Lưu trữ', '2.x Đo đạc', '3.x Cấp giấy'];
 
   return (
     <div className="flex flex-col h-full space-y-4 animate-fade-in">

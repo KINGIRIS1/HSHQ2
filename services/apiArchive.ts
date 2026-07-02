@@ -1,6 +1,7 @@
 
 import { supabase, isConfigured } from './supabaseClient';
-import { logError, getFromCache, saveToCache } from './apiCore';
+import { logError, getFromCache, saveToCache, sanitizeData } from './apiCore';
+import { RECORD_DB_COLUMNS, OPTIONAL_NEW_COLUMNS } from './apiRecords';
 
 // --- TYPES ---
 export interface ArchiveRecord {
@@ -72,19 +73,7 @@ export const migrateCungCapTaiLieu = async () => {
                 completedWorkDate: originalData.ngay_hoan_thanh || originalData.completedWorkDate
             };
 
-            const validCols = [
-                'id', 'code', 'customerName', 'phoneNumber', 'cccd', 'customerAddress', 'ward', 'landPlot', 'mapSheet', 
-                'area', 'address', 'group', 'content', 'recordType', 'receivedDate', 'receivedBy', 'deadline', 
-                'assignedDate', 'submissionDate', 'approvalDate', 'completedDate', 'status', 'assignedTo', 'submittedTo', 'checkedBy',
-                'pendingCheckDate', 'checkedDate', 'completedWorkDate',
-                'notes', 'privateNotes', 'personalNotes', 
-                'authorizedBy', 'authDocType', 'otherDocs', 'exportBatch', 'exportDate', 'handoverWard',
-                'measurementNumber', 'excerptNumber',
-                'reminderDate', 'lastRemindedAt',
-                'receiptNumber', 'resultReturnedDate', 'receiverName',
-                'needsMapCorrection',
-                'issueNumber', 'entryNumber', 'issueDate', 'residentialArea'
-            ];
+            const validCols = RECORD_DB_COLUMNS;
 
             // Bảo toàn thêm các trường hợp lệ khác
             for (const key of Object.keys(originalData)) {
@@ -92,14 +81,29 @@ export const migrateCungCapTaiLieu = async () => {
                     safeData[key] = originalData[key];
                 }
             }
-            return safeData;
+
+            // Sanitize records using exact RECORD_DB_COLUMNS configuration
+            return sanitizeData(safeData, RECORD_DB_COLUMNS);
         });
 
         // Insert into land_records using upsert to avoid conflicts on duplicate IDs
-        const { error: insertError } = await supabase
+        let { error: insertError } = await supabase
             .from('land_records')
             .upsert(landRecordsToInsert);
             
+        if (insertError && (insertError.code === 'PGRST204' || String(insertError.code) === '42703' || (insertError.message && String(insertError.message).includes('does not exist')))) {
+            console.warn("⚠️ [Migration Fallback] Database is missing columns. Retrying without new columns...", insertError);
+            const fallbackRecords = landRecordsToInsert.map(record => {
+                const fallbackPayload = { ...record };
+                OPTIONAL_NEW_COLUMNS.forEach(col => delete fallbackPayload[col]);
+                return fallbackPayload;
+            });
+            const { error: fallbackError } = await supabase
+                .from('land_records')
+                .upsert(fallbackRecords);
+            insertError = fallbackError;
+        }
+
         if (insertError) throw insertError;
 
         const idsToDelete = cungCapRecords.map(r => r.id);

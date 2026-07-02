@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { RecordFile, Holiday, RecordStatus, User, Employee, UserRole } from '../../types';
 import { RECORD_TYPES, REGISTRATION_PROCEDURES, STATUS_LABELS } from '../../constants';
 import { getStatusLabel, isMeasurementType, isArchiveType, removeVietnameseTones, groupEmployeesByDepartment } from '../../utils/appHelpers';
-import { Save, User as UserIcon, Calendar, MapPin, FileCheck, Loader2, Printer, RotateCcw, XCircle, CheckCircle, AlertCircle, X, Phone, FileText, BookOpen, Clock, Hash, Map } from 'lucide-react';
+import { Save, User as UserIcon, Calendar, MapPin, FileCheck, Loader2, Printer, RotateCcw, XCircle, CheckCircle, AlertCircle, X, Phone, FileText, BookOpen, Clock, Hash, Map, Camera, Trash2, Upload } from 'lucide-react';
 import SimpleRecordForm from './SimpleRecordForm';
 
 interface RecordFormProps {
@@ -1613,7 +1613,7 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                             <FileCheck size={16} />
                             TRẢ KẾT QUẢ CHO DÂN
                         </div>
-                        <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-emerald-50/20">
+                        <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 bg-emerald-50/20">
                             <div>
                                 <label className={`${labelClass} text-emerald-800`}>Ngày trả kết quả</label>
                                 <input 
@@ -1624,32 +1624,28 @@ const RecordForm: React.FC<RecordFormProps> = ({ onSave, wards, records, holiday
                                 />
                             </div>
                             <div>
-                                <label className={`${labelClass} text-emerald-800`}>Số Biên Lai</label>
+                                <label className={`${labelClass} text-emerald-800`}>Số Biên lai/ Hóa đơn</label>
                                 <input 
                                     type="text" 
                                     className={`${plainInputClass} border-emerald-200 focus:border-emerald-500 bg-white`}
-                                    placeholder="Nhập số biên lai..."
+                                    placeholder="Nhập số biên lai/ hóa đơn..."
                                     value={formData.receiptNumber || ''} 
                                     onChange={(e) => handleChange('receiptNumber', e.target.value)} 
                                 />
                             </div>
-                        </div>
-                    </div>
-
-                    {/* SECTION: GHI CHÚ NỘI BỘ */}
-                    <div className="bg-white rounded-lg border border-amber-200 shadow-sm overflow-hidden">
-                        <div className="bg-amber-500 text-white px-4 py-2.5 font-bold uppercase text-sm flex items-center gap-2">
-                            <BookOpen size={16} />
-                            GHI CHÚ NỘI BỘ
-                        </div>
-                        <div className="p-4 bg-amber-50/20">
-                            <textarea
-                                rows={3}
-                                className="w-full bg-white border border-amber-200 rounded-lg p-3 text-sm text-gray-800 focus:outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-                                placeholder="Nhập ghi chú nội bộ..."
-                                value={formData.privateNotes || ''}
-                                onChange={(e) => handleChange('privateNotes', e.target.value)}
-                            />
+                            <div>
+                                <label className={`${labelClass} text-emerald-800`}>Số tiền (VNĐ)</label>
+                                <input 
+                                    type="text" 
+                                    className={`${plainInputClass} border-emerald-200 focus:border-emerald-500 bg-white text-right font-mono font-bold`}
+                                    placeholder="Nhập số tiền thực thu..."
+                                    value={formData.paymentAmount !== null && formData.paymentAmount !== undefined ? formData.paymentAmount.toLocaleString('vi-VN') : ''} 
+                                    onChange={(e) => {
+                                        const rawVal = e.target.value.replace(/[^0-9]/g, '');
+                                        handleChange('paymentAmount', rawVal ? parseInt(rawVal, 10) : null);
+                                    }} 
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>

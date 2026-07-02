@@ -1,7 +1,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { RecordFile, User, UserRole, RecordStatus, Employee } from '../types';
-import { removeVietnameseTones, isRecordOverdue, isRecordApproaching, isArchiveType } from '../utils/appHelpers';
+import { removeVietnameseTones, isRecordOverdue, isRecordApproaching, isArchiveType, isMeasurementType, isRegType } from '../utils/appHelpers';
 import { REGISTRATION_PROCEDURES } from '../constants';
 
 export const useRecordFilter = (
@@ -124,26 +124,16 @@ export const useRecordFilter = (
             if (!emp.department) return false;
             const adminDept = removeVietnameseTones(emp.department.toLowerCase());
             
-            const isReg = (type: string | null | undefined): boolean => {
-                if (!type) return false;
-                const t = type.trim().toLowerCase();
-                const REG_PROCEDURES = [
-                    "đăng ký", "cấp giấy", "cấp đổi", "cấp lại", "giao đất", "thu hồi",
-                    "chuyển mục đích", "gia hạn", "thừa kế", "tặng cho", "chuyển nhượng", "thế chấp", "xóa thế chấp"
-                ];
-                return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REG_PROCEDURES.some(p => t.includes(p));
-            };
-
-            if (r.recordType === 'Cung cấp tài liệu đất đai' || r.recordType === 'Sao lục') {
-                return adminDept.includes('luu tru') || adminDept.includes('van phong') || adminDept.includes('hanh chinh');
+            if (isArchiveType(r.recordType)) {
+                return adminDept.includes('luu tru') || adminDept.includes('van phong') || adminDept.includes('hanh chinh') || adminDept.includes('cong van');
             }
-            if (r.recordType === 'Công văn') {
-                return adminDept.includes('cong van') || adminDept.includes('van phong') || adminDept.includes('hanh chinh');
-            }
-            if (isReg(r.recordType)) {
+            if (isRegType(r.recordType)) {
                 return adminDept.includes('dang ky') || adminDept.includes('cap giay');
             }
-            return adminDept.includes('do dac') || adminDept.includes('ky thuat') || adminDept.includes('to do') || adminDept.includes('dia chinh') || adminDept.includes('noi nghiep') || adminDept.includes('ngoai nghiep');
+            if (isMeasurementType(r.recordType)) {
+                return adminDept.includes('do dac') || adminDept.includes('do ve') || adminDept.includes('ky thuat') || adminDept.includes('to do') || adminDept.includes('dia chinh') || adminDept.includes('noi nghiep') || adminDept.includes('ngoai nghiep');
+            }
+            return true;
         };
 
         // View-based filtering
@@ -266,31 +256,21 @@ export const useRecordFilter = (
             'all_records', 'assign_tasks', 'completed_list', 'pending_check_list', 'check_list', 'handover_list', 'director_completed'
         ].includes(currentView);
 
-        const isReg = (type: string | null | undefined): boolean => {
-            if (!type) return false;
-            const t = type.trim().toLowerCase();
-            return t.startsWith('3.') || t === 'đăng ký' || t === 'cấp giấy' || t === 'cấp đổi' || t === 'cấp lại' || REGISTRATION_PROCEDURES.some(p => p.toLowerCase() === t);
-        };
-        
         const isSpecializedView = isRegistrationView || isArchiveView || isCongVanView || isOtherView || isMeasurementView;
         if (isSpecializedView) {
             result = result.filter(r => r.isDeptSynced !== false);
         }
 
         if (isArchiveView) {
-            result = result.filter(r => isArchiveType(r.recordType) || r.recordType === 'Sao lục' || r.recordType === 'Công văn' || r.recordType === '1.1 Công văn');
+            result = result.filter(r => isArchiveType(r.recordType));
         } else if (isCongVanView) {
-            result = result.filter(r => r.recordType === 'Công văn' || r.recordType === '1.1 Công văn');
+            result = result.filter(r => r.recordType && (r.recordType.startsWith('1.1') || r.recordType.toLowerCase().includes('công văn')));
         } else if (isRegistrationView) {
-            result = result.filter(r => isReg(r.recordType));
+            result = result.filter(r => isRegType(r.recordType));
         } else if (isOtherView) {
             result = result.filter(r => ['CMD', 'Tòa án', 'Thi hành án'].includes(r.recordType || ''));
         } else if (isMeasurementView) {
-            result = result.filter(r => 
-                !['CMD', 'Tòa án', 'Thi hành án'].includes(r.recordType || '') &&
-                !isArchiveType(r.recordType) && r.recordType !== 'Sao lục' && r.recordType !== 'Công văn' && r.recordType !== '1.1 Công văn' &&
-                !isReg(r.recordType)
-            );
+            result = result.filter(r => isMeasurementType(r.recordType));
         }
 
         return result;

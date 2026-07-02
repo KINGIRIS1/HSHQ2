@@ -21,3 +21,4 @@ ALTER TABLE land_records ADD COLUMN IF NOT EXISTS "personalNotes" text;
 ALTER TABLE land_records ADD COLUMN IF NOT EXISTS "hasDefect" boolean DEFAULT false;
 ALTER TABLE land_records ADD COLUMN IF NOT EXISTS "defectReason" text;
 ALTER TABLE land_records ADD COLUMN IF NOT EXISTS "defectDate" timestamp;
+ALTER TABLE land_records ADD COLUMN IF NOT EXISTS "receiptPhoto" text;

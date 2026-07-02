@@ -640,45 +640,41 @@ const RecordModal: React.FC<RecordModalProps> = ({ isOpen, onClose, onSubmit, in
                         )}
                         
                         {canEditResult && (
-                            <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200 space-y-4">
-                                <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2 mb-1"><FileCheck size={16} /> TRẢ KẾT QUẢ CHO DÂN</h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="bg-emerald-50 p-4 rounded-lg border border-emerald-200 space-y-3">
+                                <h4 className="text-sm font-bold text-emerald-800 flex items-center gap-2 mb-1">
+                                    <FileCheck size={16} /> TRẢ KẾT QUẢ CHO DÂN
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
                                         <label className="block text-xs font-bold text-emerald-700 mb-1">Ngày trả kết quả</label>
-                                        <input type="date" className="w-full border border-emerald-300 rounded-md px-3 py-2 bg-white font-bold text-emerald-800 text-sm" value={dateVal(formData.resultReturnedDate)} onChange={(e) => handleChange('resultReturnedDate', e.target.value)} />
+                                        <input 
+                                            type="date" 
+                                            className="w-full border border-emerald-300 rounded-md px-3 py-2 bg-white font-bold text-emerald-800 text-sm" 
+                                            value={dateVal(formData.resultReturnedDate)} 
+                                            onChange={(e) => handleChange('resultReturnedDate', e.target.value)} 
+                                        />
                                     </div>
                                     <div>
-                                        <label className="block text-xs font-bold text-emerald-700 mb-1">Người nhận kết quả</label>
-                                        <input type="text" className="w-full border border-emerald-300 rounded-md px-3 py-2 bg-white text-sm" value={val(formData.receiverName)} onChange={(e) => handleChange('receiverName', e.target.value)} placeholder="Họ tên người nhận..." />
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-emerald-700 mb-1">Loại giấy tờ thu</label>
-                                        <select 
-                                            className="w-full border border-emerald-300 rounded-md px-3 py-2 bg-white text-sm font-semibold"
-                                            value={formData.receiptType || 'receipt'}
-                                            onChange={(e) => handleChange('receiptType', e.target.value as 'receipt' | 'invoice')}
-                                        >
-                                            <option value="receipt">Biên lai</option>
-                                            <option value="invoice">Hóa đơn</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-bold text-emerald-700 mb-1">
-                                            Số {formData.receiptType === 'invoice' ? 'Hóa Đơn' : 'Biên Lai'}
-                                        </label>
-                                        <input type="text" className="w-full border border-emerald-300 rounded-md px-3 py-2 font-mono bg-white text-sm" value={val(formData.receiptNumber)} onChange={(e) => handleChange('receiptNumber', e.target.value)} placeholder={formData.receiptType === 'invoice' ? "Nhập số hóa đơn..." : "Nhập số biên lai..."} />
-                                    </div>
-                                    <div className="md:col-span-2">
-                                        <label className="block text-xs font-bold text-emerald-700 mb-1">Số tiền thực tế thu được (VNĐ)</label>
+                                        <label className="block text-xs font-bold text-emerald-700 mb-1">Số Biên lai/ Hóa đơn</label>
                                         <input 
                                             type="text" 
-                                            className="w-full border border-emerald-300 rounded-md px-3 py-2 font-mono bg-white text-sm font-bold" 
-                                            value={formData.paymentAmount !== null && formData.paymentAmount !== undefined ? String(formData.paymentAmount) : ''} 
+                                            className="w-full border border-emerald-300 rounded-md px-3 py-2 bg-white text-sm" 
+                                            value={val(formData.receiptNumber)} 
+                                            onChange={(e) => handleChange('receiptNumber', e.target.value)} 
+                                            placeholder="Nhập số biên lai/ hóa đơn..." 
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-bold text-emerald-700 mb-1">Số tiền (VNĐ)</label>
+                                        <input 
+                                            type="text" 
+                                            className="w-full border border-emerald-300 rounded-md px-3 py-2 font-mono bg-white text-sm font-bold text-right" 
+                                            value={typeof formData.paymentAmount === 'number' ? (formData.paymentAmount as number).toLocaleString('vi-VN') : ''} 
                                             onChange={(e) => {
                                                 const val = e.target.value.replace(/[^0-9]/g, '');
                                                 handleChange('paymentAmount', val ? parseInt(val, 10) : null);
                                             }} 
-                                            placeholder="Nhập số tiền thu được..." 
+                                            placeholder="Nhập số tiền..." 
                                         />
                                     </div>
                                 </div>

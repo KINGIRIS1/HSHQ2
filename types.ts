@@ -187,6 +187,7 @@ export interface RecordFile {
   paymentAmount?: number | null;     // Số tiền thu được thực tế
   receiverName?: string | null;      // Người nhận kết quả (Mới)
   resultReturnedDate?: string | null; // Ngày trả kết quả cho dân
+  receiptPhoto?: string | null;      // Bản chụp biên lai/hoá đơn (Hình ảnh/Base64)
 
   // Tính năng Chỉnh lý bản đồ (Mới)
   needsMapCorrection?: boolean; // True nếu cần lập danh sách chỉnh lý

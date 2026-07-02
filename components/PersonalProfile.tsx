@@ -6,7 +6,7 @@ import StatusBadge from './StatusBadge';
 import { Briefcase, ArrowRight, CheckCircle, Clock, Send, AlertTriangle, UserCog, ChevronLeft, ChevronRight, AlertCircle, Search, ArrowUp, ArrowDown, ArrowUpDown, Bell, CalendarClock, FileCheck, Map, CheckSquare, ClipboardList, FileDown, RotateCcw, CornerUpLeft, FileSignature } from 'lucide-react';
 import * as XLSX from 'xlsx-js-style';
 import { getShortRecordType } from '../constants';
-import { confirmAction, isRecordOverdue, isRecordApproaching, getGcnWorkflowStepsHelper, isArchiveType } from '../utils/appHelpers';
+import { confirmAction, isRecordOverdue, isRecordApproaching, getGcnWorkflowStepsHelper, isArchiveType, isMeasurementType, isRegType } from '../utils/appHelpers';
 import { updateRecordApi } from '../services/api';
 import { fetchArchiveRecords, ArchiveRecord, saveArchiveRecord } from '../services/apiArchive';
 import SubmitModal from './receive-record/SubmitModal';
@@ -47,10 +47,6 @@ function removeVietnameseTones(str: string): string {
     str = str.trim();
     return str;
 }
-
-const isRegType = (type: string | null | undefined): boolean => {
-    return false;
-};
 
 const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDirector, users, employees, rolePermissions, onUpdateStatus, onUpdateRecord, onViewRecord, onCreateLiquidation, onMapCorrection, holidays }) => {
   const effectiveId = useMemo(() => {
@@ -195,6 +191,8 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                 deadline: r.data?.hen_tra,
                 status: status,
                 assignedTo: r.data?.assigned_to,
+                checkedBy: r.data?.checked_by,
+                submittedTo: r.data?.submitted_to,
                 ward: r.data?.xa_phuong,
                 submissionDate: r.type === 'congvan' ? r.ngay_thang : undefined, // Example mapping
                 // Fill other required fields with defaults or null
@@ -288,7 +286,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   const reviewRecords = useMemo(() => {
       let list = myRecords.filter(r => 
           r.status === RecordStatus.PENDING_SIGN &&
-          (r.submittedTo === effectiveId || r.assignedTo === effectiveId)
+          (r.submittedTo === effectiveId || r.assignedTo === effectiveId || r.checkedBy === effectiveId)
       );
       return filterAndSort(list, searchTerm, sortConfig);
   }, [myRecords, searchTerm, sortConfig, effectiveId]);
@@ -473,7 +471,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   const handleSignRecord = async (record: RecordFile) => {
     if (await confirmAction(`Xác nhận ký duyệt hồ sơ ${record.code || record.receiptNumber}?\nHồ sơ sẽ chuyển sang trạng thái "Đã ký duyệt" và chuyển qua bước Chờ giao.`)) {
         const nowStr = new Date().toISOString();
-        if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
+        if (isArchiveType(record.recordType)) {
             const currentArchive = archiveRecords.find(r => r.id === record.id);
             if (currentArchive) {
                  const oldHistory = Array.isArray(currentArchive.data?.history) ? currentArchive.data.history : [];
@@ -517,7 +515,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
 
   const handleStartWork = async (record: RecordFile) => {
     if (await confirmAction(`Xác nhận bắt đầu thực hiện hồ sơ ${record.code}?\nHồ sơ sẽ chuyển sang trạng thái "Đang thực hiện".`)) {
-        if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
+        if (isArchiveType(record.recordType)) {
             const historyEntry = {
                 action: 'Bắt đầu thực hiện',
                 status: 'executing',
@@ -550,9 +548,9 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
 
   const handleMarkAsDone = async (record: RecordFile) => {
     if (await confirmAction(`Xác nhận đã hoàn thành công việc cho hồ sơ ${record.code}?\nHồ sơ sẽ chuyển sang trạng thái "Đã thực hiện".`)) {
-        if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
+        if (isArchiveType(record.recordType)) {
             // Handle Archive Record
-            const archiveType = record.recordType === 'Sao lục' ? 'saoluc' : 'congvan';
+            const archiveType = isArchiveType(record.recordType) ? 'saoluc' : 'congvan';
             // Find original record to get full data if needed, or just update status
             // We need to append history as well.
             
@@ -607,7 +605,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
   const handleConfirmSubmit = async (directorId: string) => {
     try {
         for (const record of submitTargetRecords) {
-            if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
+            if (isArchiveType(record.recordType)) {
                  // Handle Archive Record
                 const nowStr = new Date().toISOString();
                 const currentArchive = archiveRecords.find(r => r.id === record.id);
@@ -645,7 +643,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                          completed_work_date: currentArchive.data?.completed_work_date || nowStr,
                          pending_check_date: currentArchive.data?.pending_check_date || nowStr,
                          checked_date: currentArchive.data?.checked_date || nowStr,
-                         checked_by: currentArchive.data?.checked_by || assignedTo,
+                         checked_by: currentArchive.data?.checked_by || ((user.role === UserRole.TEAM_LEADER || user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN) ? user.employeeId : null) || assignedTo,
                          submission_date: nowStr,
                          submitted_to: directorId,
                          history: newHistory
@@ -660,10 +658,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
             } else {
                 // Normal Record
                 const nowStr = new Date().toISOString();
-                const isLuuTruAll = isArchiveType(record.recordType) || 
-                                    record.recordType === 'Sao lục' || 
-                                    record.recordType === 'Công văn' ||
-                                    record.recordType === '1.1 Công văn';
+                const isLuuTruAll = isArchiveType(record.recordType);
                 const responsibleId = record.assignedTo || user.employeeId || null;
                 const updatedRecord = {
                     ...record,
@@ -673,7 +668,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
                     completedWorkDate: record.completedWorkDate || nowStr,
                     pendingCheckDate: isLuuTruAll ? (record.pendingCheckDate || nowStr) : record.pendingCheckDate,
                     checkedDate: (record.status === RecordStatus.PENDING_CHECK || record.status === RecordStatus.CHECKED || isLuuTruAll) ? (record.checkedDate || nowStr) : record.checkedDate,
-                    checkedBy: (record.status === RecordStatus.PENDING_CHECK || record.status === RecordStatus.CHECKED || isLuuTruAll) ? (record.checkedBy || responsibleId) : record.checkedBy
+                    checkedBy: (record.status === RecordStatus.PENDING_CHECK || record.status === RecordStatus.CHECKED || isLuuTruAll) ? (record.checkedBy || ((user.role === UserRole.TEAM_LEADER || user.role === UserRole.SUBADMIN || user.role === UserRole.ADMIN) ? user.employeeId : null) || responsibleId) : record.checkedBy
                 };
                 
                 if (onUpdateRecord) {
@@ -711,7 +706,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
         delete currentNotesObj.stepReturnDate;
         const updatedNotes = Object.keys(currentNotesObj).length > 0 ? JSON.stringify(currentNotesObj) : null;
 
-        if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
+        if (isArchiveType(record.recordType)) {
             const nowStr = new Date().toISOString();
             const historyEntry = {
                 action: 'Thu hồi',
@@ -840,7 +835,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
               completedWorkDate: null
           };
 
-          if (returnStepTargetRecord.recordType === 'Sao lục' || returnStepTargetRecord.recordType === 'Công văn') {
+          if (isArchiveType(returnStepTargetRecord.recordType)) {
               const historyEntry = {
                   action: 'Trả về sửa lại',
                   status: 'assigned',
@@ -935,7 +930,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
               completedWorkDate: null
           };
 
-          if (rejectTargetRecord.recordType === 'Sao lục' || rejectTargetRecord.recordType === 'Công văn') {
+          if (isArchiveType(rejectTargetRecord.recordType)) {
               const historyEntry = {
                   action: 'Trả hồ sơ',
                   status: 'rejected',
@@ -1514,7 +1509,7 @@ const PersonalProfile: React.FC<PersonalProfileProps> = ({ user, records, isDire
           onConfirm={async (checkerId) => {
               try {
                   for (const record of submitTargetRecords) {
-                      if (record.recordType === 'Sao lục' || record.recordType === 'Công văn') {
+                      if (isArchiveType(record.recordType)) {
                           // Xử lý hồ sơ lưu trữ
                           const historyEntry = {
                               action: 'Trình kiểm tra',
